@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
+import { AuthError, requireUnlocked } from "@/lib/auth";
+import { nid } from "@/lib/ids";
+import { dollarsToCents } from "@/lib/money";
+
+export const dynamic = "force-dynamic";
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await requireUnlocked();
+    const { id } = await context.params;
+    const body = (await request.json()) as {
+      name?: string;
+      merchantName?: string;
+      categoryId?: string | null;
+      reviewed?: boolean;
+      hidden?: boolean;
+      notes?: string | null;
+      goalId?: string | null;
+      isTransfer?: boolean;
+      amount?: number;
+      date?: string;
+      tags?: string[];
+      splits?: { categoryId: string; amountCents?: number; amount?: number; notes?: string }[];
+    };
+    const db = await getDb();
+    await db
+      .update(transactions)
+      .set({
+        name: body.name,
+        merchantName: body.merchantName,
+        categoryId: body.categoryId,
+        reviewed: body.reviewed,
+        hidden: body.hidden,
+        notes: body.notes,
+        goalId: body.goalId,
+        isTransfer: body.isTransfer,
+        amountCents: body.amount == null ? undefined : dollarsToCents(body.amount),
+        date: body.date,
+        updatedAt: new Date(),
+      })
+      .where(eq(transactions.id, id));
+
+    if (body.tags) {
+      await db.delete(transactionTags).where(eq(transactionTags.transactionId, id));
+      for (const name of body.tags.map((t) => t.trim()).filter(Boolean)) {
+        const existing = await db.select().from(tags).where(eq(tags.name, name));
+        const tagId = existing[0]?.id ?? nid();
+        if (!existing[0]) await db.insert(tags).values({ id: tagId, name });
+        await db.insert(transactionTags).values({ transactionId: id, tagId }).onConflictDoNothing();
+      }
+    }
+
+    if (body.splits) {
+      await db.delete(transactionSplits).where(eq(transactionSplits.transactionId, id));
+      for (const part of body.splits) {
+        await db.insert(transactionSplits).values({
+          id: nid(),
+          transactionId: id,
+          categoryId: part.categoryId,
+          amountCents: part.amountCents ?? dollarsToCents(part.amount ?? 0),
+          notes: part.notes,
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    throw err;
+  }
+}

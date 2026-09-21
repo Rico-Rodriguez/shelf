@@ -1,0 +1,16 @@
+# Optional. The app runs locally without Docker via embedded PGlite.
+# Use this when you want a real Postgres (closest to Railway).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shelf
+      POSTGRES_PASSWORD: shelf
+      POSTGRES_DB: shelf
+    ports:
+      - "5432:5432"
+    volumes:
+      - shelf_pg:/var/lib/postgresql/data
+
+volumes:
+  shelf_pg:
