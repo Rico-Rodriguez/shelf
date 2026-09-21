@@ -8,12 +8,12 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0">
+    <header className="page-header">
+      <div className="min-w-0 flex-1">
         <h1>{title}</h1>
-        {subtitle ? <p>{subtitle}</p> : null}
+        {subtitle ? <p className="page-sub">{subtitle}</p> : null}
       </div>
-      {children}
-    </div>
+      {children ? <div className="page-header-actions">{children}</div> : null}
+    </header>
   );
 }

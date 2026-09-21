@@ -83,11 +83,11 @@ export default function LoginPage() {
       ) : step === "google" ? (
         <div className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
+            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Sign in</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">Use the Google account this Shelf belongs to.</p>
           </div>
-          {error ? <p className="text-[15px] text-[var(--terracotta)]">{error}</p> : null}
+          {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
           <a className="pixel-btn flex w-full items-center justify-center" href="/api/auth/google">
             Continue with Google
           </a>
@@ -95,7 +95,7 @@ export default function LoginPage() {
       ) : step === "password" ? (
         <form onSubmit={onPassword} className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
+            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Welcome back</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">
               {email
@@ -103,16 +103,18 @@ export default function LoginPage() {
                 : "Password first, then your authenticator."}
             </p>
           </div>
-          <input
-            className="pixel-input"
-            type="password"
-            autoFocus
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-          />
-          {error ? <p className="text-[15px] text-[var(--terracotta)]">{error}</p> : null}
+          <label className="field">
+            <span className="field-label">Password</span>
+            <input
+              className="pixel-input"
+              type="password"
+              autoFocus
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
           <button className="pixel-btn w-full" disabled={busy}>
             {busy ? "Checking…" : "Continue"}
           </button>
@@ -120,20 +122,23 @@ export default function LoginPage() {
       ) : (
         <form onSubmit={onCode} className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
+            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Authenticator</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">Enter the 6-digit code from your app.</p>
           </div>
-          <input
-            className="pixel-input"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="123456"
-          />
-          {error ? <p className="text-[15px] text-[var(--terracotta)]">{error}</p> : null}
+          <label className="field">
+            <span className="field-label">Code</span>
+            <input
+              className="pixel-input"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+            />
+          </label>
+          {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
           <button className="pixel-btn w-full" disabled={busy}>
             {busy ? "Checking…" : "Unlock"}
           </button>

@@ -95,8 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sticky top-0 z-10 hidden h-dvh w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--linen)] px-3 py-5 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
           <Link href="/">
-            <div className="text-[18px] font-semibold tracking-[-0.03em]">Shelf</div>
-            {syncLabel ? <div className="text-[12px] text-[var(--muted)]">{syncLabel}</div> : null}
+            <div className="text-[22px] font-semibold tracking-[-0.04em]">Shelf</div>
+            <div className="text-[12px] text-[var(--muted)]">{syncLabel || "Your money, clearly"}</div>
           </Link>
           <button type="button" className="relative text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={18} />

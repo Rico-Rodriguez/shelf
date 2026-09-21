@@ -13,13 +13,13 @@ export function Drawer({
 }) {
   return (
     <div className="ios-sheet-backdrop" onClick={onClose}>
-      <div className="ios-sheet space-y-3" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className="ios-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="ios-sheet-handle" />
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[18px] font-semibold tracking-tight">{title}</h2>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h2 className="text-[20px] font-semibold tracking-[-0.03em]">{title}</h2>
           {action}
         </div>
-        {children}
+        <div className="field-stack pb-2">{children}</div>
       </div>
     </div>
   );

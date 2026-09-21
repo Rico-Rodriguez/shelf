@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
@@ -24,7 +25,7 @@ type Dash = {
   unreviewed: {
     count: number;
     amountCents: number;
-    items: { id: string; name: string; amountCents: number; date: string }[];
+    items: { id: string; name: string; amountCents: number; date: string; categoryName?: string | null }[];
   };
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   goals: { id: string; name: string; targetCents: number; kind: string }[];
@@ -82,7 +83,7 @@ export default function HomePage() {
     void saveLayout(dash.layout.map((item) => (item.id === id ? { ...item, hidden: !item.hidden } : item)));
   }
 
-  async function place(id: string) {
+  async function markDone(id: string) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
     load();
   }
@@ -91,42 +92,70 @@ export default function HomePage() {
   if (!dash) return <p className="text-[var(--muted)]">Loading…</p>;
 
   const visible = dash.layout.filter((item) => !item.hidden);
+  const netWorthWidget = visible.find((item) => item.id === "netWorth");
+  const rest = visible.filter((item) => item.id !== "netWorth");
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Home" subtitle="Where you stand, and what needs a look.">
+    <div className="page-enter space-y-5">
+      <PageHeader title="Shelf" subtitle="One glance at your money — then clear what's new.">
         <button className="pixel-btn ghost" type="button" onClick={() => setCustomizing(true)}>
           Customize
         </button>
       </PageHeader>
 
-      {visible.length === 0 ? <EmptyState>Every card is hidden. Customize to bring one back.</EmptyState> : null}
+      {netWorthWidget ? (
+        <Card className="p-5">
+          <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">Net worth</p>
+          <Link href="/reports" className="hero-number block">
+            <MoneyText cents={dash.netWorth.netWorthCents} />
+          </Link>
+          <p className="mt-2 text-[14px] text-[var(--muted)]">
+            Assets <MoneyText cents={dash.netWorth.assetsCents} /> · Debts <MoneyText cents={dash.netWorth.liabilitiesCents} />
+          </p>
+          {dash.snapshots.length > 1 ? (
+            <div className="mt-4 h-20">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dash.snapshots.map((row) => ({ ...row, value: row.netWorthCents / 100 }))}>
+                  <YAxis hide domain={["dataMin", "dataMax"]} />
+                  <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} labelFormatter={(label) => String(label)} />
+                  <Area dataKey="value" stroke="#00c805" fill="rgba(0,200,5,0.14)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {dash.unreviewed.count > 0 ? (
+        <Hint tone="action" title={`${dash.unreviewed.count} purchase${dash.unreviewed.count === 1 ? "" : "s"} need a quick look`}>
+          <p>
+            Review means: open each one, fix the category if it&apos;s wrong, then tap <strong>Done</strong>. That keeps your budget honest.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href={activityHref({ reviewed: "false" })} className="pixel-btn soft">
+              Start reviewing
+            </Link>
+            <span className="self-center text-[13px] text-[var(--muted)]">
+              <MoneyText cents={dash.unreviewed.amountCents} /> total
+            </span>
+          </div>
+        </Hint>
+      ) : (
+        <Hint tone="success" title="Inbox clear">
+          Nothing waiting to review. New purchases will show up here after sync.
+        </Hint>
+      )}
+
+      {visible.length === 0 ? (
+        <EmptyState title="Home is empty" action={<button className="pixel-btn" type="button" onClick={() => setCustomizing(true)}>Show cards</button>}>
+          Every card is hidden. Customize to bring one back.
+        </EmptyState>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
-        {visible.map((item) => (
-          <Card key={item.id} className="p-4">
-            <h2 className="mb-3 text-[13px] font-medium uppercase tracking-[0.06em] text-[var(--muted)]">{LABELS[item.id] ?? item.id}</h2>
-            {item.id === "netWorth" && (
-              <div>
-                <Link href="/reports" className="text-[32px] font-semibold tracking-[-0.03em]">
-                  <MoneyText cents={dash.netWorth.netWorthCents} />
-                </Link>
-                <p className="mt-1 text-[14px] text-[var(--muted)]">
-                  Assets <MoneyText cents={dash.netWorth.assetsCents} /> · Debts <MoneyText cents={dash.netWorth.liabilitiesCents} />
-                </p>
-                {dash.snapshots.length > 1 ? (
-                  <div className="mt-3 h-16">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={dash.snapshots.map((row) => ({ ...row, value: row.netWorthCents / 100 }))}>
-                        <YAxis hide domain={["dataMin", "dataMax"]} />
-                        <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} labelFormatter={(label) => String(label)} />
-                        <Area dataKey="value" stroke="#1f4d45" fill="rgba(31,77,69,0.15)" strokeWidth={2} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : null}
-              </div>
-            )}
+        {rest.map((item) => (
+          <Card key={item.id} className="p-5">
+            <h2 className="mb-3 text-[13px] font-medium text-[var(--muted)]">{LABELS[item.id] ?? item.id}</h2>
             {item.id === "cashFlow" && (
               <div className="space-y-2">
                 <div className="text-[28px] font-semibold tracking-[-0.03em]">
@@ -136,7 +165,7 @@ export default function HomePage() {
                 <p className="text-[14px]">
                   Income <MoneyText cents={dash.cashFlow.incomeCents} /> · Spending <MoneyText cents={dash.cashFlow.spendingCents} />
                 </p>
-                <Link href="/cash-flow" className="text-[14px] font-medium text-[var(--terracotta)]">
+                <Link href="/cash-flow" className="text-link text-[14px]">
                   Open cash flow
                 </Link>
               </div>
@@ -151,32 +180,39 @@ export default function HomePage() {
                 <p className="text-[14px]">
                   Spent <MoneyText cents={dash.budget.spentCents} /> of <MoneyText cents={dash.budget.plannedCents} />
                 </p>
-                <Link href="/budget" className="text-[14px] font-medium text-[var(--terracotta)]">
+                <Link href="/budget" className="text-link text-[14px]">
                   Open budget
                 </Link>
               </div>
             )}
             {item.id === "unreviewed" && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-[14px] text-[var(--muted)]">
-                  {dash.unreviewed.count} to review · <MoneyText cents={dash.unreviewed.amountCents} />
+                  Tap a name to edit. Tap Done when the category looks right.
                 </p>
-                <div className="card">
+                <div className="divide-y divide-[var(--line)] rounded-[12px] border border-[var(--line)]">
                   {dash.unreviewed.items.map((tx) => (
-                    <div key={tx.id} className="data-row justify-between gap-3">
-                      <span className="min-w-0 truncate">{tx.name}</span>
+                    <div key={tx.id} className="flex items-center justify-between gap-3 px-3 py-3">
+                      <Link href={activityHref({ reviewed: "false" })} className="min-w-0 truncate font-medium">
+                        {tx.name}
+                      </Link>
                       <span className="flex shrink-0 items-center gap-3">
                         <MoneyText cents={-tx.amountCents} signed />
-                        <button className="text-[13px] font-semibold text-[var(--terracotta)]" type="button" onClick={() => place(tx.id)}>
-                          Review
+                        <button
+                          className="text-[13px] font-semibold text-[var(--positive)]"
+                          type="button"
+                          onClick={() => markDone(tx.id)}
+                          aria-label={`Mark ${tx.name} as reviewed`}
+                        >
+                          Done
                         </button>
                       </span>
                     </div>
                   ))}
-                  {dash.unreviewed.items.length === 0 ? <div className="data-row text-[var(--muted)]">Nothing waiting.</div> : null}
+                  {dash.unreviewed.items.length === 0 ? <div className="px-3 py-3 text-[var(--muted)]">Nothing waiting.</div> : null}
                 </div>
-                <Link href={activityHref({ reviewed: "false" })} className="text-[14px] font-medium text-[var(--terracotta)]">
-                  Review all
+                <Link href={activityHref({ reviewed: "false" })} className="text-link text-[14px]">
+                  Open full inbox
                 </Link>
               </div>
             )}
@@ -193,7 +229,7 @@ export default function HomePage() {
                   ))}
                   {dash.recurring.length === 0 ? <li className="text-[var(--muted)]">Nothing upcoming.</li> : null}
                 </ul>
-                <Link href="/recurring" className="text-[14px] font-medium text-[var(--terracotta)]">
+                <Link href="/recurring" className="text-link text-[14px]">
                   Open recurring
                 </Link>
               </div>
@@ -209,7 +245,7 @@ export default function HomePage() {
                   ))}
                   {dash.goals.length === 0 ? <li className="text-[var(--muted)]">No goals yet.</li> : null}
                 </ul>
-                <Link href="/goals" className="text-[14px] font-medium text-[var(--terracotta)]">
+                <Link href="/goals" className="text-link text-[14px]">
                   Open goals
                 </Link>
               </div>
@@ -225,7 +261,7 @@ export default function HomePage() {
                   ))}
                   {dash.transactions.length === 0 ? <li className="text-[var(--muted)]">No transactions yet.</li> : null}
                 </ul>
-                <Link href="/transactions" className="text-[14px] font-medium text-[var(--terracotta)]">
+                <Link href="/transactions" className="text-link text-[14px]">
                   Open transactions
                 </Link>
               </div>
@@ -244,6 +280,7 @@ export default function HomePage() {
 
       {customizing ? (
         <Sheet title="Home cards" onClose={() => setCustomizing(false)}>
+          <p className="text-[14px] text-[var(--muted)]">Show, hide, or reorder what appears on Home.</p>
           <div className="card">
             {dash.layout.map((widget, index) => (
               <div key={widget.id} className="data-row justify-between gap-3">
@@ -252,7 +289,13 @@ export default function HomePage() {
                   <button className="ios-icon-btn" type="button" aria-label={`Move ${widget.id} up`} onClick={() => move(widget.id, -1)} disabled={index === 0}>
                     ↑
                   </button>
-                  <button className="ios-icon-btn" type="button" aria-label={`Move ${widget.id} down`} onClick={() => move(widget.id, 1)} disabled={index === dash.layout.length - 1}>
+                  <button
+                    className="ios-icon-btn"
+                    type="button"
+                    aria-label={`Move ${widget.id} down`}
+                    onClick={() => move(widget.id, 1)}
+                    disabled={index === dash.layout.length - 1}
+                  >
                     ↓
                   </button>
                   <button type="button" className={`switch ${widget.hidden ? "" : "on"}`} aria-label={`Show ${widget.id}`} onClick={() => toggle(widget.id)} />

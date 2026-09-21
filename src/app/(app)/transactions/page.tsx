@@ -7,7 +7,9 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, FieldStack } from "@/components/ui/Field";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
@@ -56,11 +58,12 @@ function Activity() {
   const reviewed = params.get("reviewed") ?? "";
   const start = params.get("start") ?? "";
   const end = params.get("end") ?? "";
+  const tag = params.get("tag") ?? "";
 
   const [q, setQ] = useState(urlQ);
+  const [search, setSearch] = useState(urlQ);
   const [rows, setRows] = useState<Tx[]>([]);
   const [unreviewed, setUnreviewed] = useState(0);
-  const tag = params.get("tag") ?? "";
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [tagNames, setTagNames] = useState<string[]>([]);
@@ -72,11 +75,17 @@ function Activity() {
 
   useEffect(() => {
     setQ(urlQ);
+    setSearch(urlQ);
   }, [urlQ]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(q), 250);
+    return () => window.clearTimeout(timer);
+  }, [q]);
 
   const load = useCallback(() => {
     const qs = new URLSearchParams();
-    if (q) qs.set("q", q);
+    if (search) qs.set("q", search);
     if (accountId) qs.set("accountId", accountId);
     if (categoryId) qs.set("categoryId", categoryId);
     if (reviewed) qs.set("reviewed", reviewed);
@@ -87,7 +96,7 @@ function Activity() {
       setRows(r.transactions);
       setUnreviewed(r.unreviewed);
     });
-  }, [q, accountId, categoryId, reviewed, start, end, tag]);
+  }, [search, accountId, categoryId, reviewed, start, end, tag]);
 
   useEffect(() => {
     load();
@@ -96,8 +105,12 @@ function Activity() {
   useEffect(() => {
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
-    void api<{ tags: { name: string }[] }>("/api/tags").then((r) => setTagNames(r.tags.map((item) => item.name))).catch(() => undefined);
-    void api<{ goals: { id: string; name: string }[] }>("/api/goals").then((r) => setGoals(r.goals)).catch(() => undefined);
+    void api<{ tags: { name: string }[] }>("/api/tags")
+      .then((r) => setTagNames(r.tags.map((item) => item.name)))
+      .catch(() => undefined);
+    void api<{ goals: { id: string; name: string }[] }>("/api/goals")
+      .then((r) => setGoals(r.goals))
+      .catch(() => undefined);
   }, []);
 
   function replaceQuery(patch: Record<string, string | null>) {
@@ -108,8 +121,8 @@ function Activity() {
       if (!value) next.delete(key);
       else next.set(key, value);
     }
-    const search = next.toString();
-    router.replace(search ? `/transactions?${search}` : "/transactions", { scroll: false });
+    const query = next.toString();
+    router.replace(query ? `/transactions?${query}` : "/transactions", { scroll: false });
   }
 
   const month = start ? { year: Number(start.slice(0, 4)), month: Number(start.slice(5, 7)) } : null;
@@ -124,13 +137,14 @@ function Activity() {
   }, [rows]);
 
   const visibleUnreviewed = rows.filter((tx) => !tx.reviewed).map((tx) => tx.id);
+  const inReviewMode = reviewed === "false";
 
-  async function reviewOne(id: string) {
+  async function markDone(id: string) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
     load();
   }
 
-  async function reviewVisible() {
+  async function markVisibleDone() {
     if (!visibleUnreviewed.length) return;
     await api("/api/transactions/review-all", { method: "POST", body: JSON.stringify({ ids: visibleUnreviewed }) });
     load();
@@ -149,7 +163,10 @@ function Activity() {
         isTransfer: edit.isTransfer,
         goalId: edit.goalId,
         transferPairId: edit.transferPairId,
-        tags: edit.tagText.split(",").map((tag) => tag.trim()).filter(Boolean),
+        tags: edit.tagText
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
         splits: edit.splitDrafts
           .filter((part) => part.categoryId && part.amount)
           .map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
@@ -166,7 +183,7 @@ function Activity() {
     ).then((res) => setPairs(res.candidates));
     setEdit({
       ...tx,
-      tagText: tx.tags.map((tag) => tag.name).join(", "),
+      tagText: tx.tags.map((item) => item.name).join(", "),
       splitDrafts: tx.splits
         .filter((part) => part.categoryId)
         .map((part) => ({ categoryId: part.categoryId!, amount: (part.amountCents / 100).toFixed(2) })),
@@ -203,14 +220,15 @@ function Activity() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="page-enter space-y-4">
       <PageHeader
-        title="Transactions"
+        title="Activity"
         subtitle={
-          <>
-            {unreviewed} to review
-            {rows.length ? ` · ${rows.length} shown` : ""}
-          </>
+          unreviewed
+            ? `${unreviewed} waiting for a quick look${rows.length ? ` · ${rows.length} shown` : ""}`
+            : rows.length
+              ? `${rows.length} shown · inbox clear`
+              : "Every purchase in one list"
         }
       >
         <button className="pixel-btn" type="button" onClick={() => setShowAdd(true)}>
@@ -220,41 +238,53 @@ function Activity() {
 
       <input
         className="pixel-input ios-search"
-        placeholder="Search"
+        placeholder="Search merchants, notes, amounts"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         aria-label="Search transactions"
       />
 
       <Segment
-        className="w-full max-w-xs"
+        className="w-full max-w-md"
         value={reviewed}
         onChange={(value) => replaceQuery({ reviewed: value || null })}
         options={[
           { value: "", label: "All" },
-          { value: "false", label: "Inbox" },
+          { value: "false", label: "Needs review" },
           { value: "true", label: "Reviewed" },
         ]}
       />
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <select className="pixel-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
-          <option value="">All accounts</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-        <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
-        <select className="pixel-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })} aria-label="Tag">
-          <option value="">All tags</option>
-          {tagNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+      {inReviewMode ? (
+        <Hint tone="action" title="What “review” means">
+          Tap a purchase to rename it or fix the category. When it looks right, tap <strong>Done</strong> — or save from the detail sheet. Reviewed items stop counting against your inbox so the budget stays trustworthy.
+        </Hint>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Account">
+          <select className="pixel-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
+            <option value="">All accounts</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Category">
+          <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
+        </Field>
+        <Field label="Tag">
+          <select className="pixel-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })} aria-label="Tag">
+            <option value="">All tags</option>
+            {tagNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </Field>
       </div>
 
       <FilterBar className="justify-between">
@@ -286,13 +316,26 @@ function Activity() {
           </button>
         ) : null}
         {visibleUnreviewed.length ? (
-          <button className="pixel-btn secondary" type="button" onClick={reviewVisible}>
-            Review all visible
+          <button className="pixel-btn soft" type="button" onClick={markVisibleDone}>
+            Mark {visibleUnreviewed.length} done
           </button>
         ) : null}
       </FilterBar>
 
-      {grouped.length === 0 ? <EmptyState>No transactions match.</EmptyState> : null}
+      {grouped.length === 0 ? (
+        <EmptyState
+          title={inReviewMode ? "Inbox clear" : "No matches"}
+          action={
+            inReviewMode ? (
+              <button className="pixel-btn ghost" type="button" onClick={() => replaceQuery({ reviewed: null })}>
+                Show all activity
+              </button>
+            ) : undefined
+          }
+        >
+          {inReviewMode ? "You’re caught up. New purchases will land here after sync." : "Try another search or clear a filter."}
+        </EmptyState>
+      ) : null}
 
       {grouped.map(([date, items]) => (
         <section key={date}>
@@ -302,24 +345,30 @@ function Activity() {
               <div key={tx.id} className={`data-row ${tx.reviewed ? "placed" : ""}`}>
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openEdit(tx)}>
                   <div className="tx-name flex items-center gap-2 truncate font-medium">
-                    <span className="size-2 shrink-0 rounded-full" style={{ background: tx.category?.color ?? "#c8c0b4" }} />
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: tx.category?.color ?? "#c8c8c8" }} />
                     <span className="truncate">{tx.name}</span>
                     {tx.pending ? <span className="chip">Pending</span> : null}
+                    {!tx.reviewed && !tx.categoryId ? <span className="chip warn">No category</span> : null}
                   </div>
                   <div className="truncate text-[13px] text-[var(--muted)]">
                     {tx.category?.name ?? "Uncategorized"}
                     {tx.account?.name ? ` · ${tx.account.name}` : ""}
                     {tx.splits.length ? ` · ${tx.splits.length} splits` : ""}
-                    {tx.tags.length ? ` · ${tx.tags.map((tag) => tag.name).join(", ")}` : ""}
+                    {tx.tags.length ? ` · ${tx.tags.map((item) => item.name).join(", ")}` : ""}
                   </div>
                 </button>
                 <div className="flex shrink-0 items-center gap-2">
-                  <div className="text-[17px] tabular-nums">
+                  <div className="text-[16px] font-medium tabular-nums">
                     <MoneyText cents={-tx.amountCents} signed />
                   </div>
                   {tx.reviewed ? null : (
-                    <button className="text-[15px] font-semibold text-[var(--terracotta)]" type="button" onClick={() => reviewOne(tx.id)}>
-                      Review
+                    <button
+                      className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-[#067a0a] bg-[var(--sage-soft)]"
+                      type="button"
+                      onClick={() => markDone(tx.id)}
+                      aria-label={`Mark ${tx.name} as reviewed`}
+                    >
+                      Done
                     </button>
                   )}
                 </div>
@@ -330,60 +379,65 @@ function Activity() {
       ))}
 
       {edit ? (
-        <Sheet title="Transaction" onClose={() => setEdit(null)}>
-          <p className="text-[13px] text-[var(--muted)]">
-            {dayLabel(edit.date)}
-            {edit.account?.name ? ` · ${edit.account.name}` : ""}
-            {edit.pending ? " · Pending" : ""}
-          </p>
-          <div className="text-[28px] font-bold tracking-tight">
-            <MoneyText cents={-edit.amountCents} signed />
-          </div>
-          {edit.originalDescription && edit.originalDescription !== edit.name ? (
-            <p className="text-[13px] text-[var(--muted)]">{edit.originalDescription}</p>
-          ) : null}
-          <input className="pixel-input" aria-label="Name" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-          <CategoryPicker groups={groups} value={edit.categoryId ?? ""} onChange={(id) => setEdit({ ...edit, categoryId: id || null })} />
-          <select className="pixel-input" aria-label="Goal" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
-            <option value="">No goal</option>
-            {goals.map((goal) => (
-              <option key={goal.id} value={goal.id}>
-                {goal.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="pixel-input"
-            aria-label="Transfer pair"
-            value={edit.transferPairId ?? ""}
-            onChange={(e) => setEdit({ ...edit, transferPairId: e.target.value || null, isTransfer: Boolean(e.target.value) || edit.isTransfer })}
-          >
-            <option value="">No linked transfer</option>
-            {pairs.map((pair) => (
-              <option key={pair.id} value={pair.id}>
-                {pair.date} · {pair.name}
-                {pair.account ? ` · ${pair.account}` : ""}
-              </option>
-            ))}
-            {edit.transferPairId && !pairs.some((pair) => pair.id === edit.transferPairId) ? (
-              <option value={edit.transferPairId}>Linked transfer</option>
+        <Sheet title="Review purchase" onClose={() => setEdit(null)}>
+          <div>
+            <p className="text-[13px] text-[var(--muted)]">
+              {dayLabel(edit.date)}
+              {edit.account?.name ? ` · ${edit.account.name}` : ""}
+              {edit.pending ? " · Pending" : ""}
+            </p>
+            <div className="mt-1 text-[32px] font-semibold tracking-[-0.03em]">
+              <MoneyText cents={-edit.amountCents} signed />
+            </div>
+            {edit.originalDescription && edit.originalDescription !== edit.name ? (
+              <p className="mt-1 text-[13px] text-[var(--muted)]">{edit.originalDescription}</p>
             ) : null}
-          </select>
-          <textarea
-            className="pixel-input"
-            rows={2}
-            placeholder="Note"
-            value={edit.notes ?? ""}
-            onChange={(e) => setEdit({ ...edit, notes: e.target.value })}
-          />
-          <input
-            className="pixel-input"
-            placeholder="Tags, separated by commas"
-            value={edit.tagText}
-            onChange={(e) => setEdit({ ...edit, tagText: e.target.value })}
-          />
-          <div className="space-y-2">
-            <div className="text-[13px] text-[var(--muted)]">Splits</div>
+            {!edit.reviewed ? (
+              <p className="mt-2 text-[13px] text-[var(--muted)]">Fix the details below, then save — that marks it reviewed.</p>
+            ) : null}
+          </div>
+
+          <Field label="Name">
+            <input className="pixel-input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+          </Field>
+          <Field label="Category" hint="Pick where this spending belongs in your budget.">
+            <CategoryPicker groups={groups} value={edit.categoryId ?? ""} onChange={(id) => setEdit({ ...edit, categoryId: id || null })} />
+          </Field>
+          <Field label="Goal">
+            <select className="pixel-input" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
+              <option value="">No goal</option>
+              {goals.map((goal) => (
+                <option key={goal.id} value={goal.id}>
+                  {goal.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Linked transfer" hint="Pair the other side of a move between accounts.">
+            <select
+              className="pixel-input"
+              value={edit.transferPairId ?? ""}
+              onChange={(e) => setEdit({ ...edit, transferPairId: e.target.value || null, isTransfer: Boolean(e.target.value) || edit.isTransfer })}
+            >
+              <option value="">No linked transfer</option>
+              {pairs.map((pair) => (
+                <option key={pair.id} value={pair.id}>
+                  {pair.date} · {pair.name}
+                  {pair.account ? ` · ${pair.account}` : ""}
+                </option>
+              ))}
+              {edit.transferPairId && !pairs.some((pair) => pair.id === edit.transferPairId) ? <option value={edit.transferPairId}>Linked transfer</option> : null}
+            </select>
+          </Field>
+          <Field label="Note">
+            <textarea className="pixel-input" rows={2} value={edit.notes ?? ""} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+          </Field>
+          <Field label="Tags" hint="Comma-separated, like travel, reimbursable.">
+            <input className="pixel-input" value={edit.tagText} onChange={(e) => setEdit({ ...edit, tagText: e.target.value })} />
+          </Field>
+
+          <div className="space-y-3">
+            <div className="field-label">Splits</div>
             {edit.splitDrafts.map((part, index) => (
               <div key={index} className="flex gap-2">
                 <CategorySelect
@@ -424,48 +478,86 @@ function Activity() {
               Add split
             </button>
           </div>
+
           <div className="card">
-            <button type="button" className="data-row w-full justify-between text-[17px]" aria-pressed={edit.hidden} onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}>
+            <button
+              type="button"
+              className="data-row w-full justify-between"
+              aria-pressed={edit.hidden}
+              onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}
+            >
               Hide from budget
               <span className={`switch ${edit.hidden ? "on" : ""}`} />
             </button>
-            <button type="button" className="data-row w-full justify-between text-[17px]" aria-pressed={edit.isTransfer} onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}>
-              Transfer
+            <button
+              type="button"
+              className="data-row w-full justify-between"
+              aria-pressed={edit.isTransfer}
+              onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}
+            >
+              Count as transfer
               <span className={`switch ${edit.isTransfer ? "on" : ""}`} />
             </button>
           </div>
+
           <button className="pixel-btn w-full" type="button" onClick={saveEdit}>
-            {edit.reviewed ? "Save" : "Save and review"}
+            {edit.reviewed ? "Save changes" : "Save & mark reviewed"}
           </button>
           <button className="pixel-btn ghost w-full" type="button" onClick={makeRule}>
-            Make a rule
+            Automate with a rule
           </button>
         </Sheet>
       ) : null}
 
       {showAdd ? (
         <Sheet title="New transaction" onClose={() => setShowAdd(false)}>
-          <form className="space-y-3" onSubmit={addManual}>
-            <select className="pixel-input" value={manual.accountId} onChange={(e) => setManual({ ...manual, accountId: e.target.value })} required aria-label="Account">
-              <option value="">Account</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            <input className="pixel-input" placeholder="Name" value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} required />
-            <input
-              className="pixel-input"
-              inputMode="decimal"
-              placeholder="Amount (+ out, − in)"
-              value={manual.amount}
-              onChange={(e) => setManual({ ...manual, amount: e.target.value })}
-              required
-            />
-            <input className="pixel-input" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} aria-label="Date" />
-            <CategorySelect groups={groups} value={manual.categoryId} onChange={(id) => setManual({ ...manual, categoryId: id })} emptyLabel="Category" />
-            <button className="pixel-btn w-full">Add</button>
+          <form
+            onSubmit={addManual}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <FieldStack>
+              <Field label="Account">
+                <select
+                  className="pixel-input"
+                  value={manual.accountId}
+                  onChange={(e) => setManual({ ...manual, accountId: e.target.value })}
+                  required
+                >
+                  <option value="">Choose account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Name">
+                <input
+                  className="pixel-input"
+                  placeholder="Coffee, paycheck…"
+                  value={manual.name}
+                  onChange={(e) => setManual({ ...manual, name: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field label="Amount" hint="Positive is money out. Negative is money in.">
+                <input
+                  className="pixel-input"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={manual.amount}
+                  onChange={(e) => setManual({ ...manual, amount: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field label="Date">
+                <input className="pixel-input" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
+              </Field>
+              <Field label="Category">
+                <CategorySelect groups={groups} value={manual.categoryId} onChange={(id) => setManual({ ...manual, categoryId: id })} emptyLabel="Choose category" />
+              </Field>
+              <button className="pixel-btn w-full">Add transaction</button>
+            </FieldStack>
           </form>
         </Sheet>
       ) : null}

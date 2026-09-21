@@ -136,7 +136,7 @@ function Rules() {
         </span>
         Settings
       </Link>
-      <PageHeader title="Rules" subtitle="Most rules start from a transaction. You can also write one here.">
+      <PageHeader title="Rules" subtitle="When a merchant matches, Shelf can rename, categorize, tag, or hide it automatically.">
         <button className="pixel-btn" type="button" onClick={() => { setForm(empty); setOpen(true); }}>
           Add
         </button>
@@ -166,42 +166,79 @@ function Rules() {
 
       {open ? (
         <Sheet title="New rule" onClose={() => setOpen(false)}>
-          <form className="space-y-3" onSubmit={add}>
-            <input className="pixel-input" placeholder="Rule name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <input className="pixel-input" placeholder="Merchant contains" value={form.matchMerchant} onChange={(e) => setForm({ ...form, matchMerchant: e.target.value })} />
-            <input className="pixel-input" placeholder="Description contains" value={form.matchDescription} onChange={(e) => setForm({ ...form, matchDescription: e.target.value })} />
-            <div className="grid grid-cols-2 gap-2">
-              <input className="pixel-input" inputMode="decimal" placeholder="Min amount" value={form.matchAmountMin} onChange={(e) => setForm({ ...form, matchAmountMin: e.target.value })} />
-              <input className="pixel-input" inputMode="decimal" placeholder="Max amount" value={form.matchAmountMax} onChange={(e) => setForm({ ...form, matchAmountMax: e.target.value })} />
+          <form
+            onSubmit={add}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="field-stack">
+              <label className="field">
+                <span className="field-label">Rule name</span>
+                <input className="pixel-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </label>
+              <label className="field">
+                <span className="field-label">Merchant contains</span>
+                <input className="pixel-input" placeholder="e.g. Starbucks" value={form.matchMerchant} onChange={(e) => setForm({ ...form, matchMerchant: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">Description contains</span>
+                <input className="pixel-input" value={form.matchDescription} onChange={(e) => setForm({ ...form, matchDescription: e.target.value })} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="field">
+                  <span className="field-label">Min amount</span>
+                  <input className="pixel-input" inputMode="decimal" value={form.matchAmountMin} onChange={(e) => setForm({ ...form, matchAmountMin: e.target.value })} />
+                </label>
+                <label className="field">
+                  <span className="field-label">Max amount</span>
+                  <input className="pixel-input" inputMode="decimal" value={form.matchAmountMax} onChange={(e) => setForm({ ...form, matchAmountMax: e.target.value })} />
+                </label>
+              </div>
+              <label className="field">
+                <span className="field-label">Account</span>
+                <select className="pixel-input" value={form.matchAccountId} onChange={(e) => setForm({ ...form, matchAccountId: e.target.value })}>
+                  <option value="">Any account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Rename to</span>
+                <input className="pixel-input" value={form.actionRename} onChange={(e) => setForm({ ...form, actionRename: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">Set category</span>
+                <CategorySelect groups={groups} value={form.actionCategoryId} onChange={(id) => setForm({ ...form, actionCategoryId: id })} emptyLabel="Keep category" />
+              </label>
+              <label className="field">
+                <span className="field-label">Tags</span>
+                <input className="pixel-input" placeholder="Comma-separated" value={form.actionTagNames} onChange={(e) => setForm({ ...form, actionTagNames: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">Link goal</span>
+                <select className="pixel-input" value={form.actionGoalId} onChange={(e) => setForm({ ...form, actionGoalId: e.target.value })}>
+                  <option value="">No goal</option>
+                  {goals.map((goal) => (
+                    <option key={goal.id} value={goal.id}>
+                      {goal.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="card">
+                <button type="button" className="data-row w-full justify-between" aria-pressed={form.actionHide} onClick={() => setForm({ ...form, actionHide: !form.actionHide })}>
+                  Hide matching purchases
+                  <span className={`switch ${form.actionHide ? "on" : ""}`} />
+                </button>
+                <button type="button" className="data-row w-full justify-between" aria-pressed={form.applyExisting} onClick={() => setForm({ ...form, applyExisting: !form.applyExisting })}>
+                  Apply to existing transactions
+                  <span className={`switch ${form.applyExisting ? "on" : ""}`} />
+                </button>
+              </div>
+              <button className="pixel-btn w-full">Save rule</button>
             </div>
-            <select className="pixel-input" aria-label="Account" value={form.matchAccountId} onChange={(e) => setForm({ ...form, matchAccountId: e.target.value })}>
-              <option value="">Any account</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-            <input className="pixel-input" placeholder="Rename to" value={form.actionRename} onChange={(e) => setForm({ ...form, actionRename: e.target.value })} />
-            <CategorySelect groups={groups} value={form.actionCategoryId} onChange={(id) => setForm({ ...form, actionCategoryId: id })} emptyLabel="Keep category" />
-            <input className="pixel-input" placeholder="Tags" value={form.actionTagNames} onChange={(e) => setForm({ ...form, actionTagNames: e.target.value })} />
-            <select className="pixel-input" aria-label="Goal" value={form.actionGoalId} onChange={(e) => setForm({ ...form, actionGoalId: e.target.value })}>
-              <option value="">No goal</option>
-              {goals.map((goal) => (
-                <option key={goal.id} value={goal.id}>
-                  {goal.name}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.actionHide} onClick={() => setForm({ ...form, actionHide: !form.actionHide })}>
-              Hide
-              <span className={`switch ${form.actionHide ? "on" : ""}`} />
-            </button>
-            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.applyExisting} onClick={() => setForm({ ...form, applyExisting: !form.applyExisting })}>
-              Apply to existing transactions
-              <span className={`switch ${form.applyExisting ? "on" : ""}`} />
-            </button>
-            <button className="pixel-btn w-full">Save rule</button>
           </form>
         </Sheet>
       ) : null}
