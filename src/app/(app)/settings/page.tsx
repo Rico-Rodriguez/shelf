@@ -109,9 +109,9 @@ export default function SettingsPage() {
               <div className="pixel-title text-sm" style={{ color: g.color }}>{g.name}</div>
               <ul className="text-sm">
                 {g.categories.map((c) => (
-                  <li key={c.id} className="flex justify-between">
-                    <span>{c.name}</span>
-                    <span className="text-xs text-ink-soft">{c.flexBucket ?? ""}{c.rollover ? " · roll" : ""}</span>
+                  <li key={c.id} className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate">{c.name}</span>
+                    <span className="shrink-0 whitespace-nowrap text-xs text-ink-soft">{c.flexBucket ?? ""}{c.rollover ? " · roll" : ""}</span>
                   </li>
                 ))}
               </ul>

@@ -91,7 +91,7 @@ export default function BudgetPage() {
         </div>
       </div>
 
-      <div className="ios-seg">
+      <div className="ios-seg w-full max-w-xs">
         <button type="button" className={data.mode === "category" ? "active" : ""} onClick={() => setMode("category")}>
           Category
         </button>
