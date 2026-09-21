@@ -19,10 +19,13 @@
   --danger: #ff3b30;
   --positive: #34c759;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.12);
-  --radius: 16px;
-  --radius-sm: 12px;
-  --nav-height: 49px;
+  --shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.1);
+  --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 0 0 0.5px rgba(0, 0, 0, 0.12),
+    0 8px 28px rgba(0, 0, 0, 0.1);
+  --radius: 22px;
+  --radius-sm: 16px;
+  --radius-sheet: 28px;
+  --nav-height: 62px;
   --font-ios: var(--font-inter), "Segoe UI", sans-serif;
   --cream: var(--parchment);
   --cream-dark: var(--fill);
@@ -78,6 +81,14 @@ body {
   touch-action: manipulation;
   overscroll-behavior-y: none;
   color-scheme: light;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 50% at 8% -8%, rgba(212, 101, 74, 0.16), transparent 56%),
+    radial-gradient(ellipse 70% 46% at 100% 0%, rgba(36, 138, 61, 0.12), transparent 52%),
+    var(--parchment);
+  background-attachment: fixed;
 }
 
 * {
@@ -147,9 +158,17 @@ a:focus-visible {
     color: var(--muted);
   }
 
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: var(--shadow-glass);
+  }
+
   .pixel-panel {
     background: var(--linen);
     border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
   }
 
   .pixel-btn {
@@ -157,14 +176,15 @@ a:focus-visible {
     align-items: center;
     justify-content: center;
     min-height: 50px;
-    padding: 0 16px;
+    padding: 0 20px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 999px;
     background: var(--terracotta);
     color: #fff;
     font-size: 17px;
     font-weight: 600;
     letter-spacing: -0.41px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
     transition: opacity 120ms ease;
   }
 
@@ -180,30 +200,30 @@ a:focus-visible {
     opacity: 0.4;
   }
 
-  .pixel-btn.secondary {
-    background: var(--fill);
-    color: var(--espresso);
-  }
-
+  .pixel-btn.secondary,
   .pixel-btn.ghost {
-    background: var(--fill);
+    background: rgba(255, 255, 255, 0.72);
     color: var(--espresso);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: var(--shadow-glass);
   }
 
   .pixel-btn.danger {
     background: var(--danger);
     color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   }
 
   .pixel-input {
     width: 100%;
     min-height: 44px;
     border: 0;
-    border-radius: 10px;
-    background: var(--fill);
-    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(120, 120, 128, 0.12);
+    padding: 10px 14px;
     color: var(--espresso);
-    box-shadow: none;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .pixel-input:focus {
@@ -224,7 +244,7 @@ a:focus-visible {
     height: 36px;
     padding-top: 0;
     padding-bottom: 0;
-    border-radius: 10px;
+    border-radius: 999px;
   }
 
   .chip {
@@ -251,17 +271,17 @@ a:focus-visible {
 
   .ios-seg {
     display: flex;
-    min-height: 36px;
-    padding: 2px;
-    border-radius: 9px;
-    background: var(--fill);
+    min-height: 40px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(120, 120, 128, 0.12);
   }
 
   .ios-seg button {
     flex: 1;
-    min-height: 32px;
+    min-height: 34px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 999px;
     background: transparent;
     color: var(--espresso);
     font-size: 13px;
@@ -270,8 +290,10 @@ a:focus-visible {
   }
 
   .ios-seg button.active {
-    background: #fff;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04), 0 3px 8px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: var(--shadow-glass);
   }
 
   .ios-sheet-backdrop {
@@ -283,14 +305,17 @@ a:focus-visible {
 
   .ios-sheet {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
     max-height: 88vh;
     overflow: auto;
-    padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
-    border-radius: 16px 16px 0 0;
-    background: var(--parchment);
+    padding: 8px 16px 20px;
+    border-radius: var(--radius-sheet);
+    background: rgba(242, 242, 247, 0.82);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: var(--shadow-glass);
   }
 
   .ios-sheet-handle {
@@ -303,25 +328,33 @@ a:focus-visible {
 
   .ios-tabbar {
     position: sticky;
-    bottom: 0;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     z-index: 20;
     display: grid;
     grid-template-columns: repeat(5, 1fr);
+    width: calc(100% - 32px);
     min-height: var(--nav-height);
-    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
-    border-top: 0.5px solid var(--line-strong);
-    background: rgba(249, 249, 249, 0.86);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    margin: 0 auto calc(10px + env(safe-area-inset-bottom));
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: var(--shadow-glass);
   }
 
   .ios-tab {
     display: flex;
+    min-width: 0;
     min-height: 48px;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--muted);
     font-size: 10px;
     font-weight: 500;
@@ -329,8 +362,41 @@ a:focus-visible {
     line-height: 12px;
   }
 
+  .ios-tab-glyph {
+    display: flex;
+    width: 48px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+  }
+
   .ios-tab.active {
     color: var(--terracotta);
+  }
+
+  .ios-tab.active .ios-tab-glyph {
+    background: rgba(212, 101, 74, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .ios-nav {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    gap: 10px;
+    border-radius: 999px;
+    padding: 0 12px;
+    color: inherit;
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: -0.41px;
+  }
+
+  .ios-nav.active {
+    background: rgba(212, 101, 74, 0.16);
+    font-weight: 600;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 0.5px rgba(212, 101, 74, 0.18);
   }
 
   .ios-row {
@@ -352,7 +418,7 @@ a:focus-visible {
     right: 0;
     left: 16px;
     height: 0.5px;
-    background: var(--line);
+    background: rgba(60, 60, 67, 0.12);
   }
 
   .ios-group {
@@ -360,8 +426,9 @@ a:focus-visible {
     padding: 0;
     overflow: hidden;
     list-style: none;
-    border-radius: 12px;
+    border-radius: var(--radius);
     background: var(--linen);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .ios-section {
@@ -408,7 +475,8 @@ a:focus-visible {
     flex-shrink: 0;
     border: 0;
     border-radius: 999px;
-    background: #e9e9eb;
+    background: rgba(120, 120, 128, 0.16);
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
     transition: background 160ms ease;
   }
 
@@ -425,7 +493,7 @@ a:focus-visible {
     height: 27px;
     border-radius: 99px;
     background: #fff;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.18);
     transition: transform 160ms ease;
   }
 
@@ -465,5 +533,23 @@ main h1 + p {
 @media (min-width: 768px) {
   .ios-tabbar {
     display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .pixel-btn.secondary,
+  .pixel-btn.ghost,
+  .ios-seg button.active,
+  .ios-tabbar {
+    background: var(--linen);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .ios-sheet {
+    background: var(--parchment);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

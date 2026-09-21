@@ -86,7 +86,7 @@ export default function RecurringPage() {
               const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const hits = rows.filter((r) => r.isActive && r.nextDate === iso);
               return (
-                <div key={iso} className="min-h-16 rounded-lg border border-[var(--line)] p-1 text-left">
+                <div key={iso} className="min-h-16 rounded-[16px] bg-[rgba(120,120,128,0.08)] p-1 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                   <div className="text-[10px] text-ink-soft">{day}</div>
                   {hits.map((h) => (
                     <div key={h.id} className="truncate text-[10px]">

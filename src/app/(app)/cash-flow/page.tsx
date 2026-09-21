@@ -175,7 +175,7 @@ function FlowTip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl bg-white px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+    <div className="rounded-[22px] bg-white px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),inset_0_0_0_0.5px_rgba(0,0,0,0.12),0_8px_28px_rgba(0,0,0,0.10)]">
       <div className="mb-1 text-[13px] font-semibold tracking-[-0.08px]">{tipLabel(String(label ?? ""))}</div>
       {payload.map((row) => (
         <div key={row.name} className="flex items-center justify-between gap-4 text-[13px] leading-[18px]">

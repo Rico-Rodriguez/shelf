@@ -59,7 +59,8 @@ function build(nodes: Node[], links: Link[]) {
       borderWidth: 0,
       padding: [8, 12],
       textStyle: { color: "#1c1c1e", fontSize: 13 },
-      extraCssText: "border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);",
+      extraCssText:
+        "border-radius:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.85), inset 0 0 0 0.5px rgba(0,0,0,0.12), 0 8px 28px rgba(0,0,0,0.10);",
       formatter: (item: { dataType?: string; name?: string; data?: { source?: string; target?: string; value?: number } }) => {
         const value = item.data?.value;
         const money = typeof value === "number" ? usd(value) : "";
