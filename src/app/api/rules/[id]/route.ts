@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { rules } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { applyRuleToExisting } from "@/lib/rules";
 import { openRule, sealedRuleWrite } from "@/lib/secrets";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const { id } = await context.params;
     const body = (await request.json()) as Partial<typeof rules.$inferInsert> & { applyExisting?: boolean };
     const db = await getDb();
@@ -52,20 +52,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
     return NextResponse.json({ ok: true, applied });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireDek();
+    await requireWriter();
     const { id } = await context.params;
     const db = await getDb();
     await db.delete(rules).where(eq(rules.id, id));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

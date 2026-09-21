@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { users } from "@/db/schema";
+import { householdMembers, households, users } from "@/db/schema";
 import { getSession } from "@/lib/auth";
 import { createDek, hashPassword, MIN_PASSWORD, wrapDek } from "@/lib/crypto";
 import { nid } from "@/lib/ids";
@@ -19,15 +19,22 @@ export async function POST(request: Request) {
   }
   const dek = createDek();
   const wrapped = wrapDek(dek, body.password);
+  const userId = nid();
+  const householdId = nid();
   await db.insert(users).values({
-    id: nid(),
+    id: userId,
     passwordHash: hashPassword(body.password),
     dekSalt: wrapped.salt,
     dekWrapped: wrapped.wrapped,
+    displayName: "Owner",
     totpEnabled: false,
     failedAttempts: 0,
   });
+  await db.insert(households).values({ id: householdId, name: "Household" });
+  await db.insert(householdMembers).values({ householdId, userId, role: "owner" });
   const session = await getSession();
+  session.userId = userId;
+  session.role = "owner";
   session.unlocked = false;
   session.pendingEnroll = true;
   session.pendingTotp = false;

@@ -20,7 +20,9 @@ export async function POST(request: Request) {
     if (!session.pendingTotp || !session.dek) throw new AuthError("locked");
     const body = (await request.json()) as { code?: string };
     const db = await getDb();
-    const [user] = await db.select().from(users);
+    const [user] = session.userId
+      ? await db.select().from(users).where(eq(users.id, session.userId))
+      : await db.select().from(users);
     if (!user?.totpSecretEnc || !user.totpEnabled) throw new AuthError("locked");
     const locked = lockMessage(user.lockedUntil);
     if (locked) return NextResponse.json({ error: locked }, { status: 429 });

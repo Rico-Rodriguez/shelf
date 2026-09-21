@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { categories, categoryGroups, netWorthSnapshots, transactions } from "@/db/schema";
+import { categories, categoryGroups, netWorthSnapshots, transactionSplits, transactions } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
 import { computeNetWorth } from "@/lib/networth";
 import { monthRange, yearMonth } from "@/lib/dates";
-import { openSnapshot, openTx } from "@/lib/secrets";
+import { transactionParts } from "@/lib/spend";
+import { openSnapshot, openSplit, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -17,14 +18,16 @@ export async function GET(request: Request) {
     const month = Number(url.searchParams.get("month") ?? now.month);
     const { start, end } = monthRange(year, month);
     const db = await getDb();
-    const [txRows, cats, groups, snapRows, nw] = await Promise.all([
+    const [txRows, splitRows, cats, groups, snapRows, nw] = await Promise.all([
       db.select().from(transactions),
+      db.select().from(transactionSplits),
       db.select().from(categories),
       db.select().from(categoryGroups),
       db.select().from(netWorthSnapshots),
       computeNetWorth(dek),
     ]);
     const txs = txRows.map((row) => openTx(row, dek));
+    const splits = splitRows.map((row) => openSplit(row, dek));
     const snaps = snapRows.map((row) => openSnapshot(row, dek));
 
     const incomeIds = new Set(cats.filter((c) => c.kind === "income").map((c) => c.id));
@@ -35,24 +38,26 @@ export async function GET(request: Request) {
     const catSpend: Record<string, { id: string; name: string; group: string; cents: number; color: string }> = {};
 
     for (const tx of monthTx) {
-      if (tx.categoryId && incomeIds.has(tx.categoryId) && tx.amountCents < 0) {
-        income += Math.abs(tx.amountCents);
-        continue;
+      for (const part of transactionParts(tx, splits)) {
+        if (part.categoryId && incomeIds.has(part.categoryId) && part.amountCents < 0) {
+          income += Math.abs(part.amountCents);
+          continue;
+        }
+        if (part.amountCents <= 0) continue;
+        const cat = cats.find((c) => c.id === part.categoryId);
+        const group = groups.find((g) => g.id === cat?.groupId);
+        const gName = group?.name ?? "Other";
+        groupSpend[gName] = (groupSpend[gName] ?? 0) + part.amountCents;
+        const key = cat?.id ?? "uncat";
+        catSpend[key] = catSpend[key] ?? {
+          id: cat?.id ?? "",
+          name: cat?.name ?? "Uncategorized",
+          group: gName,
+          cents: 0,
+          color: group?.color ?? "#9A8B7A",
+        };
+        catSpend[key].cents += part.amountCents;
       }
-      if (tx.amountCents <= 0) continue;
-      const cat = cats.find((c) => c.id === tx.categoryId);
-      const group = groups.find((g) => g.id === cat?.groupId);
-      const gName = group?.name ?? "Other";
-      groupSpend[gName] = (groupSpend[gName] ?? 0) + tx.amountCents;
-      const key = cat?.id ?? "uncat";
-      catSpend[key] = catSpend[key] ?? {
-        id: cat?.id ?? "",
-        name: cat?.name ?? "Uncategorized",
-        group: gName,
-        cents: 0,
-        color: group?.color ?? "#9A8B7A",
-      };
-      catSpend[key].cents += tx.amountCents;
     }
 
     const nodes: { id: string; color: string }[] = [{ id: "Income", color: "#6B8F5E" }];

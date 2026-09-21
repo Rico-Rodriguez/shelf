@@ -6,6 +6,8 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Stat } from "@/components/Stat";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { addMonths, monthRange } from "@/lib/dates";
@@ -27,6 +29,9 @@ type Budget = {
   month: number;
   mode: "category" | "flex";
   plannedIncomeCents: number;
+  flexPoolCents: number;
+  flexSpentCents: number;
+  flexRemainingCents: number;
   actualIncomeCents: number;
   leftoverCents: number;
   expensePlannedCents: number;
@@ -116,6 +121,7 @@ export default function BudgetPage() {
         year: data!.year,
         month: data!.month,
         plannedIncomeCents: previous.plannedIncomeCents,
+        flexPoolCents: previous.flexPoolCents,
         items: previous.rows.map((row) => ({ categoryId: row.category.id, plannedCents: row.plannedCents })),
       }),
     });
@@ -131,49 +137,31 @@ export default function BudgetPage() {
   }
 
   async function saveFlexTotal(cents: number) {
-    const rows = data!.flex.flex;
-    if (!rows.length) return;
-    const current = rows.reduce((sum, row) => sum + row.plannedCents, 0);
-    if (current <= 0) {
-      await saveItems(rows.map((row, index) => ({ categoryId: row.category.id, plannedCents: index === 0 ? cents : row.plannedCents })));
-      return;
-    }
-    const scaled = rows.map((row) => ({
-      categoryId: row.category.id,
-      plannedCents: Math.floor((row.plannedCents / current) * cents),
-      weight: row.plannedCents,
-    }));
-    let remainder = cents - scaled.reduce((sum, row) => sum + row.plannedCents, 0);
-    const order = [...scaled].sort((a, b) => b.weight - a.weight);
-    for (const row of order) {
-      if (remainder <= 0) break;
-      row.plannedCents += 1;
-      remainder -= 1;
-    }
-    await saveItems(scaled.map(({ categoryId, plannedCents }) => ({ categoryId, plannedCents })));
+    await api("/api/budget", {
+      method: "PUT",
+      body: JSON.stringify({ year: data!.year, month: data!.month, flexPoolCents: cents }),
+    });
+    load(data!.year, data!.month);
   }
 
   const range = monthRange(data.year, data.month);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1>Budget</h1>
-          <p>Income in, categories planned, leftover unassigned.</p>
-        </div>
+      <PageHeader title="Budget" subtitle="Income in, categories planned, leftover unassigned.">
         <MonthNav year={data.year} month={data.month} onChange={load} />
-      </div>
+      </PageHeader>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="ios-seg w-full max-w-xs">
-          <button type="button" className={data.mode === "category" ? "active" : ""} onClick={() => setMode("category")}>
-            Category
-          </button>
-          <button type="button" className={data.mode === "flex" ? "active" : ""} onClick={() => setMode("flex")}>
-            Flex
-          </button>
-        </div>
+        <Segment
+          className="w-full max-w-xs"
+          value={data.mode}
+          onChange={(value) => setMode(value as "category" | "flex")}
+          options={[
+            { value: "category", label: "Category" },
+            { value: "flex", label: "Flex" },
+          ]}
+        />
         <button className="pixel-btn ghost" type="button" onClick={copyLastMonth}>
           Use last month
         </button>
@@ -206,7 +194,7 @@ export default function BudgetPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Bucket title="Fixed" rows={rowsOf(data.flex.fixed)} range={range} onSave={setPlanned} onRollover={toggleRollover} />
           <Bucket title="Non-monthly" rows={rowsOf(data.flex.non_monthly)} range={range} onSave={setPlanned} onRollover={toggleRollover} />
-          <FlexPot rows={data.flex.flex} range={range} onSave={saveFlexTotal} />
+          <FlexPot pool={data.flexPoolCents} spent={data.flexSpentCents} rows={data.flex.flex} range={range} onSave={saveFlexTotal} />
         </div>
       ) : (
         groups.map((group) => {
@@ -226,7 +214,7 @@ export default function BudgetPage() {
                 </span>
               </button>
               {isClosed ? null : (
-                <div className="ios-group">
+                <div className="card">
                   {group.rows.map((row) => (
                     <CategoryRow key={row.category.id} row={row} range={range} color={shelfColor(group.color)} onSave={setPlanned} onRollover={toggleRollover} />
                   ))}
@@ -323,16 +311,19 @@ function Bucket({
 }
 
 function FlexPot({
+  pool,
+  spent,
   rows,
   range,
   onSave,
 }: {
+  pool: number;
+  spent: number;
   rows: Row[];
   range: { start: string; end: string };
   onSave: (cents: number) => void;
 }) {
-  const planned = rows.reduce((sum, row) => sum + row.plannedCents, 0);
-  const spent = rows.reduce((sum, row) => sum + row.spentCents, 0);
+  const planned = pool;
   return (
     <section className="pixel-panel p-4">
       <h2 className="text-[17px] font-semibold">Flex</h2>

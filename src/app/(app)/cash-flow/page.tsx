@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { periodRange } from "@/lib/dates";
@@ -20,10 +22,21 @@ type Flow = {
 type Point = { name: string; Income: number; Spending: number; Saved: number };
 
 const SERIES = [
-  { key: "Income", color: "#34C759" },
-  { key: "Saved", color: "#007AFF" },
-  { key: "Spending", color: "#E15A3A" },
+  { key: "Income", color: "#1f7a45" },
+  { key: "Saved", color: "#1f4d45" },
+  { key: "Spending", color: "#b23b32" },
 ] as const;
+
+function SavingsRate({ series }: { series: { income: number; spending: number }[] }) {
+  const income = series.reduce((sum, row) => sum + row.income, 0);
+  const spending = series.reduce((sum, row) => sum + row.spending, 0);
+  const rate = income > 0 ? Math.round(((income - spending) / income) * 100) : null;
+  return (
+    <p className="text-[14px] text-[var(--muted)]">
+      Savings rate {rate == null ? "—" : `${rate}%`} over this range
+    </p>
+  );
+}
 
 const tick = { fill: "rgba(60, 60, 67, 0.6)", fontSize: 11 };
 
@@ -60,19 +73,18 @@ export default function CashFlowPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1>Cash flow</h1>
-        <p>What came in, what went out, and what was left. Tap a month or a row to see the transactions.</p>
-      </div>
+      <PageHeader title="Cash flow" subtitle="What came in, what went out, and what was left. Open a month or a row to see the transactions." />
+      <SavingsRate series={data.series} />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="ios-seg sm:w-56">
-          <button type="button" className={grain === "month" ? "active" : ""} onClick={() => setGrain("month")}>
-            Monthly
-          </button>
-          <button type="button" className={grain === "quarter" ? "active" : ""} onClick={() => setGrain("quarter")}>
-            Quarterly
-          </button>
-        </div>
+        <Segment
+          className="sm:w-56"
+          value={grain}
+          onChange={(value) => setGrain(value as "month" | "quarter")}
+          options={[
+            { value: "month", label: "Monthly" },
+            { value: "quarter", label: "Quarterly" },
+          ]}
+        />
         <input
           className="pixel-input ios-search sm:max-w-xs"
           placeholder="Filter merchant"
@@ -145,16 +157,16 @@ function List({ title, rows, hrefFor }: { title: string; rows: Row[]; hrefFor: (
   return (
     <section>
       <h2 className="ios-section">{title}</h2>
-      <ul className="ios-group">
+      <ul className="card">
         {sorted.map((row) => (
           <li key={row.id || row.name}>
-            <Link href={hrefFor(row)} className="ios-row justify-between gap-3">
+            <Link href={hrefFor(row)} className="data-row justify-between gap-3">
               <span className="min-w-0 truncate">{row.name}</span>
               <MoneyText className="shrink-0 text-[var(--muted)]" cents={row.cents} />
             </Link>
           </li>
         ))}
-        {sorted.length === 0 ? <li className="ios-row text-[var(--muted)]">Nothing yet.</li> : null}
+        {sorted.length === 0 ? <li className="data-row text-[var(--muted)]">Nothing yet.</li> : null}
       </ul>
     </section>
   );

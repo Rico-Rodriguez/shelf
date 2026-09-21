@@ -7,6 +7,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { SankeyChart } from "@/components/SankeyChart";
 import { Stat } from "@/components/Stat";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { monthRange, yearMonth } from "@/lib/dates";
@@ -37,13 +38,9 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1>Reports</h1>
-          <p>Income, spending, and net worth. Tap a category to see its transactions.</p>
-        </div>
+      <PageHeader title="Reports" subtitle="Income, spending, and net worth. Open a category to see its transactions.">
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
-      </div>
+      </PageHeader>
 
       <div className="pixel-panel grid grid-cols-3 divide-x divide-[var(--line)]">
         <Stat label="Income" cents={data.incomeCents} />
@@ -63,12 +60,12 @@ export default function ReportsPage() {
 
       <section>
         <h2 className="ios-section">Spending</h2>
-        <ul className="ios-group">
+        <ul className="card">
           {data.byCategory.map((category) => (
             <li key={category.id || category.name}>
               <Link
                 href={activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
-                className="ios-row justify-between gap-3"
+                className="data-row justify-between gap-3"
               >
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: shelfColor(category.color) }} />
@@ -78,7 +75,7 @@ export default function ReportsPage() {
               </Link>
             </li>
           ))}
-          {data.byCategory.length === 0 ? <li className="ios-row text-[var(--muted)]">Nothing this month.</li> : null}
+          {data.byCategory.length === 0 ? <li className="data-row text-[var(--muted)]">Nothing this month.</li> : null}
         </ul>
       </section>
 

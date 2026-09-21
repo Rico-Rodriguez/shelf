@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/crypto";
 import { googleConfigured, googleSessionOk } from "@/lib/google-config";
 import { clearIpFailures, clientIp, ipBlocked, lockMessage, nextLock, noteIpFailure } from "@/lib/throttle";
+import { roleForUser } from "@/lib/household";
 import { openOrCreateDek } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in with Google first." }, { status: 401 });
   }
   const db = await getDb();
-  const [user] = await db.select().from(users);
+  const people = await db.select().from(users);
+  const user = body.password ? people.find((person) => verifyPassword(body.password!, person.passwordHash)) : undefined;
   if (!user || !body.password) {
     noteIpFailure(ip);
     return NextResponse.json({ error: "That key does not fit." }, { status: 401 });
@@ -46,6 +48,8 @@ export async function POST(request: Request) {
   clearIpFailures(ip);
 
   session.dek = dek.toString("base64");
+  session.userId = user.id;
+  session.role = await roleForUser(user.id);
   session.unlocked = false;
   session.totpSetupSecret = undefined;
   if (googleConfigured() && session.googleSub) {

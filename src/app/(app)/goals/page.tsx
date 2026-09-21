@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 
 type Goal = {
@@ -89,17 +91,13 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1>Goals</h1>
-          <p>A target for something ahead, or a balance you want gone.</p>
-        </div>
+      <PageHeader title="Goals" subtitle="A target for something ahead, or a balance you want gone.">
         <button className="pixel-btn" type="button" onClick={openNew}>
           Add
         </button>
-      </div>
+      </PageHeader>
 
-      {goals.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No goals yet.</p> : null}
+      {goals.length === 0 ? <EmptyState>No goals yet.</EmptyState> : null}
 
       <div className="grid gap-3 md:grid-cols-2">
         {goals.map((goal) => (
@@ -111,7 +109,11 @@ export default function GoalsPage() {
               {goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
             </p>
             <div className="my-3">
-              <ProgressBar value={goal.progressCents} max={goal.targetCents || 1} color={goal.kind === "save_up" ? "#248a3d" : "#d4654a"} />
+              <ProgressBar
+                value={goal.progressCents}
+                max={goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1}
+                color={goal.kind === "save_up" ? "#1f7a45" : "#b23b32"}
+              />
             </div>
             <p className="text-[15px]">
               <MoneyText cents={goal.progressCents} /> of <MoneyText cents={goal.targetCents} />
@@ -132,17 +134,17 @@ export default function GoalsPage() {
             <input className="pixel-input" type="date" aria-label="Target date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
             <div>
               <div className="mb-1 text-[13px] text-[var(--muted)]">Linked accounts</div>
-              <div className="ios-group">
+              <div className="card">
                 {accounts.map((account) => {
                   const on = form.accountIds.includes(account.id);
                   return (
-                    <button key={account.id} type="button" className="ios-row w-full justify-between text-[17px]" aria-pressed={on} onClick={() => toggleAccount(account.id)}>
+                    <button key={account.id} type="button" className="data-row w-full justify-between text-[17px]" aria-pressed={on} onClick={() => toggleAccount(account.id)}>
                       {account.name}
                       <span className={`switch ${on ? "on" : ""}`} />
                     </button>
                   );
                 })}
-                {accounts.length === 0 ? <div className="ios-row text-[var(--muted)]">Add an account first.</div> : null}
+                {accounts.length === 0 ? <div className="data-row text-[var(--muted)]">Add an account first.</div> : null}
               </div>
             </div>
             <button className="pixel-btn w-full">Save</button>

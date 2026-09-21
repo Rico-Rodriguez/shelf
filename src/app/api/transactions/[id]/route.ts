@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { openTx, sealedSplitWrite, sealedTxWrite } from "@/lib/secrets";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const { id } = await context.params;
     const body = (await request.json()) as {
       name?: string;
@@ -22,6 +22,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       notes?: string | null;
       goalId?: string | null;
       isTransfer?: boolean;
+      transferPairId?: string | null;
       amount?: number;
       date?: string;
       tags?: string[];
@@ -51,11 +52,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         reviewed: body.reviewed,
         hidden: body.hidden,
         goalId: body.goalId,
-        isTransfer: body.isTransfer,
+        isTransfer: body.transferPairId ? true : body.isTransfer,
+        transferPairId: body.transferPairId,
         date: body.date,
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, id));
+
+    if (body.transferPairId !== undefined) {
+      if (opened.transferPairId && opened.transferPairId !== body.transferPairId) {
+        await db.update(transactions).set({ transferPairId: null }).where(eq(transactions.id, opened.transferPairId));
+      }
+      if (body.transferPairId) {
+        await db
+          .update(transactions)
+          .set({ transferPairId: id, isTransfer: true, updatedAt: new Date() })
+          .where(eq(transactions.id, body.transferPairId));
+      }
+    }
 
     if (body.tags) {
       await db.delete(transactionTags).where(eq(transactionTags.transactionId, id));
@@ -87,7 +101,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

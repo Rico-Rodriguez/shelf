@@ -6,6 +6,10 @@ import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/Cate
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
 
@@ -22,8 +26,11 @@ type Tx = {
   categoryId: string | null;
   isTransfer: boolean;
   pending: boolean;
-  account: { name: string } | null;
-  category: { name: string; sprite: string } | null;
+  account: { id?: string; name: string } | null;
+  accountId?: string;
+  goalId: string | null;
+  transferPairId: string | null;
+  category: { name: string; sprite: string; color?: string } | null;
   tags: { name: string }[];
   splits: { categoryId: string | null; amountCents: number }[];
 };
@@ -53,8 +60,12 @@ function Activity() {
   const [q, setQ] = useState(urlQ);
   const [rows, setRows] = useState<Tx[]>([]);
   const [unreviewed, setUnreviewed] = useState(0);
+  const tag = params.get("tag") ?? "";
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [tagNames, setTagNames] = useState<string[]>([]);
+  const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
+  const [pairs, setPairs] = useState<{ id: string; name: string; date: string; amountCents: number; account: string | null }[]>([]);
   const [edit, setEdit] = useState<EditState | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
@@ -71,11 +82,12 @@ function Activity() {
     if (reviewed) qs.set("reviewed", reviewed);
     if (start) qs.set("start", start);
     if (end) qs.set("end", end);
+    if (tag) qs.set("tag", tag);
     void api<{ transactions: Tx[]; unreviewed: number }>(`/api/transactions?${qs}`).then((r) => {
       setRows(r.transactions);
       setUnreviewed(r.unreviewed);
     });
-  }, [q, accountId, categoryId, reviewed, start, end]);
+  }, [q, accountId, categoryId, reviewed, start, end, tag]);
 
   useEffect(() => {
     load();
@@ -84,6 +96,8 @@ function Activity() {
   useEffect(() => {
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
+    void api<{ tags: { name: string }[] }>("/api/tags").then((r) => setTagNames(r.tags.map((item) => item.name))).catch(() => undefined);
+    void api<{ goals: { id: string; name: string }[] }>("/api/goals").then((r) => setGoals(r.goals)).catch(() => undefined);
   }, []);
 
   function replaceQuery(patch: Record<string, string | null>) {
@@ -133,6 +147,8 @@ function Activity() {
         hidden: edit.hidden,
         notes: edit.notes,
         isTransfer: edit.isTransfer,
+        goalId: edit.goalId,
+        transferPairId: edit.transferPairId,
         tags: edit.tagText.split(",").map((tag) => tag.trim()).filter(Boolean),
         splits: edit.splitDrafts
           .filter((part) => part.categoryId && part.amount)
@@ -144,6 +160,10 @@ function Activity() {
   }
 
   function openEdit(tx: Tx) {
+    setPairs([]);
+    void api<{ candidates: { id: string; name: string; date: string; amountCents: number; account: string | null }[] }>(
+      `/api/transactions?pairFor=${tx.id}`,
+    ).then((res) => setPairs(res.candidates));
     setEdit({
       ...tx,
       tagText: tx.tags.map((tag) => tag.name).join(", "),
@@ -184,18 +204,19 @@ function Activity() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1>Activity</h1>
-          <p>
+      <PageHeader
+        title="Transactions"
+        subtitle={
+          <>
             {unreviewed} to review
             {rows.length ? ` · ${rows.length} shown` : ""}
-          </p>
-        </div>
+          </>
+        }
+      >
         <button className="pixel-btn" type="button" onClick={() => setShowAdd(true)}>
           Add
         </button>
-      </div>
+      </PageHeader>
 
       <input
         className="pixel-input ios-search"
@@ -205,17 +226,16 @@ function Activity() {
         aria-label="Search transactions"
       />
 
-      <div className="ios-seg w-full max-w-xs">
-        <button type="button" className={reviewed === "" ? "active" : ""} onClick={() => replaceQuery({ reviewed: null })}>
-          All
-        </button>
-        <button type="button" className={reviewed === "false" ? "active" : ""} onClick={() => replaceQuery({ reviewed: "false" })}>
-          Inbox
-        </button>
-        <button type="button" className={reviewed === "true" ? "active" : ""} onClick={() => replaceQuery({ reviewed: "true" })}>
-          Reviewed
-        </button>
-      </div>
+      <Segment
+        className="w-full max-w-xs"
+        value={reviewed}
+        onChange={(value) => replaceQuery({ reviewed: value || null })}
+        options={[
+          { value: "", label: "All" },
+          { value: "false", label: "Inbox" },
+          { value: "true", label: "Reviewed" },
+        ]}
+      />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <select className="pixel-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
@@ -227,9 +247,17 @@ function Activity() {
           ))}
         </select>
         <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
+        <select className="pixel-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })} aria-label="Tag">
+          <option value="">All tags</option>
+          {tagNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <FilterBar className="justify-between">
         {month ? (
           <MonthNav
             year={month.year}
@@ -262,18 +290,19 @@ function Activity() {
             Review all visible
           </button>
         ) : null}
-      </div>
+      </FilterBar>
 
-      {grouped.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No transactions match.</p> : null}
+      {grouped.length === 0 ? <EmptyState>No transactions match.</EmptyState> : null}
 
       {grouped.map(([date, items]) => (
         <section key={date}>
           <h2 className="ios-section">{dayLabel(date)}</h2>
-          <div className="ios-group">
+          <div className="card">
             {items.map((tx) => (
-              <div key={tx.id} className={`ios-row ${tx.reviewed ? "placed" : ""}`}>
+              <div key={tx.id} className={`data-row ${tx.reviewed ? "placed" : ""}`}>
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openEdit(tx)}>
-                  <div className="tx-name flex items-center gap-2 truncate text-[17px] font-medium">
+                  <div className="tx-name flex items-center gap-2 truncate font-medium">
+                    <span className="size-2 shrink-0 rounded-full" style={{ background: tx.category?.color ?? "#c8c0b4" }} />
                     <span className="truncate">{tx.name}</span>
                     {tx.pending ? <span className="chip">Pending</span> : null}
                   </div>
@@ -315,6 +344,31 @@ function Activity() {
           ) : null}
           <input className="pixel-input" aria-label="Name" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
           <CategoryPicker groups={groups} value={edit.categoryId ?? ""} onChange={(id) => setEdit({ ...edit, categoryId: id || null })} />
+          <select className="pixel-input" aria-label="Goal" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
+            <option value="">No goal</option>
+            {goals.map((goal) => (
+              <option key={goal.id} value={goal.id}>
+                {goal.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="pixel-input"
+            aria-label="Transfer pair"
+            value={edit.transferPairId ?? ""}
+            onChange={(e) => setEdit({ ...edit, transferPairId: e.target.value || null, isTransfer: Boolean(e.target.value) || edit.isTransfer })}
+          >
+            <option value="">No linked transfer</option>
+            {pairs.map((pair) => (
+              <option key={pair.id} value={pair.id}>
+                {pair.date} · {pair.name}
+                {pair.account ? ` · ${pair.account}` : ""}
+              </option>
+            ))}
+            {edit.transferPairId && !pairs.some((pair) => pair.id === edit.transferPairId) ? (
+              <option value={edit.transferPairId}>Linked transfer</option>
+            ) : null}
+          </select>
           <textarea
             className="pixel-input"
             rows={2}
@@ -370,12 +424,12 @@ function Activity() {
               Add split
             </button>
           </div>
-          <div className="ios-group">
-            <button type="button" className="ios-row w-full justify-between text-[17px]" aria-pressed={edit.hidden} onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}>
+          <div className="card">
+            <button type="button" className="data-row w-full justify-between text-[17px]" aria-pressed={edit.hidden} onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}>
               Hide from budget
               <span className={`switch ${edit.hidden ? "on" : ""}`} />
             </button>
-            <button type="button" className="ios-row w-full justify-between text-[17px]" aria-pressed={edit.isTransfer} onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}>
+            <button type="button" className="data-row w-full justify-between text-[17px]" aria-pressed={edit.isTransfer} onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}>
               Transfer
               <span className={`switch ${edit.isTransfer ? "on" : ""}`} />
             </button>

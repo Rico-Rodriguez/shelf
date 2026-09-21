@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import * as schema from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
-import { openAccount, openGoal, openRecurrence, openTx } from "@/lib/secrets";
+import { openAccount, openGoal, openRecurrence, openSplit, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -11,20 +11,25 @@ export async function GET(request: Request) {
     const dek = await requireDek();
     const format = new URL(request.url).searchParams.get("format") ?? "json";
     const db = await getDb();
-    const [accountRows, transactionRows, categories, goalRows, recurrenceRows] = await Promise.all([
+    const [accountRows, transactionRows, categories, goalRows, recurrenceRows, tagRows, splitRows, txTags] = await Promise.all([
       db.select().from(schema.accounts),
       db.select().from(schema.transactions),
       db.select().from(schema.categories),
       db.select().from(schema.goals),
       db.select().from(schema.recurrences),
+      db.select().from(schema.tags),
+      db.select().from(schema.transactionSplits),
+      db.select().from(schema.transactionTags),
     ]);
     const accounts = accountRows.map((row) => openAccount(row, dek));
     const transactions = transactionRows.map((row) => openTx(row, dek));
     const goals = goalRows.map((row) => openGoal(row, dek));
     const recurrences = recurrenceRows.map((row) => openRecurrence(row, dek));
+    const splits = splitRows.map((row) => openSplit(row, dek));
+    const tags = tagRows;
 
     if (format === "csv") {
-      const header = ["date", "name", "merchant", "amount", "category", "account", "reviewed", "hidden"];
+      const header = ["date", "name", "merchant", "amount", "category", "account", "reviewed", "hidden", "tags", "goal"];
       const lines = [header.join(",")];
       for (const tx of transactions) {
         const cat = categories.find((c) => c.id === tx.categoryId)?.name ?? "";
@@ -38,6 +43,8 @@ export async function GET(request: Request) {
           csv(acct),
           String(tx.reviewed),
           String(tx.hidden),
+          csv(txTags.filter((link) => link.transactionId === tx.id).map((link) => tags.find((tag) => tag.id === link.tagId)?.name).filter(Boolean).join("|")),
+          csv(goals.find((goal) => goal.id === tx.goalId)?.name ?? ""),
         ];
         lines.push(cells.join(","));
       }
@@ -56,6 +63,8 @@ export async function GET(request: Request) {
       categories,
       goals,
       recurrences,
+      tags,
+      splits,
     });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });

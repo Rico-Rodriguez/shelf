@@ -4,6 +4,7 @@ import { accounts, netWorthSnapshots } from "@/db/schema";
 import { nid } from "./ids";
 import { todayISO } from "./dates";
 import { classifyAccount } from "./money";
+import { recordBalances } from "./balances";
 import { openAccount, openSnapshot, sealedSnapshotWrite } from "./secrets";
 
 export { classifyAccount };
@@ -35,5 +36,6 @@ export async function snapshotNetWorth(dek: Buffer) {
   } else {
     await db.insert(netWorthSnapshots).values({ id: nid(), date, ...sealed });
   }
+  await recordBalances(dek);
   return { date, ...snap };
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ConnectBank } from "@/components/ConnectBank";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
 
@@ -83,6 +84,11 @@ export default function AccountsPage() {
     load();
   }
 
+  async function disconnect(itemId: string) {
+    await api(`/api/plaid/items/${itemId}`, { method: "DELETE" });
+    load();
+  }
+
   async function sync() {
     await api("/api/plaid/sync", { method: "POST", body: "{}" });
     load();
@@ -92,14 +98,15 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1>Accounts</h1>
-          <p>
+      <PageHeader
+        title="Accounts"
+        subtitle={
+          <>
             Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
             {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} bank logins` : ""}
-          </p>
-        </div>
+          </>
+        }
+      >
         <div className="flex flex-wrap gap-2">
           {data.plaidConfigured ? (
             <>
@@ -113,7 +120,7 @@ export default function AccountsPage() {
             Add
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {!data.plaidConfigured ? (
         <p className="text-[15px] text-[var(--muted)]">Add Plaid keys to connect a bank, or add an account by hand.</p>
@@ -137,13 +144,20 @@ export default function AccountsPage() {
         }, 0);
         return (
           <section key={group.key}>
-            <h2 className="ios-section flex justify-between">
+            <h2 className="ios-section flex items-center justify-between gap-3">
               <span>{group.name}</span>
-              <MoneyText cents={total} signed />
+              <span className="flex items-center gap-3">
+                {group.key !== "manual" ? (
+                  <button className="text-[13px] font-medium text-[var(--danger)]" type="button" onClick={() => disconnect(group.key)}>
+                    Disconnect
+                  </button>
+                ) : null}
+                <MoneyText cents={total} signed />
+              </span>
             </h2>
-            <div className="ios-group">
+            <div className="card">
               {group.rows.map((account) => (
-                <Link key={account.id} href={`/accounts/${account.id}`} className="ios-row justify-between gap-3">
+                <Link key={account.id} href={`/accounts/${account.id}`} className="data-row justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-[17px] font-medium">{account.name}</div>
                     <div className="truncate text-[13px] text-[var(--muted)]">

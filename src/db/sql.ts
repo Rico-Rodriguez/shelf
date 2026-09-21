@@ -229,6 +229,57 @@ ALTER TABLE securities ADD COLUMN IF NOT EXISTS secret_enc TEXT;
 ALTER TABLE holdings ADD COLUMN IF NOT EXISTS secret_enc TEXT;
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS secret_enc TEXT;
 
+CREATE TABLE IF NOT EXISTS account_balance_snapshots (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  balance_cents INTEGER NOT NULL DEFAULT 0,
+  secret_enc TEXT,
+  UNIQUE (account_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS households (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT 'Household',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS household_members (
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  PRIMARY KEY (household_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS household_invites (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  dek_salt TEXT NOT NULL,
+  dek_wrapped TEXT NOT NULL,
+  created_by TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  href TEXT,
+  read_at TIMESTAMPTZ,
+  dedupe_key TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_pair_id TEXT;
+ALTER TABLE budget_months ADD COLUMN IF NOT EXISTS flex_pool_cents INTEGER NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_idx ON notifications (dedupe_key);
 CREATE INDEX IF NOT EXISTS tx_date_idx ON transactions (date);
 CREATE INDEX IF NOT EXISTS tx_account_idx ON transactions (account_id);
 CREATE INDEX IF NOT EXISTS tx_category_idx ON transactions (category_id);

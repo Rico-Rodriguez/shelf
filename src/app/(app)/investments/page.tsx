@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 
-const COLORS = ["#34C759", "#007AFF", "#FF9F0A", "#AF52DE", "#FF375F", "#64D2FF"];
+const COLORS = ["#1f4d45", "#1f7a45", "#6f6a62", "#b23b32", "#3d6b62", "#8a9a84"];
 
 type Hold = {
   id: string;
@@ -50,10 +51,7 @@ export default function InvestmentsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1>Investments</h1>
-        <p>Holdings from connected accounts, grouped by account.</p>
-      </div>
+      <PageHeader title="Investments" subtitle="Holdings from connected accounts, grouped by account." />
       <div className="pixel-panel grid grid-cols-2 divide-x divide-[var(--line)] p-0">
         <div className="px-4 py-3">
           <div className="text-[13px] text-[var(--muted)]">Total</div>
@@ -85,9 +83,9 @@ export default function InvestmentsPage() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <ul className="ios-group self-start">
+          <ul className="card self-start">
             {pie.map((slice, index) => (
-              <li key={slice.name} className="ios-row justify-between gap-3">
+              <li key={slice.name} className="data-row justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: COLORS[index % COLORS.length] }} />
                   <span className="truncate">{slice.name}</span>
@@ -104,11 +102,11 @@ export default function InvestmentsPage() {
       {groups.map((group) => (
         <section key={group.name}>
           <h2 className="ios-section">{group.name}</h2>
-          <ul className="ios-group">
+          <ul className="card">
             {group.rows.map((holding) => {
               const gainCents = holding.costBasisCents == null ? null : holding.institutionValueCents - holding.costBasisCents;
               return (
-                <li key={holding.id} className="ios-row justify-between gap-3">
+                <li key={holding.id} className="data-row justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{holding.security?.ticker || holding.security?.name || "Holding"}</div>
                     <div className="truncate text-[13px] text-[var(--muted)]">

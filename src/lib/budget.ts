@@ -32,12 +32,13 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
     .where(and(eq(budgetMonths.year, prev.year), eq(budgetMonths.month, prev.month)));
   const prevOpened = prevMonth[0] ? openBudgetMonth(prevMonth[0], dek) : null;
   const income = prevOpened?.plannedIncomeCents ?? cfg?.plannedIncomeCents ?? 0;
+  const flexPool = prevOpened?.flexPoolCents ?? 0;
 
   const row = {
     id: nid(),
     year,
     month,
-    ...sealedBudgetMonthWrite(income, dek),
+    ...sealedBudgetMonthWrite(income, dek, flexPool),
   };
   await db.insert(budgetMonths).values(row);
 

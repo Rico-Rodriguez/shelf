@@ -1,17 +1,48 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { budgetItems, holdings, plaidItems, recurrences, settings, transactions } from "@/db/schema";
-import { AuthError, requireDek, requireUnlocked } from "@/lib/auth";
-import { getOrCreateBudgetMonth, spentByCategory } from "@/lib/budget";
+import { budgetItems, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
+import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
+import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
-import { openBudgetItem, openHolding, openRecurrence, openTx } from "@/lib/secrets";
+import { openBudgetItem, openGoal, openHolding, openRecurrence, openSnapshot, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LAYOUT = ["netWorth", "budget", "unreviewed", "recurring", "transactions", "investments"];
+const DEFAULT_LAYOUT = ["netWorth", "cashFlow", "budget", "unreviewed", "recurring", "goals", "transactions", "investments"];
+const LEGACY_LAYOUT = ["netWorth", "budget", "unreviewed", "recurring", "transactions", "investments"];
+
+function parseLayout(raw: string | null | undefined) {
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(raw ?? "null");
+  } catch {
+    parsed = null;
+  }
+  if (!Array.isArray(parsed)) return DEFAULT_LAYOUT.map((id) => ({ id, hidden: false }));
+  if (parsed.every((item) => typeof item === "string")) {
+    const visible = parsed.filter((id): id is string => typeof id === "string" && DEFAULT_LAYOUT.includes(id));
+    const omitted = DEFAULT_LAYOUT.filter((id) => !visible.includes(id));
+    const hidden = omitted.filter((id) => LEGACY_LAYOUT.includes(id));
+    const added = omitted.filter((id) => !LEGACY_LAYOUT.includes(id));
+    return [
+      ...visible.map((id) => ({ id, hidden: false })),
+      ...added.map((id) => ({ id, hidden: false })),
+      ...hidden.map((id) => ({ id, hidden: true })),
+    ];
+  }
+  const items = parsed
+    .filter((item): item is { id: string; hidden?: boolean } => Boolean(item) && typeof item === "object" && typeof (item as { id?: string }).id === "string")
+    .filter((item) => DEFAULT_LAYOUT.includes(item.id))
+    .map((item) => ({ id: item.id, hidden: Boolean(item.hidden) }));
+  for (const id of DEFAULT_LAYOUT) {
+    if (!items.some((item) => item.id === id)) items.push({ id, hidden: false });
+  }
+  return items;
+}
 
 export async function GET() {
   try {
@@ -40,20 +71,18 @@ export async function GET() {
     const investTotal = holds.reduce((s, h) => s + h.institutionValueCents, 0);
     const nw = await computeNetWorth(dek);
     const itemsPlaid = await db.select().from(plaidItems);
-
-    let layout = DEFAULT_LAYOUT;
-    try {
-      const parsed = JSON.parse(cfg?.dashboardLayout ?? "null");
-      if (Array.isArray(parsed)) {
-        layout = parsed.filter((id): id is string => typeof id === "string" && DEFAULT_LAYOUT.includes(id));
-      }
-    } catch {
-      layout = DEFAULT_LAYOUT;
-    }
+    const income = await incomeInMonth(now.year, now.month, dek);
+    const goalRows = (await db.select().from(goals)).map((row) => openGoal(row, dek)).slice(0, 4);
+    const snapshots = (await db.select().from(netWorthSnapshots)).map((row) => openSnapshot(row, dek)).sort((a, b) => a.date.localeCompare(b.date)).slice(-18);
+    const layout = parseLayout(cfg?.dashboardLayout);
+    await refreshNotifications(dek);
 
     return NextResponse.json({
       layout,
       netWorth: nw,
+      snapshots: snapshots.map((row) => ({ date: row.date, netWorthCents: row.netWorthCents })),
+      cashFlow: { incomeCents: income, spendingCents: spentTotal, savedCents: income - spentTotal },
+      goals: goalRows.map((goal) => ({ id: goal.id, name: goal.name, targetCents: goal.targetCents, kind: goal.kind })),
       budget: {
         plannedCents: planned,
         spentCents: spentTotal,
@@ -73,20 +102,25 @@ export async function GET() {
       trialLimit: TRIAL_ITEM_LIMIT,
     });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    await requireUnlocked();
-    const body = (await request.json()) as { layout: string[] };
+    await requireWriter();
+    const body = (await request.json()) as { layout: { id: string; hidden?: boolean }[] | string[] };
     const db = await getDb();
-    await db.update(settings).set({ dashboardLayout: JSON.stringify(body.layout) }).where(eq(settings.id, "default"));
+    const layout = Array.isArray(body.layout)
+      ? body.layout
+          .map((item) => (typeof item === "string" ? { id: item, hidden: false } : { id: item.id, hidden: Boolean(item.hidden) }))
+          .filter((item) => DEFAULT_LAYOUT.includes(item.id))
+      : DEFAULT_LAYOUT.map((id) => ({ id, hidden: false }));
+    await db.update(settings).set({ dashboardLayout: JSON.stringify(layout) }).where(eq(settings.id, "default"));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

@@ -32,9 +32,9 @@ export async function seedDemoHouse(dek: Buffer) {
 
   await db.insert(accounts).values([
     { id: checking, name: "Everyday checking", type: "depository", subtype: "checking", mask: "2144", currentBalanceCents: 428_550, availableBalanceCents: 412_200, isManual: true, officialName: "Sample checking" },
-    { id: savings, name: "Rainy day jar", type: "depository", subtype: "savings", mask: "8831", currentBalanceCents: 1_250_000, isManual: true },
+    { id: savings, name: "Rainy day savings", type: "depository", subtype: "savings", mask: "8831", currentBalanceCents: 1_250_000, isManual: true },
     { id: card, name: "Kitchen table card", type: "credit", subtype: "credit card", mask: "4412", currentBalanceCents: 186_440, isManual: true },
-    { id: brokerage, name: "Nest brokerage", type: "investment", subtype: "brokerage", mask: "1022", currentBalanceCents: 4_812_300, isManual: true },
+    { id: brokerage, name: "Brokerage", type: "investment", subtype: "brokerage", mask: "1022", currentBalanceCents: 4_812_300, isManual: true },
     { id: house, name: "The cottage", type: "other", subtype: "property", currentBalanceCents: 42_000_000, isManual: true, manualKind: "property" },
     { id: car, name: "Blue hatchback", type: "other", subtype: "vehicle", currentBalanceCents: 1_100_000, isManual: true, manualKind: "vehicle" },
   ]);
@@ -55,9 +55,9 @@ export async function seedDemoHouse(dek: Buffer) {
     { days: 6, name: "City Power", amount: 9820, categoryId: "cat-utilities", accountId: checking, reviewed: true },
     { days: 37, name: "City Power", amount: 10110, categoryId: "cat-utilities", accountId: checking, reviewed: true },
     { days: 68, name: "City Power", amount: 9440, categoryId: "cat-utilities", accountId: checking, reviewed: true },
-    { days: 4, name: "Streamnest", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
-    { days: 35, name: "Streamnest", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
-    { days: 66, name: "Streamnest", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
+    { days: 4, name: "Stream", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
+    { days: 35, name: "Stream", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
+    { days: 66, name: "Stream", amount: 1599, categoryId: "cat-streaming", accountId: card, reviewed: true },
     { days: 8, name: "Fill-up", amount: 4210, categoryId: "cat-gas", accountId: card },
     { days: 14, name: "Book nook", amount: 1899, categoryId: "cat-shopping", accountId: card },
     { days: 16, name: "Pharmacy", amount: 1240, categoryId: "cat-medical", accountId: card },
@@ -102,7 +102,7 @@ export async function seedDemoHouse(dek: Buffer) {
   const vti = nid();
   const bond = nid();
   await db.insert(securities).values([
-    { id: vti, name: "Total market nest", ticker: "VTI", type: "etf", closePriceCents: 26500 },
+    { id: vti, name: "Total market", ticker: "VTI", type: "etf", closePriceCents: 26500 },
     { id: bond, name: "Quiet bonds", ticker: "BND", type: "etf", closePriceCents: 7200 },
   ]);
   await db.insert(holdings).values([
@@ -112,7 +112,7 @@ export async function seedDemoHouse(dek: Buffer) {
 
   await db.insert(recurrences).values([
     { id: nid(), merchantName: "Landlord", categoryId: "cat-rent", accountId: checking, amountCents: 185000, cadence: "monthly", nextDate: addDays(todayISO(), 12), isIncome: false, source: "detected", lastPaidDate: addDays(todayISO(), -18) },
-    { id: nid(), merchantName: "Streamnest", categoryId: "cat-streaming", accountId: card, amountCents: 1599, cadence: "monthly", nextDate: addDays(todayISO(), 8), isIncome: false, source: "detected" },
+    { id: nid(), merchantName: "Stream", categoryId: "cat-streaming", accountId: card, amountCents: 1599, cadence: "monthly", nextDate: addDays(todayISO(), 8), isIncome: false, source: "detected" },
     { id: nid(), merchantName: "Paycheck", categoryId: "cat-paycheck", accountId: checking, amountCents: 320000, cadence: "monthly", nextDate: addDays(todayISO(), 14), isIncome: true, source: "detected" },
   ]);
 

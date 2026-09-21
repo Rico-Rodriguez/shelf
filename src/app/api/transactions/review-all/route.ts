@@ -1,4 +1,5 @@
 import { withAuth } from "@/lib/api-guard";
+import { requireWriter } from "@/lib/auth";
 import { getDb } from "@/db";
 import { transactions } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   return withAuth(async () => {
+    await requireWriter();
     const db = await getDb();
     let ids: string[] | undefined;
     const text = await request.text();

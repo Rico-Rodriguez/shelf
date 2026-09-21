@@ -8,7 +8,11 @@ export async function withAuth<T>(fn: () => Promise<T>): Promise<NextResponse> {
     return NextResponse.json(data);
   } catch (err) {
     if (err instanceof AuthError) {
-      return NextResponse.json({ error: "locked" }, { status: 401 });
+      const forbidden = err.message === "forbidden";
+      return NextResponse.json(
+        { error: forbidden ? "You have view-only access." : "locked" },
+        { status: forbidden ? 403 : 401 },
+      );
     }
     const message = err instanceof Error ? err.message : "Server error";
     console.error(err);

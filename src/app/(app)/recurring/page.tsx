@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { monthName, occurrencesInMonth, yearMonth } from "@/lib/dates";
 
@@ -138,13 +140,14 @@ export default function RecurringPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1>Bills</h1>
-          <p>
+      <PageHeader
+        title="Recurring"
+        subtitle={
+          <>
             {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In <MoneyText cents={income} />
-          </p>
-        </div>
+          </>
+        }
+      >
         <div className="flex flex-wrap gap-2">
           <button className="pixel-btn secondary" type="button" onClick={detect}>
             Detect
@@ -153,27 +156,28 @@ export default function RecurringPage() {
             Add
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
-        <div className="ios-seg w-full max-w-xs">
-          <button className={view === "calendar" ? "active" : ""} type="button" onClick={() => setView("calendar")}>
-            Calendar
-          </button>
-          <button className={view === "list" ? "active" : ""} type="button" onClick={() => setView("list")}>
-            List
-          </button>
-        </div>
+        <Segment
+          className="w-full max-w-xs"
+          value={view}
+          onChange={(value) => setView(value as "calendar" | "list")}
+          options={[
+            { value: "calendar", label: "Calendar" },
+            { value: "list", label: "List" },
+          ]}
+        />
       </div>
 
       {suggestions.length ? (
         <section className="pixel-panel space-y-3 p-4">
           <h2 className="text-[17px] font-semibold">Detected</h2>
           <p className="text-[15px] text-[var(--muted)]">These are not on the calendar until you keep them.</p>
-          <ul className="ios-group">
+          <ul className="card">
             {suggestions.map((draft) => (
-              <li key={draft.merchantName} className="ios-row justify-between gap-3">
+              <li key={draft.merchantName} className="data-row justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate">{draft.merchantName}</div>
                   <div className="text-[13px] text-[var(--muted)]">
@@ -224,10 +228,10 @@ export default function RecurringPage() {
           </div>
         </div>
       ) : (
-        <ul className="ios-group">
+        <ul className="card">
           {rows.map((row) => (
             <li key={row.id}>
-              <button type="button" className="ios-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
+              <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
                 <div className="min-w-0">
                   <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
                   <div className="text-[13px] text-[var(--muted)]">
@@ -239,7 +243,7 @@ export default function RecurringPage() {
               </button>
             </li>
           ))}
-          {rows.length === 0 ? <li className="ios-row text-[var(--muted)]">No bills yet.</li> : null}
+          {rows.length === 0 ? <li className="data-row text-[var(--muted)]">No bills yet.</li> : null}
         </ul>
       )}
 
@@ -256,7 +260,7 @@ export default function RecurringPage() {
               ))}
             </select>
             <input className="pixel-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required aria-label="Next date" />
-            <button type="button" className="ios-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
+            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
               Income
               <span className={`switch ${form.isIncome ? "on" : ""}`} />
             </button>

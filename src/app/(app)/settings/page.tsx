@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Category = {
   id: string;
@@ -69,10 +70,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1>Settings</h1>
-        <p>Categories, rules, export, and the password that opens your data.</p>
-      </div>
+      <PageHeader title="Settings" subtitle="Household, categories, connections, and the password that opens your data." />
       {status ? <p className="pixel-panel p-3 text-[15px]">{status}</p> : null}
 
       <section className="pixel-panel space-y-3 p-4">
@@ -113,6 +111,21 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-[20px] font-bold tracking-tight">Categories</h2>
+        <form
+          className="flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            void api("/api/categories", {
+              method: "POST",
+              body: JSON.stringify({ entity: "group", name: String(form.get("group") || ""), kind: "expense" }),
+            }).then(load);
+            e.currentTarget.reset();
+          }}
+        >
+          <input className="pixel-input max-w-xs" name="group" placeholder="New group" required />
+          <button className="pixel-btn secondary">Add group</button>
+        </form>
         <form onSubmit={addCat} className="flex flex-wrap gap-2">
           <select className="pixel-input max-w-xs" value={newCat.groupId} onChange={(e) => setNewCat({ ...newCat, groupId: e.target.value })} aria-label="Group">
             {groups.map((group) => (
@@ -126,10 +139,30 @@ export default function SettingsPage() {
         </form>
         {groups.map((group) => (
           <section key={group.id}>
-            <h3 className="ios-section" style={{ color: group.color }}>
-              {group.name}
+            <h3 className="ios-section flex items-center justify-between" style={{ color: group.color }}>
+              <span>{group.name}</span>
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  className="text-[var(--muted)]"
+                  onClick={() => {
+                    const index = groups.findIndex((item) => item.id === group.id);
+                    if (index <= 0) return;
+                    const order = groups.map((item, i) => ({ id: item.id, sortOrder: i, entity: "group" as const }));
+                    const prev = order[index - 1];
+                    order[index - 1] = order[index];
+                    order[index] = prev;
+                    void api("/api/categories", { method: "PATCH", body: JSON.stringify({ order: order.map((item, i) => ({ ...item, sortOrder: i })) }) }).then(load);
+                  }}
+                >
+                  Up
+                </button>
+                <button className="text-[var(--danger)]" type="button" onClick={() => void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: group.id, entity: "group" }) }).then(load)}>
+                  Delete
+                </button>
+              </span>
             </h3>
-            <ul className="ios-group">
+            <ul className="card">
               {group.categories.map((category) => (
                 <li key={category.id} className="space-y-2 border-b border-[var(--line)] px-4 py-3 last:border-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -178,6 +211,9 @@ export default function SettingsPage() {
                       Rolls over
                       <span className={`switch ${category.rollover ? "on" : ""}`} />
                     </button>
+                    <button className="text-[13px] font-medium text-[var(--danger)]" type="button" onClick={() => void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: category.id, entity: "category" }) }).then(load)}>
+                      Delete
+                    </button>
                   </div>
                 </li>
               ))}
@@ -186,19 +222,140 @@ export default function SettingsPage() {
         ))}
       </section>
 
+      <HouseholdPanel onStatus={setStatus} />
+      <TagsPanel />
+      <ConnectionsPanel />
+
       <section className="pixel-panel space-y-2 p-4 text-[15px]">
-        <h2 className="text-[20px] font-bold tracking-tight">Plaid Trial checklist</h2>
-        <ol className="list-decimal space-y-1 pl-5">
-          <li>Create an account at dashboard.plaid.com (Sandbox first).</li>
-          <li>Copy PLAID_CLIENT_ID and PLAID_SECRET into .env or Railway variables.</li>
-          <li>Set PLAID_ENV=sandbox, then production after Trial approval.</li>
-          <li>Add redirect https://YOUR_APP/api/plaid/oauth and webhook https://YOUR_APP/api/plaid/webhook.</li>
-          <li>Remember: 10 institution logins. Removing one does not free a slot.</li>
-        </ol>
+        <h2 className="text-[20px] font-semibold tracking-tight">Session</h2>
         <button className="pixel-btn ghost" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
           Log out
         </button>
       </section>
     </div>
+  );
+}
+
+function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
+  const [data, setData] = useState<{
+    role: string;
+    members: { userId: string; role: string; name: string }[];
+    invites: { id: string; role: string }[];
+  } | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void api<NonNullable<typeof data>>("/api/household").then(setData).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function invite(role: "member" | "advisor") {
+    const res = await api<{ code: string }>("/api/household/invites", { method: "POST", body: JSON.stringify({ role }) });
+    setCode(res.code);
+    onStatus("Share this code once. It is not shown again.");
+    load();
+  }
+
+  if (!data) return null;
+  return (
+    <section className="pixel-panel space-y-3 p-4">
+      <h2 className="text-[20px] font-semibold tracking-tight">Household</h2>
+      <p className="text-[15px] text-[var(--muted)]">Members share this vault. Advisors can look, and cannot change anything.</p>
+      <ul className="space-y-2 text-[15px]">
+        {data.members.map((member) => (
+          <li key={member.userId} className="flex items-center justify-between gap-3">
+            <span>
+              {member.name} <span className="text-[var(--muted)]">{member.role}</span>
+            </span>
+            {data.role === "owner" ? (
+              <button className="text-[13px] text-[var(--danger)]" type="button" onClick={() => api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(load)}>
+                Remove
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {data.role === "owner" ? (
+        <div className="flex flex-wrap gap-2">
+          <button className="pixel-btn" type="button" onClick={() => invite("member")}>
+            Invite member
+          </button>
+          <button className="pixel-btn secondary" type="button" onClick={() => invite("advisor")}>
+            Invite advisor
+          </button>
+        </div>
+      ) : null}
+      {code ? <p className="rounded-[10px] bg-[var(--fill)] p-3 font-mono text-[14px]">{code}</p> : null}
+      <p className="text-[13px] text-[var(--muted)]">
+        New people open <span className="font-medium">/join</span> and enter the code.
+      </p>
+    </section>
+  );
+}
+
+function TagsPanel() {
+  const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [name, setName] = useState("");
+  const load = useCallback(() => {
+    void api<{ tags: { id: string; name: string; color: string }[] }>("/api/tags").then((r) => setTags(r.tags));
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <section className="pixel-panel space-y-3 p-4">
+      <h2 className="text-[20px] font-semibold tracking-tight">Tags</h2>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void api("/api/tags", { method: "POST", body: JSON.stringify({ name }) }).then(() => {
+            setName("");
+            load();
+          });
+        }}
+      >
+        <input className="pixel-input" placeholder="New tag" value={name} onChange={(e) => setName(e.target.value)} required />
+        <button className="pixel-btn">Add</button>
+      </form>
+      <ul className="space-y-2">
+        {tags.map((tag) => (
+          <li key={tag.id} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2">
+              <span className="size-2.5 rounded-full" style={{ background: tag.color }} />
+              {tag.name}
+            </span>
+            <button className="text-[13px] text-[var(--danger)]" type="button" onClick={() => api("/api/tags", { method: "DELETE", body: JSON.stringify({ id: tag.id }) }).then(load)}>
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ConnectionsPanel() {
+  const [items, setItems] = useState<{ institutionName: string | null; status: string; errorCode: string | null }[]>([]);
+  useEffect(() => {
+    void api<{ items: { institutionName: string | null; status: string; errorCode: string | null }[]; plaidConfigured: boolean }>("/api/accounts").then((r) =>
+      setItems(r.items),
+    );
+  }, []);
+  return (
+    <section className="pixel-panel space-y-2 p-4">
+      <h2 className="text-[20px] font-semibold tracking-tight">Connections</h2>
+      {items.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No banks connected. Add one from Accounts.</p> : null}
+      <ul className="space-y-1 text-[15px]">
+        {items.map((item, index) => (
+          <li key={index}>
+            {item.institutionName || "Bank"} · {item.status === "ok" ? "Connected" : item.errorCode || item.status}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

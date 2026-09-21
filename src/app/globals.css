@@ -1,32 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --parchment: #f2f2f7;
-  --linen: #ffffff;
-  --fill: #e9e9eb;
-  --fill-strong: #d1d1d6;
-  --terracotta: #d4654a;
-  --terracotta-strong: #c4543a;
-  --sage: #248a3d;
-  --sage-soft: rgba(52, 199, 89, 0.16);
-  --periwinkle: #007aff;
-  --periwinkle-soft: rgba(0, 122, 255, 0.12);
-  --espresso: #1c1c1e;
-  --muted: rgba(60, 60, 67, 0.6);
-  --tertiary: rgba(60, 60, 67, 0.3);
-  --line: rgba(60, 60, 67, 0.18);
-  --line-strong: rgba(60, 60, 67, 0.29);
-  --danger: #ff3b30;
-  --positive: #34c759;
+  --parchment: #f4f1ea;
+  --linen: #fffcf8;
+  --fill: #ece7de;
+  --fill-strong: #ddd6cb;
+  --terracotta: #1f4d45;
+  --terracotta-strong: #163832;
+  --accent-soft: rgba(31, 77, 69, 0.1);
+  --sage: #1f7a45;
+  --sage-soft: rgba(31, 122, 69, 0.14);
+  --periwinkle: #1f4d45;
+  --periwinkle-soft: rgba(31, 77, 69, 0.1);
+  --espresso: #1c1915;
+  --muted: #6f6a62;
+  --tertiary: #a39c92;
+  --line: rgba(28, 25, 21, 0.1);
+  --line-strong: rgba(28, 25, 21, 0.18);
+  --danger: #b23b32;
+  --positive: #1f7a45;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.1);
   --shadow-glass: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 0 0 0.5px rgba(0, 0, 0, 0.12),
     0 8px 28px rgba(0, 0, 0, 0.1);
   --shadow-control: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 0 0 0.5px rgba(0, 0, 0, 0.12),
     0 1px 2px rgba(0, 0, 0, 0.06);
-  --radius: 22px;
-  --radius-sm: 16px;
-  --radius-sheet: 28px;
+  --radius: 12px;
+  --radius-sm: 10px;
+  --radius-sheet: 16px;
   --nav-height: 62px;
   --font-ios: var(--font-inter), "Segoe UI", sans-serif;
   --cream: var(--parchment);
@@ -41,11 +42,6 @@
   --denim: var(--periwinkle);
 }
 
-@supports (font: -apple-system-body) {
-  :root {
-    --font-ios: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", sans-serif;
-  }
-}
 
 @theme inline {
   --color-cream: var(--parchment);
@@ -63,7 +59,7 @@
   --text-xs--line-height: 16px;
   --text-sm: 13px;
   --text-sm--line-height: 18px;
-  --text-base: 17px;
+  --text-base: 15px;
   --text-base--line-height: 22px;
 }
 
@@ -73,9 +69,9 @@ body {
   background: var(--parchment);
   color: var(--espresso);
   font-family: var(--font-ios), "Segoe UI", sans-serif;
-  font-size: 17px;
+  font-size: 15px;
   line-height: 22px;
-  letter-spacing: -0.41px;
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -116,11 +112,11 @@ textarea {
   letter-spacing: inherit;
 }
 
-input,
-select,
-textarea {
-  font-size: 17px !important;
-}
+  input,
+  select,
+  textarea {
+    font-size: 15px !important;
+  }
 
 button:focus-visible,
 input:focus-visible,
@@ -161,23 +157,25 @@ a:focus-visible {
 
   .pixel-panel {
     background: var(--linen);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(28, 25, 21, 0.04);
   }
 
   .pixel-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 44px;
-    padding: 0 20px;
+    min-height: 40px;
+    padding: 0 16px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 10px;
     background: var(--terracotta);
     color: #fff;
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 600;
-    letter-spacing: -0.41px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    letter-spacing: -0.01em;
+    box-shadow: none;
     transition: opacity 120ms ease;
   }
 
@@ -365,59 +363,57 @@ a:focus-visible {
   }
 
   .ios-tab.active .ios-tab-glyph {
-    background: rgba(212, 101, 74, 0.16);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    background: var(--accent-soft);
+    box-shadow: none;
   }
 
   .ios-nav {
     display: flex;
-    min-height: 40px;
+    min-height: 36px;
     align-items: center;
     gap: 10px;
-    border-radius: 999px;
-    padding: 0 12px;
-    color: inherit;
-    font-size: 17px;
-    font-weight: 400;
-    letter-spacing: -0.41px;
+    border-radius: 8px;
+    padding: 0 10px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
   }
 
   .ios-nav.active {
-    background: rgba(120, 120, 128, 0.16);
-    color: var(--terracotta);
+    background: var(--accent-soft, rgba(31, 77, 69, 0.1));
+    color: var(--espresso);
     font-weight: 600;
   }
 
+  .data-row,
   .ios-row {
     position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
-    min-height: 44px;
-    padding: 11px 16px;
+    min-height: 52px;
+    padding: 10px 14px;
     background: var(--linen);
-    font-size: 17px;
-    letter-spacing: -0.41px;
+    font-size: 15px;
+    letter-spacing: -0.011em;
   }
 
-  .ios-row + .ios-row::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 16px;
-    height: 0.5px;
-    background: rgba(60, 60, 67, 0.12);
+  .data-row + .data-row,
+  .ios-row + .ios-row {
+    border-top: 1px solid var(--line);
   }
 
+  .card,
   .ios-group {
     margin: 0;
     padding: 0;
     overflow: hidden;
     list-style: none;
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--linen);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 2px rgba(28, 25, 21, 0.04);
   }
 
   .ios-section {
@@ -499,10 +495,10 @@ a:focus-visible {
 }
 
 main h1 {
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.4px;
-  line-height: 41px;
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
 main h1 + p {
@@ -521,6 +517,26 @@ main h1 + p {
 
 @media (min-width: 768px) {
   .ios-tabbar {
+    display: none;
+  }
+
+  .ios-sheet-backdrop {
+    background: rgba(28, 25, 21, 0.28);
+  }
+
+  .ios-sheet {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: min(440px, 100%);
+    max-height: none;
+    border-radius: 0;
+    background: var(--linen);
+    box-shadow: -12px 0 40px rgba(28, 25, 21, 0.12);
+  }
+
+  .ios-sheet-handle {
     display: none;
   }
 }

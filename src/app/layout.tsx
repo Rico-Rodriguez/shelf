@@ -13,7 +13,7 @@ const inter = localFont({
 
 export const metadata: Metadata = {
   title: "Shelf",
-  description: "A tidy personal money room.",
+  description: "Accounts, budget, and cash flow in one place.",
   applicationName: "Shelf",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F2F2F7",
+  themeColor: "#f4f1ea",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

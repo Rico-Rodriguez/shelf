@@ -4,6 +4,7 @@ import { googleConfigured } from "@/lib/google-config";
 
 const PUBLIC = [
   "/login",
+  "/join",
   "/setup",
   "/api/auth/session",
   "/api/auth/login",

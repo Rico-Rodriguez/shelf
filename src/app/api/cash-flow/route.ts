@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { accounts, categories, categoryGroups, transactions } from "@/db/schema";
+import { accounts, categories, categoryGroups, transactionSplits, transactions } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
 import { addMonths, monthKey, yearMonth } from "@/lib/dates";
-import { openAccount, openTx } from "@/lib/secrets";
+import { transactionParts } from "@/lib/spend";
+import { openAccount, openSplit, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +19,15 @@ export async function GET(request: Request) {
     const months = Number(url.searchParams.get("months") ?? 12);
     const now = yearMonth();
     const db = await getDb();
-    const [txRows, cats, groups, acctRows] = await Promise.all([
+    const [txRows, splitRows, cats, groups, acctRows] = await Promise.all([
       db.select().from(transactions),
+      db.select().from(transactionSplits),
       db.select().from(categories),
       db.select().from(categoryGroups),
       db.select().from(accounts),
     ]);
     const txs = txRows.map((row) => openTx(row, dek));
+    const splits = splitRows.map((row) => openSplit(row, dek));
     const accts = acctRows.map((row) => openAccount(row, dek));
     const incomeIds = new Set(cats.filter((c) => c.kind === "income").map((c) => c.id));
 
@@ -43,23 +46,25 @@ export async function GET(request: Request) {
     for (const tx of txs) {
       if (tx.hidden || tx.pending || tx.isTransfer) continue;
       if (accountId && tx.accountId !== accountId) continue;
-      if (categoryId && tx.categoryId !== categoryId) continue;
       if (merchant && !(tx.merchantName ?? tx.name).toLowerCase().includes(merchant)) continue;
       const key = tx.date.slice(0, 7);
       if (!buckets[key]) continue;
-      if (tx.categoryId && incomeIds.has(tx.categoryId) && tx.amountCents < 0) {
-        buckets[key].income += Math.abs(tx.amountCents);
-      } else if (tx.amountCents > 0) {
-        buckets[key].spending += tx.amountCents;
-        const cat = cats.find((c) => c.id === tx.categoryId);
-        const catKey = cat?.id ?? "uncat";
-        const catRow = byCategory.get(catKey) ?? { id: cat?.id ?? "", name: cat?.name ?? "Uncategorized", cents: 0 };
-        catRow.cents += tx.amountCents;
-        byCategory.set(catKey, catRow);
-        const merch = tx.merchantName || tx.name;
-        const merchRow = byMerchant.get(merch) ?? { name: merch, cents: 0 };
-        merchRow.cents += tx.amountCents;
-        byMerchant.set(merch, merchRow);
+      for (const part of transactionParts(tx, splits)) {
+        if (categoryId && part.categoryId !== categoryId) continue;
+        if (part.categoryId && incomeIds.has(part.categoryId) && part.amountCents < 0) {
+          buckets[key].income += Math.abs(part.amountCents);
+        } else if (part.amountCents > 0) {
+          buckets[key].spending += part.amountCents;
+          const cat = cats.find((c) => c.id === part.categoryId);
+          const catKey = cat?.id ?? "uncat";
+          const catRow = byCategory.get(catKey) ?? { id: cat?.id ?? "", name: cat?.name ?? "Uncategorized", cents: 0 };
+          catRow.cents += part.amountCents;
+          byCategory.set(catKey, catRow);
+          const merch = tx.merchantName || tx.name;
+          const merchRow = byMerchant.get(merch) ?? { name: merch, cents: 0 };
+          merchRow.cents += part.amountCents;
+          byMerchant.set(merch, merchRow);
+        }
       }
     }
 
