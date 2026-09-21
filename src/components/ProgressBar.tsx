@@ -1,7 +1,7 @@
 export function ProgressBar({
   value,
   max,
-  color = "var(--sage)",
+  color = "var(--positive)",
 }: {
   value: number;
   max: number;

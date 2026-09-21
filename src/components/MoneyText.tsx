@@ -13,7 +13,7 @@ export function MoneyText({
   const prefix = signed ? (cents > 0 ? "+" : cents < 0 ? "-" : "") : "";
   const tone = signed
     ? cents > 0
-      ? "text-[var(--sage)]"
+      ? "text-[var(--positive)]"
       : cents < 0
         ? "text-[var(--danger)]"
         : ""

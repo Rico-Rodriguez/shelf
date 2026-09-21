@@ -101,12 +101,20 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <form onSubmit={changePw} className="pixel-panel grid gap-2 p-4 md:grid-cols-2">
-        <h2 className="text-[20px] font-bold tracking-tight md:col-span-2">Password</h2>
-        <p className="text-[15px] text-[var(--muted)] md:col-span-2">This password opens the sealed balances and transactions.</p>
-        <input className="pixel-input" type="password" placeholder="Current" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
-        <input className="pixel-input" type="password" placeholder="New (12+)" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
-        <button className="pixel-btn justify-self-start md:col-span-2">Change</button>
+      <form onSubmit={changePw} className="pixel-panel grid gap-4 p-5 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <h2 className="text-[18px] font-semibold tracking-tight">Password</h2>
+          <p className="mt-1 text-[14px] text-[var(--muted)]">This password opens the sealed balances and transactions.</p>
+        </div>
+        <label className="field">
+          <span className="field-label">Current password</span>
+          <input className="pixel-input" type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="field-label">New password</span>
+          <input className="pixel-input" type="password" placeholder="12+ characters" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
+        </label>
+        <button className="pixel-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
       <section className="space-y-3">

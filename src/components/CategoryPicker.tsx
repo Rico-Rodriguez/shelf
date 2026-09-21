@@ -49,14 +49,14 @@ export function CategoryPicker({
 
   return (
     <div>
-      <button type="button" className="pixel-input text-left" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="pixel-input text-left font-medium" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         {current?.name ?? "Uncategorized"}
       </button>
       {open ? (
-        <div className="mt-2 max-h-64 overflow-auto rounded-[16px] bg-white">
+        <div className="mt-2 max-h-64 overflow-auto rounded-[12px] border border-[var(--line)] bg-[var(--linen)]">
           <button
             type="button"
-            className={`block w-full px-3 py-2 text-left text-[17px] ${value ? "" : "font-semibold text-[var(--terracotta)]"}`}
+            className={`block w-full px-3.5 py-2.5 text-left text-[15px] ${value ? "" : "font-semibold text-[var(--positive)]"}`}
             onClick={() => {
               onChange("");
               setOpen(false);
@@ -66,12 +66,12 @@ export function CategoryPicker({
           </button>
           {groups.map((group) => (
             <div key={group.id}>
-              <div className="px-3 pt-3 text-[13px] text-[var(--muted)]">{group.name}</div>
+              <div className="px-3.5 pt-3 text-[12px] font-semibold uppercase tracking-[0.04em] text-[var(--tertiary)]">{group.name}</div>
               {group.categories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
-                  className={`block w-full px-3 py-2 text-left text-[17px] ${category.id === value ? "font-semibold text-[var(--terracotta)]" : ""}`}
+                  className={`block w-full px-3.5 py-2.5 text-left text-[15px] ${category.id === value ? "font-semibold text-[var(--positive)]" : ""}`}
                   onClick={() => {
                     onChange(category.id);
                     setOpen(false);

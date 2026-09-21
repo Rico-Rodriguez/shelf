@@ -141,10 +141,11 @@ export default function RecurringPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Recurring"
+        title="Bills & recurring"
         subtitle={
           <>
-            {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In <MoneyText cents={income} />
+            Subscriptions and bills Shelf spotted for you. {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In{" "}
+            <MoneyText cents={income} />
           </>
         }
       >

@@ -102,7 +102,7 @@ export default function AccountsPage() {
         title="Accounts"
         subtitle={
           <>
-            Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
+            Everything you own and owe, in one list. Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
             {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} bank logins` : ""}
           </>
         }
@@ -127,7 +127,7 @@ export default function AccountsPage() {
       ) : null}
 
       {data.items.some((item) => item.status !== "ok") ? (
-        <p className="text-[15px] text-[var(--terracotta)]">
+        <p className="text-[15px] text-[var(--danger)]">
           {data.items
             .filter((item) => item.status !== "ok")
             .map((item) => `${item.institutionName || "Bank"} needs attention${item.errorCode ? ` (${item.errorCode})` : ""}`)
@@ -179,23 +179,40 @@ export default function AccountsPage() {
 
       {open ? (
         <Sheet title="Add an account" onClose={() => setOpen(false)}>
-          <form className="space-y-3" onSubmit={addManual}>
-            <input className="pixel-input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-            <select className="pixel-input" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind">
-              <option value="cash">Cash / bank</option>
-              <option value="property">Home</option>
-              <option value="vehicle">Car</option>
-              <option value="other">Other</option>
-            </select>
-            <select className="pixel-input" value={type} onChange={(e) => setType(e.target.value)} aria-label="Type">
-              <option value="depository">Deposit</option>
-              <option value="investment">Investment</option>
-              <option value="credit">Credit card</option>
-              <option value="loan">Loan</option>
-              <option value="other">Other</option>
-            </select>
-            <input className="pixel-input" inputMode="decimal" placeholder="Balance" value={balance} onChange={(e) => setBalance(e.target.value)} />
-            <button className="pixel-btn w-full">Add account</button>
+          <form
+            onSubmit={addManual}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="field-stack">
+              <label className="field">
+                <span className="field-label">Name</span>
+                <input className="pixel-input" placeholder="Checking, Home, Car…" value={name} onChange={(e) => setName(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span className="field-label">Kind</span>
+                <select className="pixel-input" value={kind} onChange={(e) => setKind(e.target.value)}>
+                  <option value="cash">Cash / bank</option>
+                  <option value="property">Home</option>
+                  <option value="vehicle">Car</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Type</span>
+                <select className="pixel-input" value={type} onChange={(e) => setType(e.target.value)}>
+                  <option value="depository">Deposit</option>
+                  <option value="investment">Investment</option>
+                  <option value="credit">Credit card</option>
+                  <option value="loan">Loan</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Balance</span>
+                <input className="pixel-input" inputMode="decimal" placeholder="0.00" value={balance} onChange={(e) => setBalance(e.target.value)} />
+              </label>
+              <button className="pixel-btn w-full">Add account</button>
+            </div>
           </form>
         </Sheet>
       ) : null}

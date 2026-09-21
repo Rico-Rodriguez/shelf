@@ -148,7 +148,7 @@ export default function BudgetPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Budget" subtitle="Income in, categories planned, leftover unassigned.">
+      <PageHeader title="Budget" subtitle="Plan income, assign categories, and see what’s left to spend.">
         <MonthNav year={data.year} month={data.month} onChange={load} />
       </PageHeader>
 
@@ -158,21 +158,21 @@ export default function BudgetPage() {
           value={data.mode}
           onChange={(value) => setMode(value as "category" | "flex")}
           options={[
-            { value: "category", label: "Category" },
-            { value: "flex", label: "Flex" },
+            { value: "category", label: "By category" },
+            { value: "flex", label: "Flex pot" },
           ]}
         />
         <button className="pixel-btn ghost" type="button" onClick={copyLastMonth}>
           Use last month
         </button>
         <button className="pixel-btn ghost" type="button" onClick={suggest}>
-          Suggest
+          Suggest from history
         </button>
       </div>
 
-      <div className="pixel-panel grid grid-cols-2 divide-y divide-[var(--line)] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-        <label className="min-w-0 px-4 py-3">
-          <span className="text-[13px] leading-[18px] text-[var(--muted)]">Income</span>
+      <div className="pixel-panel grid grid-cols-2 sm:grid-cols-4">
+        <label className="field min-w-0 border-b border-[var(--line)] px-4 py-3 sm:border-b-0 sm:border-r">
+          <span className="field-label">Planned income</span>
           <input
             className="pixel-input mt-1"
             inputMode="decimal"
