@@ -1,9 +1,16 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession } from "iron-session";
 import { sessionSecret } from "./crypto";
+import { prepareVault } from "./secrets";
 
 export type SessionData = {
   unlocked: boolean;
+  dek?: string;
+  pendingTotp?: boolean;
+  pendingEnroll?: boolean;
+  totpSetupSecret?: string;
+  googleSub?: string;
+  googleEmail?: string;
 };
 
 export async function getSession(): Promise<IronSession<SessionData>> {
@@ -22,10 +29,17 @@ export async function getSession(): Promise<IronSession<SessionData>> {
 
 export async function requireUnlocked(): Promise<IronSession<SessionData>> {
   const session = await getSession();
-  if (!session.unlocked) {
+  if (!session.unlocked || !session.dek || session.pendingTotp || session.pendingEnroll) {
     throw new AuthError("locked");
   }
   return session;
+}
+
+export async function requireDek(): Promise<Buffer> {
+  const session = await requireUnlocked();
+  const dek = Buffer.from(session.dek!, "base64");
+  await prepareVault(dek);
+  return dek;
 }
 
 export class AuthError extends Error {

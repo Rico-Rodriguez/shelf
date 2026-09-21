@@ -14,26 +14,35 @@ import { nid } from "./ids";
 import { dollarsFromPlaid, getPlaidClient } from "./plaid";
 import { applyRulesToNewTx } from "./rules";
 import { snapshotNetWorth } from "./networth";
+import {
+  openTx,
+  prepareVault,
+  sealedAccountWrite,
+  sealedHoldingWrite,
+  sealedSecurityWrite,
+  sealedTxWrite,
+  sealText,
+} from "./secrets";
 
-export async function syncAllItems() {
+export async function syncAllItems(dek: Buffer) {
   const db = await getDb();
   const items = await db.select().from(plaidItems);
   const results = [];
   for (const item of items) {
-    results.push(await syncItem(item.id));
+    results.push(await syncItem(item.id, dek));
   }
-  await snapshotNetWorth();
+  await snapshotNetWorth(dek);
   return results;
 }
 
-export async function syncItem(localItemId: string) {
+export async function syncItem(localItemId: string, dek: Buffer) {
   const db = await getDb();
   const [item] = await db.select().from(plaidItems).where(eq(plaidItems.id, localItemId));
   if (!item) throw new Error("Item not found");
   const client = getPlaidClient();
-  const access = decryptSecret(item.accessTokenEnc);
+  const access = decryptSecret(item.accessTokenEnc, dek);
 
-  await refreshAccounts(localItemId, access);
+  await refreshAccounts(localItemId, access, dek);
 
   let cursor = item.cursor ?? undefined;
   let added = 0;
@@ -46,11 +55,11 @@ export async function syncItem(localItemId: string) {
       cursor,
     });
     for (const tx of res.data.added) {
-      await upsertTransaction(tx);
+      await upsertTransaction(tx, dek);
       added += 1;
     }
     for (const tx of res.data.modified) {
-      await upsertTransaction(tx);
+      await upsertTransaction(tx, dek);
       modified += 1;
     }
     for (const tx of res.data.removed) {
@@ -69,20 +78,21 @@ export async function syncItem(localItemId: string) {
     .where(eq(plaidItems.id, localItemId));
 
   try {
-    await syncInvestments(localItemId, access);
+    await syncInvestments(localItemId, access, dek);
   } catch {
     // Item may not have investment accounts
   }
   try {
-    await syncLiabilities(access);
+    await syncLiabilities(access, dek);
   } catch {
     // Item may not have liabilities
   }
 
+  await prepareVault(dek);
   return { itemId: localItemId, added, modified, removed };
 }
 
-async function refreshAccounts(localItemId: string, access: string) {
+async function refreshAccounts(localItemId: string, access: string, dek: Buffer) {
   const db = await getDb();
   const client = getPlaidClient();
   const res = await client.accountsGet({ access_token: access });
@@ -102,8 +112,9 @@ async function refreshAccounts(localItemId: string, access: string) {
       isoCurrency: acct.balances.iso_currency_code ?? "USD",
       updatedAt: new Date(),
     };
+    const sealed = sealedAccountWrite(payload, dek);
     if (existing[0]) {
-      await db.update(accounts).set(payload).where(eq(accounts.id, existing[0].id));
+      await db.update(accounts).set({ ...payload, ...sealed }).where(eq(accounts.id, existing[0].id));
     } else {
       await db.insert(accounts).values({
         id: nid(),
@@ -111,12 +122,13 @@ async function refreshAccounts(localItemId: string, access: string) {
         plaidAccountId: acct.account_id,
         isManual: false,
         ...payload,
+        ...sealed,
       });
     }
   }
 }
 
-async function upsertTransaction(tx: Transaction) {
+async function upsertTransaction(tx: Transaction, dek: Buffer) {
   const db = await getDb();
   const [account] = await db
     .select()
@@ -132,19 +144,26 @@ async function upsertTransaction(tx: Transaction) {
   const existing = tx.transaction_id
     ? await db.select().from(transactions).where(eq(transactions.plaidTransactionId, tx.transaction_id))
     : [];
+  const prior = existing[0] ? openTx(existing[0], dek) : null;
 
   const base = {
     accountId: account.id,
-    amountCents: dollarsFromPlaid(tx.amount),
     date: tx.date,
     authorizedDate: tx.authorized_date ?? null,
-    merchantName: tx.merchant_name ?? null,
-    originalDescription: tx.original_description ?? tx.name,
-    name: tx.merchant_name || tx.name,
     pending: Boolean(tx.pending),
     pfcPrimary,
     pfcDetailed,
     updatedAt: new Date(),
+    ...sealedTxWrite(
+      {
+        name: tx.merchant_name || tx.name,
+        merchantName: tx.merchant_name ?? null,
+        originalDescription: tx.original_description ?? tx.name,
+        notes: prior?.notes ?? null,
+        amountCents: dollarsFromPlaid(tx.amount),
+      },
+      dek,
+    ),
   };
 
   if (existing[0]) {
@@ -160,6 +179,7 @@ async function upsertTransaction(tx: Transaction) {
   }
 
   const id = nid();
+  const plainName = tx.merchant_name || tx.name;
   await db.insert(transactions).values({
     id,
     plaidTransactionId: tx.transaction_id,
@@ -169,20 +189,25 @@ async function upsertTransaction(tx: Transaction) {
     hidden: false,
     ...base,
   });
-  const patch = await applyRulesToNewTx(db, id, {
-    name: base.name,
-    merchantName: base.merchantName,
-    originalDescription: base.originalDescription,
-    amountCents: base.amountCents,
-    accountId: account.id,
-    categoryId: mapped,
-  });
+  const patch = await applyRulesToNewTx(
+    db,
+    id,
+    {
+      name: plainName,
+      merchantName: tx.merchant_name ?? null,
+      originalDescription: tx.original_description ?? tx.name,
+      amountCents: dollarsFromPlaid(tx.amount),
+      accountId: account.id,
+      categoryId: mapped,
+    },
+    dek,
+  );
   if (Object.keys(patch).length) {
     await db.update(transactions).set({ ...patch, updatedAt: new Date() }).where(eq(transactions.id, id));
   }
 }
 
-async function syncInvestments(localItemId: string, access: string) {
+async function syncInvestments(localItemId: string, access: string, dek: Buffer) {
   const db = await getDb();
   const client = getPlaidClient();
   const res = await client.investmentsHoldingsGet({ access_token: access });
@@ -195,11 +220,16 @@ async function syncInvestments(localItemId: string, access: string) {
       .from(securities)
       .where(eq(securities.plaidSecurityId, sec.security_id));
     const payload = {
-      name: sec.name ?? sec.ticker_symbol ?? "Security",
-      ticker: sec.ticker_symbol ?? null,
       type: sec.type ?? null,
-      closePriceCents: sec.close_price == null ? null : dollarsFromPlaid(sec.close_price),
       closePriceAsOf: sec.close_price_as_of ?? null,
+      ...sealedSecurityWrite(
+        {
+          name: sec.name ?? sec.ticker_symbol ?? "Security",
+          ticker: sec.ticker_symbol ?? null,
+          closePriceCents: sec.close_price == null ? null : dollarsFromPlaid(sec.close_price),
+        },
+        dek,
+      ),
     };
     if (existing[0]) {
       await db.update(securities).set(payload).where(eq(securities.id, existing[0].id));
@@ -232,15 +262,20 @@ async function syncInvestments(localItemId: string, access: string) {
       id: nid(),
       accountId: account.id,
       securityId: security.id,
-      quantity: String(hold.quantity ?? 0),
-      costBasisCents: hold.cost_basis == null ? null : dollarsFromPlaid(hold.cost_basis),
-      institutionValueCents: dollarsFromPlaid(hold.institution_value),
-      institutionPriceCents: hold.institution_price == null ? null : dollarsFromPlaid(hold.institution_price),
+      ...sealedHoldingWrite(
+        {
+          quantity: String(hold.quantity ?? 0),
+          costBasisCents: hold.cost_basis == null ? null : dollarsFromPlaid(hold.cost_basis),
+          institutionValueCents: dollarsFromPlaid(hold.institution_value),
+          institutionPriceCents: hold.institution_price == null ? null : dollarsFromPlaid(hold.institution_price),
+        },
+        dek,
+      ),
     });
   }
 }
 
-async function syncLiabilities(access: string) {
+async function syncLiabilities(access: string, dek: Buffer) {
   const db = await getDb();
   const client = getPlaidClient();
   const res = await client.liabilitiesGet({ access_token: access });
@@ -255,7 +290,7 @@ async function syncLiabilities(access: string) {
     if (!account) continue;
     await db
       .update(accounts)
-      .set({ liabilityJson: JSON.stringify({ kind: "credit", ...card }), updatedAt: new Date() })
+      .set({ liabilityJson: sealText(JSON.stringify({ kind: "credit", ...card }), dek), updatedAt: new Date() })
       .where(eq(accounts.id, account.id));
   }
   for (const loan of [...mortgages, ...students]) {
@@ -267,10 +302,13 @@ async function syncLiabilities(access: string) {
     await db
       .update(accounts)
       .set({
-        liabilityJson: JSON.stringify({
-          kind: "account_id" in loan ? "loan" : "loan",
-          ...loan,
-        }),
+        liabilityJson: sealText(
+          JSON.stringify({
+            kind: "loan",
+            ...loan,
+          }),
+          dek,
+        ),
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, account.id));

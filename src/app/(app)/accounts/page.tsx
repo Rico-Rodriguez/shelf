@@ -129,7 +129,7 @@ export default function AccountsPage() {
 function Group({ title, rows }: { title: string; rows: Account[] }) {
   return (
     <section className="space-y-2">
-      <h2 className="px-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">{title}</h2>
+      <h2 className="ios-section">{title}</h2>
       <div className="ios-group">
         {rows.map((a) => (
           <Link key={a.id} href={`/accounts/${a.id}`} className="ios-row justify-between">

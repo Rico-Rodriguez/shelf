@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, holdings, plaidItems, recurrences, settings, transactions } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek, requireUnlocked } from "@/lib/auth";
 import { getOrCreateBudgetMonth, spentByCategory } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
 import { computeNetWorth } from "@/lib/networth";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
+import { openBudgetItem, openHolding, openRecurrence, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -14,25 +15,30 @@ const DEFAULT_LAYOUT = ["netWorth", "budget", "unreviewed", "recurring", "transa
 
 export async function GET() {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const db = await getDb();
     const now = yearMonth();
     const [cfg] = await db.select().from(settings);
-    const monthRow = await getOrCreateBudgetMonth(now.year, now.month);
-    const spent = await spentByCategory(now.year, now.month);
+    const monthRow = await getOrCreateBudgetMonth(now.year, now.month, dek);
+    const spent = await spentByCategory(now.year, now.month, dek);
     const spentTotal = Object.values(spent).reduce((a, b) => a + b, 0);
-    const plannedRows = await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, monthRow.id));
+    const plannedRows = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, monthRow.id))).map((row) =>
+      openBudgetItem(row, dek),
+    );
     const planned = plannedRows.reduce((s, r) => s + r.plannedCents + r.rolloverInCents, 0);
 
-    const recent = await db.select().from(transactions).orderBy(desc(transactions.date)).limit(8);
-    const unreviewed = (await db.select().from(transactions).where(eq(transactions.reviewed, false))).filter((t) => !t.hidden);
+    const recent = (await db.select().from(transactions).orderBy(desc(transactions.date)).limit(8)).map((row) => openTx(row, dek));
+    const unreviewed = (await db.select().from(transactions).where(eq(transactions.reviewed, false)))
+      .map((row) => openTx(row, dek))
+      .filter((t) => !t.hidden);
     const upcoming = (await db.select().from(recurrences))
+      .map((row) => openRecurrence(row, dek))
       .filter((r) => r.isActive)
       .sort((a, b) => a.nextDate.localeCompare(b.nextDate))
       .slice(0, 6);
-    const holds = await db.select().from(holdings);
+    const holds = (await db.select().from(holdings)).map((row) => openHolding(row, dek));
     const investTotal = holds.reduce((s, h) => s + h.institutionValueCents, 0);
-    const nw = await computeNetWorth();
+    const nw = await computeNetWorth(dek);
     const itemsPlaid = await db.select().from(plaidItems);
 
     let layout = DEFAULT_LAYOUT;

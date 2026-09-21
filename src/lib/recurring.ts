@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { recurrences, transactions } from "@/db/schema";
 import { addDays, todayISO } from "./dates";
 import { nid } from "./ids";
+import { openRecurrence, openTx, sealedRecurrenceWrite } from "./secrets";
 
 function normalizeMerchant(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -41,9 +42,9 @@ export function nextFromCadence(last: string, cadence: string): string {
   return addDays(last, map[cadence] ?? 30);
 }
 
-export async function detectRecurring() {
+export async function detectRecurring(dek: Buffer) {
   const db = await getDb();
-  const txs = await db.select().from(transactions);
+  const txs = (await db.select().from(transactions)).map((tx) => openTx(tx, dek));
   const groups = new Map<string, typeof txs>();
   for (const tx of txs) {
     if (tx.hidden || tx.pending) continue;
@@ -54,7 +55,7 @@ export async function detectRecurring() {
     groups.set(key, list);
   }
 
-  const existing = await db.select().from(recurrences);
+  const existing = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
   let created = 0;
 
   for (const [merchant, list] of groups) {
@@ -77,10 +78,9 @@ export async function detectRecurring() {
     const sample = similar[0];
     await db.insert(recurrences).values({
       id: nid(),
-      merchantName: sample.merchantName || sample.name,
+      ...sealedRecurrenceWrite({ merchantName: sample.merchantName || sample.name, amountCents: mid }, dek),
       categoryId: sample.categoryId,
       accountId: sample.accountId,
-      amountCents: mid,
       cadence,
       nextDate: nextFromCadence(last, cadence),
       isIncome: sample.amountCents < 0,

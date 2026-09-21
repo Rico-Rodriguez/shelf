@@ -5,7 +5,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
 
-const COLORS = ["#6A9985", "#7A9EAF", "#D97757", "#C4A484", "#8B6B9A", "#E0A84A"];
+const COLORS = ["#34C759", "#007AFF", "#FF9F0A", "#AF52DE", "#FF375F", "#64D2FF"];
 
 type Hold = {
   id: string;
@@ -53,7 +53,7 @@ export default function InvestmentsPage() {
               <PieChart>
                 <Pie data={pie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
                   {pie.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="#3d2c29" />
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="#fff" />
                   ))}
                 </Pie>
                 <Tooltip />

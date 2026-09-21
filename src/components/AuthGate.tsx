@@ -15,6 +15,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         window.location.href = "/setup";
         return;
       }
+      if (session.needsEnroll) {
+        window.location.href = "/setup/two-factor";
+        return;
+      }
       if (!session.unlocked) {
         window.location.href = "/login";
         return;
@@ -32,8 +36,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-2">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--terracotta)]">Shelf</p>
-        <p className="text-[var(--muted)]">Opening…</p>
+        <p className="text-[17px] font-semibold tracking-[-0.41px]">Shelf</p>
+        <p className="text-[15px] text-[var(--muted)]">Opening…</p>
       </div>
     );
   }

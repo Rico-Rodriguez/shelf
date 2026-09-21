@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthError, requireUnlocked } from "@/lib/auth";
-import { getPlaidClient, linkProducts, plaidConfigured } from "@/lib/plaid";
+import { getPlaidClient, linkProducts, plaidConfigured, plaidErrorMessage } from "@/lib/plaid";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,8 @@ export async function POST() {
     return NextResponse.json({ linkToken: res.data.link_token });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
-    const message = err instanceof Error ? err.message : "Plaid error";
+    const message = plaidErrorMessage(err);
+    console.error("link-token failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

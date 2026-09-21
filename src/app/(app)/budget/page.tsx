@@ -5,6 +5,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { ProgressBar } from "@/components/ProgressBar";
 import { api } from "@/lib/client";
 import { addMonths, monthName } from "@/lib/dates";
+import { shelfColor } from "@/lib/palette";
 
 type Row = {
   category: { id: string; name: string; flexBucket: string | null; rollover: boolean };
@@ -84,9 +85,9 @@ export default function BudgetPage() {
           <p className="text-sm text-ink-soft">Income in, shelves labeled, leftovers in the leftover jar.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="pixel-btn ghost min-h-11 w-11 px-0" type="button" onClick={() => load(prev.year, prev.month)}>←</button>
-          <span className="min-w-36 text-center text-[17px] font-semibold">{monthName(data.year, data.month)}</span>
-          <button className="pixel-btn ghost min-h-11 w-11 px-0" type="button" onClick={() => load(next.year, next.month)}>→</button>
+          <button className="ios-icon-btn size-11 text-[22px] text-[var(--terracotta)]" type="button" onClick={() => load(prev.year, prev.month)} aria-label="Previous month">‹</button>
+          <span className="min-w-36 text-center text-[17px] font-semibold tracking-[-0.41px]">{monthName(data.year, data.month)}</span>
+          <button className="ios-icon-btn size-11 text-[22px] text-[var(--terracotta)]" type="button" onClick={() => load(next.year, next.month)} aria-label="Next month">›</button>
         </div>
       </div>
 
@@ -180,7 +181,7 @@ export default function BudgetPage() {
                     />
                   </td>
                   <td className="p-2">
-                    <ProgressBar value={r.spentCents} max={r.availableCents || 1} color={r.group?.color} />
+                    <ProgressBar value={r.spentCents} max={r.availableCents || 1} color={shelfColor(r.group?.color)} />
                     <MoneyText cents={r.spentCents} />
                   </td>
                   <td className="p-2">

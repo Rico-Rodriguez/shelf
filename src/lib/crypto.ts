@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -21,12 +21,6 @@ export function sessionSecret(): string {
   return fileSecret("app-secret", 32);
 }
 
-export function encryptionKey(): Buffer {
-  const env = process.env.APP_ENCRYPTION_KEY;
-  const material = env && env.length >= 32 ? env : fileSecret("app-encryption-key", 32);
-  return createHash("sha256").update(material).digest();
-}
-
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -42,18 +36,43 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(next, prev);
 }
 
-export function encryptSecret(plain: string): string {
+export const MIN_PASSWORD = 12;
+
+function seal(plain: string, key: Buffer): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
   const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${iv.toString("hex")}:${tag.toString("hex")}:${enc.toString("hex")}`;
 }
 
-export function decryptSecret(payload: string): string {
+function open(payload: string, key: Buffer): string {
   const [ivHex, tagHex, dataHex] = payload.split(":");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivHex, "hex"));
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
   decipher.setAuthTag(Buffer.from(tagHex, "hex"));
   const dec = Buffer.concat([decipher.update(Buffer.from(dataHex, "hex")), decipher.final()]);
   return dec.toString("utf8");
+}
+
+export function createDek(): Buffer {
+  return randomBytes(32);
+}
+
+export function wrapDek(dek: Buffer, password: string): { salt: string; wrapped: string } {
+  const salt = randomBytes(16).toString("hex");
+  const kek = scryptSync(password, salt, 32);
+  return { salt, wrapped: seal(dek.toString("base64"), kek) };
+}
+
+export function unwrapDek(password: string, salt: string, wrapped: string): Buffer {
+  const kek = scryptSync(password, salt, 32);
+  return Buffer.from(open(wrapped, kek), "base64");
+}
+
+export function encryptSecret(plain: string, dek: Buffer): string {
+  return seal(plain, dek);
+}
+
+export function decryptSecret(payload: string, dek: Buffer): string {
+  return open(payload, dek);
 }

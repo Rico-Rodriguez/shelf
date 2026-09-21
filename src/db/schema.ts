@@ -12,6 +12,14 @@ import {
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   passwordHash: text("password_hash").notNull(),
+  dekSalt: text("dek_salt"),
+  dekWrapped: text("dek_wrapped"),
+  totpSecretEnc: text("totp_secret_enc"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  googleSub: text("google_sub"),
+  googleEmail: text("google_email"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -25,6 +33,7 @@ export const settings = pgTable("settings", {
       '["netWorth","budget","unreviewed","recurring","transactions","investments"]',
     ),
   demoLoaded: boolean("demo_loaded").notNull().default(false),
+  secretEnc: text("secret_enc"),
 });
 
 export const categoryGroups = pgTable("category_groups", {
@@ -84,6 +93,7 @@ export const accounts = pgTable("accounts", {
   includeInNetWorth: boolean("include_in_net_worth").notNull().default(true),
   manualKind: text("manual_kind"),
   liabilityJson: text("liability_json"),
+  secretEnc: text("secret_enc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -109,6 +119,7 @@ export const transactions = pgTable("transactions", {
   isTransfer: boolean("is_transfer").notNull().default(false),
   pfcPrimary: text("pfc_primary"),
   pfcDetailed: text("pfc_detailed"),
+  secretEnc: text("secret_enc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("tx_plaid_id_idx").on(t.plaidTransactionId)]);
@@ -122,6 +133,7 @@ export const transactionSplits = pgTable("transaction_splits", {
   amountCents: integer("amount_cents").notNull(),
   notes: text("notes"),
   goalId: text("goal_id"),
+  secretEnc: text("secret_enc"),
 });
 
 export const tags = pgTable("tags", {
@@ -160,6 +172,7 @@ export const rules = pgTable("rules", {
   actionTagNames: text("action_tag_names"),
   actionGoalId: text("action_goal_id"),
   actionSplitJson: text("action_split_json"),
+  secretEnc: text("secret_enc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -168,6 +181,7 @@ export const budgetMonths = pgTable("budget_months", {
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   plannedIncomeCents: integer("planned_income_cents").notNull().default(0),
+  secretEnc: text("secret_enc"),
 }, (t) => [uniqueIndex("budget_months_ym_idx").on(t.year, t.month)]);
 
 export const budgetItems = pgTable("budget_items", {
@@ -180,6 +194,7 @@ export const budgetItems = pgTable("budget_items", {
     .references(() => categories.id),
   plannedCents: integer("planned_cents").notNull().default(0),
   rolloverInCents: integer("rollover_in_cents").notNull().default(0),
+  secretEnc: text("secret_enc"),
 }, (t) => [uniqueIndex("budget_items_month_cat_idx").on(t.budgetMonthId, t.categoryId)]);
 
 export const recurrences = pgTable("recurrences", {
@@ -194,6 +209,7 @@ export const recurrences = pgTable("recurrences", {
   isActive: boolean("is_active").notNull().default(true),
   source: text("source").notNull().default("manual"),
   lastPaidDate: text("last_paid_date"),
+  secretEnc: text("secret_enc"),
 });
 
 export const goals = pgTable("goals", {
@@ -202,6 +218,7 @@ export const goals = pgTable("goals", {
   kind: text("kind").notNull(),
   targetCents: integer("target_cents").notNull().default(0),
   targetDate: text("target_date"),
+  secretEnc: text("secret_enc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -226,6 +243,7 @@ export const securities = pgTable("securities", {
   type: text("type"),
   closePriceCents: integer("close_price_cents"),
   closePriceAsOf: text("close_price_as_of"),
+  secretEnc: text("secret_enc"),
 }, (t) => [uniqueIndex("securities_plaid_idx").on(t.plaidSecurityId)]);
 
 export const holdings = pgTable("holdings", {
@@ -240,6 +258,7 @@ export const holdings = pgTable("holdings", {
   costBasisCents: integer("cost_basis_cents"),
   institutionValueCents: integer("institution_value_cents").notNull().default(0),
   institutionPriceCents: integer("institution_price_cents"),
+  secretEnc: text("secret_enc"),
 });
 
 export const netWorthSnapshots = pgTable("net_worth_snapshots", {
@@ -248,6 +267,7 @@ export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   assetsCents: integer("assets_cents").notNull(),
   liabilitiesCents: integer("liabilities_cents").notNull(),
   netWorthCents: integer("net_worth_cents").notNull(),
+  secretEnc: text("secret_enc"),
 }, (t) => [uniqueIndex("nw_date_idx").on(t.date)]);
 
 export const categoryGroupRelations = relations(categoryGroups, ({ many }) => ({

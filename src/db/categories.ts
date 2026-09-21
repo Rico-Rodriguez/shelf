@@ -31,7 +31,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Income",
     kind: "income",
     sortOrder: 0,
-    color: "#6B8F5E",
+    color: "#30D158",
     sprite: "leaf",
     categories: [
       { id: "cat-paycheck", name: "Paycheck", slug: "paycheck", kind: "income", sortOrder: 0, plaidPrimary: "INCOME", plaidDetailed: "INCOME_WAGES", sprite: "coins" },
@@ -45,7 +45,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Home",
     kind: "expense",
     sortOrder: 1,
-    color: "#C4A484",
+    color: "#A2845E",
     sprite: "house",
     categories: [
       { id: "cat-rent", name: "Rent / Mortgage", slug: "rent", kind: "expense", flexBucket: "fixed", sortOrder: 0, plaidPrimary: "RENT_AND_UTILITIES", plaidDetailed: "RENT_AND_UTILITIES_RENT", sprite: "house" },
@@ -58,7 +58,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Food",
     kind: "expense",
     sortOrder: 2,
-    color: "#E07A5F",
+    color: "#FF453A",
     sprite: "fork",
     categories: [
       { id: "cat-groceries", name: "Groceries", slug: "groceries", kind: "expense", flexBucket: "flex", sortOrder: 0, plaidPrimary: "FOOD_AND_DRINK", plaidDetailed: "FOOD_AND_DRINK_GROCERIES", sprite: "cart" },
@@ -71,7 +71,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Transport",
     kind: "expense",
     sortOrder: 3,
-    color: "#4A6FA5",
+    color: "#0A84FF",
     sprite: "car",
     categories: [
       { id: "cat-gas", name: "Gas", slug: "gas", kind: "expense", flexBucket: "flex", sortOrder: 0, plaidPrimary: "TRANSPORTATION", plaidDetailed: "TRANSPORTATION_GAS", sprite: "car" },
@@ -84,7 +84,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Life",
     kind: "expense",
     sortOrder: 4,
-    color: "#D4847C",
+    color: "#FF375F",
     sprite: "shirt",
     categories: [
       { id: "cat-shopping", name: "Shopping", slug: "shopping", kind: "expense", flexBucket: "flex", sortOrder: 0, plaidPrimary: "GENERAL_MERCHANDISE", sprite: "cart" },
@@ -99,7 +99,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Fun",
     kind: "expense",
     sortOrder: 5,
-    color: "#E0A84A",
+    color: "#FF9F0A",
     sprite: "game",
     categories: [
       { id: "cat-entertainment", name: "Entertainment", slug: "entertainment", kind: "expense", flexBucket: "flex", sortOrder: 0, plaidPrimary: "ENTERTAINMENT", sprite: "game" },
@@ -112,7 +112,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Bills",
     kind: "expense",
     sortOrder: 6,
-    color: "#7BA3A0",
+    color: "#64D2FF",
     sprite: "paper",
     categories: [
       { id: "cat-phone", name: "Phone", slug: "phone", kind: "expense", flexBucket: "fixed", sortOrder: 0, plaidPrimary: "RENT_AND_UTILITIES", plaidDetailed: "RENT_AND_UTILITIES_TELEPHONE", sprite: "phone" },
@@ -127,7 +127,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Giving",
     kind: "expense",
     sortOrder: 7,
-    color: "#8B6B9A",
+    color: "#BF5AF2",
     sprite: "gift",
     categories: [
       { id: "cat-gifts", name: "Gifts", slug: "gifts", kind: "expense", flexBucket: "non_monthly", rollover: true, sortOrder: 0, plaidPrimary: "GENERAL_MERCHANDISE", plaidDetailed: "GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES", sprite: "gift" },
@@ -139,7 +139,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Transfers",
     kind: "transfer",
     sortOrder: 8,
-    color: "#8B7355",
+    color: "#8E8E93",
     sprite: "swap",
     categories: [
       { id: "cat-transfer", name: "Transfer", slug: "transfer", kind: "transfer", sortOrder: 0, plaidPrimary: "TRANSFER_IN", sprite: "swap" },
@@ -152,7 +152,7 @@ export const DEFAULT_GROUPS: SeedGroup[] = [
     name: "Other",
     kind: "expense",
     sortOrder: 9,
-    color: "#9A8B7A",
+    color: "#98989D",
     sprite: "box",
     categories: [
       { id: "cat-uncategorized", name: "Uncategorized", slug: "uncategorized", kind: "expense", flexBucket: "flex", sortOrder: 0, sprite: "box" },

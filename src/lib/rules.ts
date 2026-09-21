@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { rules, tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
 import { nid } from "./ids";
+import { openRule, openTx, sealedSplitWrite, sealTxPatch } from "./secrets";
 
 export type RuleRow = typeof rules.$inferSelect;
 export type TxPatch = {
@@ -73,8 +74,9 @@ export async function applyRulesToNewTx(
     accountId: string;
     categoryId?: string | null;
   },
+  dek: Buffer,
 ): Promise<TxPatch> {
-  const all = await db.select().from(rules);
+  const all = (await db.select().from(rules)).map((rule) => openRule(rule, dek));
   const sorted = all.sort((a, b) => a.priority - b.priority);
   let patch: TxPatch = {};
   const working = { ...input };
@@ -84,12 +86,12 @@ export async function applyRulesToNewTx(
     if (patch.name) working.name = patch.name;
     if (patch.merchantName !== undefined) working.merchantName = patch.merchantName;
     if (patch.categoryId !== undefined) working.categoryId = patch.categoryId;
-    await applyRuleSideEffects(db, txId, rule);
+    await applyRuleSideEffects(db, txId, rule, dek);
   }
-  return patch;
+  return sealTxPatch(patch, dek);
 }
 
-async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow) {
+async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow, dek: Buffer) {
   if (rule.actionTagNames) {
     const names = rule.actionTagNames.split(",").map((s) => s.trim()).filter(Boolean);
     for (const name of names) {
@@ -110,8 +112,7 @@ async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow) {
           id: nid(),
           transactionId: txId,
           categoryId: part.categoryId,
-          amountCents: part.amountCents,
-          notes: part.notes,
+          ...sealedSplitWrite({ amountCents: part.amountCents, notes: part.notes }, dek),
         });
       }
     } catch {
@@ -120,25 +121,28 @@ async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow) {
   }
 }
 
-export async function applyRuleToExisting(db: AppDb, rule: RuleRow) {
+export async function applyRuleToExisting(db: AppDb, rule: RuleRow, dek: Buffer) {
+  const openedRule = openRule(rule, dek);
   const txs = await db.select().from(transactions);
   let applied = 0;
   for (const tx of txs) {
-    if (!ruleMatches(rule, tx)) continue;
-    const patch = applyRuleToFields(rule, {});
+    const opened = openTx(tx, dek);
+    if (!ruleMatches(openedRule, opened)) continue;
+    const patch = sealTxPatch(applyRuleToFields(openedRule, {}), dek);
     if (Object.keys(patch).length) {
       await db.update(transactions).set({ ...patch, updatedAt: new Date() }).where(eq(transactions.id, tx.id));
     }
-    await applyRuleSideEffects(db, tx.id, rule);
+    await applyRuleSideEffects(db, tx.id, openedRule, dek);
     applied += 1;
   }
   return applied;
 }
 
-export async function reapplyAllRules(db: AppDb, txId: string) {
+export async function reapplyAllRules(db: AppDb, txId: string, dek: Buffer) {
   const [tx] = await db.select().from(transactions).where(eq(transactions.id, txId));
   if (!tx) return;
-  const patch = await applyRulesToNewTx(db, txId, tx);
+  const opened = openTx(tx, dek);
+  const patch = await applyRulesToNewTx(db, txId, opened, dek);
   if (Object.keys(patch).length) {
     await db.update(transactions).set({ ...patch, updatedAt: new Date() }).where(eq(transactions.id, txId));
   }

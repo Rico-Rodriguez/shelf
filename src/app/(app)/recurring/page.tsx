@@ -76,7 +76,7 @@ export default function RecurringPage() {
         <div className="pixel-panel p-3">
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
             {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-              <div key={i} className="pixel-title">{d}</div>
+              <div key={i} className="text-[11px] font-medium text-[var(--muted)]">{d}</div>
             ))}
             {Array.from({ length: cells.startPad }).map((_, i) => (
               <div key={`p${i}`} />
@@ -86,7 +86,7 @@ export default function RecurringPage() {
               const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const hits = rows.filter((r) => r.isActive && r.nextDate === iso);
               return (
-                <div key={iso} className="min-h-16 border-2 border-ink/20 bg-paper p-1 text-left">
+                <div key={iso} className="min-h-16 rounded-lg border border-[var(--line)] p-1 text-left">
                   <div className="text-[10px] text-ink-soft">{day}</div>
                   {hits.map((h) => (
                     <div key={h.id} className="truncate text-[10px]">

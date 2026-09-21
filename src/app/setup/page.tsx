@@ -34,17 +34,17 @@ export default function SetupPage() {
       setError(body.error);
       return;
     }
-    window.location.href = "/";
+    window.location.href = "/setup/two-factor";
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
         <div>
-          <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--terracotta)]">Shelf</p>
+          <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
           <h1 className="mt-2 text-[34px] font-bold tracking-tight">Set a lock</h1>
           <p className="mt-1 text-[15px] text-[var(--muted)]">
-            Private to this device. Eight or more characters. Nothing leaves unless you export it.
+            Twelve or more characters. This password seals your balances and transactions.
           </p>
         </div>
         <input

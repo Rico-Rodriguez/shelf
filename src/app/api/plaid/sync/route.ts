@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { syncAllItems, syncItem } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json().catch(() => ({}))) as { itemId?: string };
-    const result = body.itemId ? await syncItem(body.itemId) : await syncAllItems();
+    const result = body.itemId ? await syncItem(body.itemId, dek) : await syncAllItems(dek);
     return NextResponse.json({ ok: true, result });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });

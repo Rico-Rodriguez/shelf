@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
+import { openTx, sealedSplitWrite, sealedTxWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const { id } = await context.params;
     const body = (await request.json()) as {
       name?: string;
@@ -27,18 +28,30 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       splits?: { categoryId: string; amountCents?: number; amount?: number; notes?: string }[];
     };
     const db = await getDb();
+    const [existing] = await db.select().from(transactions).where(eq(transactions.id, id));
+    if (!existing) return NextResponse.json({ error: "missing" }, { status: 404 });
+    const opened = openTx(existing, dek);
+    const sensitive = body.name != null || body.merchantName != null || body.notes !== undefined || body.amount != null;
     await db
       .update(transactions)
       .set({
-        name: body.name,
-        merchantName: body.merchantName,
+        ...(sensitive
+          ? sealedTxWrite(
+              {
+                name: body.name ?? opened.name,
+                merchantName: body.merchantName ?? opened.merchantName,
+                originalDescription: opened.originalDescription,
+                notes: body.notes !== undefined ? body.notes : opened.notes,
+                amountCents: body.amount == null ? opened.amountCents : dollarsToCents(body.amount),
+              },
+              dek,
+            )
+          : {}),
         categoryId: body.categoryId,
         reviewed: body.reviewed,
         hidden: body.hidden,
-        notes: body.notes,
         goalId: body.goalId,
         isTransfer: body.isTransfer,
-        amountCents: body.amount == null ? undefined : dollarsToCents(body.amount),
         date: body.date,
         updatedAt: new Date(),
       })
@@ -61,8 +74,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           id: nid(),
           transactionId: id,
           categoryId: part.categoryId,
-          amountCents: part.amountCents ?? dollarsToCents(part.amount ?? 0),
-          notes: part.notes,
+          ...sealedSplitWrite(
+            {
+              amountCents: part.amountCents ?? dollarsToCents(part.amount ?? 0),
+              notes: part.notes,
+            },
+            dek,
+          ),
         });
       }
     }

@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, categories, tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { applyRulesToNewTx } from "@/lib/rules";
 import { todayISO } from "@/lib/dates";
+import { openAccount, openSplit, openTx, sealedTxWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const url = new URL(request.url);
     const q = url.searchParams.get("q")?.trim() ?? "";
     const accountId = url.searchParams.get("accountId");
@@ -34,24 +35,22 @@ export async function GET(request: Request) {
     else filters.push(eq(transactions.hidden, false));
     if (start) filters.push(gte(transactions.date, start));
     if (end) filters.push(lte(transactions.date, end));
-    if (q) {
-      const likeQ = `%${q}%`;
-      filters.push(
-        or(
-          like(transactions.name, likeQ),
-          like(transactions.merchantName, likeQ),
-          like(transactions.originalDescription, likeQ),
-        )!,
-      );
-    }
+    if (end) filters.push(lte(transactions.date, end));
 
-    const rows = await db
+    const base = db
       .select()
       .from(transactions)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(transactions.date), desc(transactions.createdAt))
-      .limit(limit)
-      .offset(offset);
+      .orderBy(desc(transactions.date), desc(transactions.createdAt));
+    const stored = q ? await base : await base.limit(limit).offset(offset);
+    let rows = stored.map((tx) => openTx(tx, dek));
+    if (q) {
+      const needle = q.toLowerCase();
+      rows = rows.filter((tx) =>
+        `${tx.name} ${tx.merchantName ?? ""} ${tx.originalDescription ?? ""}`.toLowerCase().includes(needle),
+      );
+      rows = rows.slice(offset, offset + limit);
+    }
 
     const [acctRows, catRows, splitRows, tagRows, txTags] = await Promise.all([
       db.select().from(accounts),
@@ -60,12 +59,14 @@ export async function GET(request: Request) {
       db.select().from(tags),
       db.select().from(transactionTags),
     ]);
+    const openedAccounts = acctRows.map((row) => openAccount(row, dek));
+    const openedSplits = splitRows.map((row) => openSplit(row, dek));
 
     const data = rows.map((tx) => ({
       ...tx,
-      account: acctRows.find((a) => a.id === tx.accountId) ?? null,
+      account: openedAccounts.find((a) => a.id === tx.accountId) ?? null,
       category: catRows.find((c) => c.id === tx.categoryId) ?? null,
-      splits: splitRows.filter((s) => s.transactionId === tx.id),
+      splits: openedSplits.filter((s) => s.transactionId === tx.id),
       tags: txTags
         .filter((t) => t.transactionId === tx.id)
         .map((t) => tagRows.find((tag) => tag.id === t.tagId))
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json()) as {
       accountId: string;
       name: string;
@@ -101,15 +102,20 @@ export async function POST(request: Request) {
     await db.insert(transactions).values({
       id,
       accountId: body.accountId,
-      name: body.name,
-      merchantName: body.name,
-      amountCents,
       date: body.date ?? todayISO(),
       categoryId: body.categoryId,
-      notes: body.notes,
       reviewed: true,
       hidden: false,
       isTransfer: body.categoryId === "cat-transfer" || body.categoryId === "cat-cc-payment",
+      ...sealedTxWrite(
+        {
+          name: body.name,
+          merchantName: body.name,
+          notes: body.notes ?? null,
+          amountCents,
+        },
+        dek,
+      ),
     });
     const patch = await applyRulesToNewTx(db, id, {
       name: body.name,
@@ -117,7 +123,7 @@ export async function POST(request: Request) {
       amountCents,
       accountId: body.accountId,
       categoryId: body.categoryId,
-    });
+    }, dek);
     if (Object.keys(patch).length) {
       await db.update(transactions).set(patch).where(eq(transactions.id, id));
     }

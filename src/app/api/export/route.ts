@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import * as schema from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
+import { openAccount, openGoal, openRecurrence, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const format = new URL(request.url).searchParams.get("format") ?? "json";
     const db = await getDb();
-    const [accounts, transactions, categories, goals, recurrences] = await Promise.all([
+    const [accountRows, transactionRows, categories, goalRows, recurrenceRows] = await Promise.all([
       db.select().from(schema.accounts),
       db.select().from(schema.transactions),
       db.select().from(schema.categories),
       db.select().from(schema.goals),
       db.select().from(schema.recurrences),
     ]);
+    const accounts = accountRows.map((row) => openAccount(row, dek));
+    const transactions = transactionRows.map((row) => openTx(row, dek));
+    const goals = goalRows.map((row) => openGoal(row, dek));
+    const recurrences = recurrenceRows.map((row) => openRecurrence(row, dek));
 
     if (format === "csv") {
       const header = ["date", "name", "merchant", "amount", "category", "account", "reviewed", "hidden"];

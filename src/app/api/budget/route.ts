@@ -2,28 +2,32 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, budgetMonths, categories, categoryGroups, settings } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory, suggestBudget } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
 import { nid } from "@/lib/ids";
+import { openBudgetItem, openSettings, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const url = new URL(request.url);
     const now = yearMonth();
     const year = Number(url.searchParams.get("year") ?? now.year);
     const month = Number(url.searchParams.get("month") ?? now.month);
     const db = await getDb();
-    const monthRow = await getOrCreateBudgetMonth(year, month);
-    const items = await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, monthRow.id));
+    const monthRow = await getOrCreateBudgetMonth(year, month, dek);
+    const items = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, monthRow.id))).map((row) =>
+      openBudgetItem(row, dek),
+    );
     const cats = await db.select().from(categories);
     const groups = await db.select().from(categoryGroups);
-    const spent = await spentByCategory(year, month);
-    const actualIncome = await incomeInMonth(year, month);
-    const [cfg] = await db.select().from(settings);
+    const spent = await spentByCategory(year, month, dek);
+    const actualIncome = await incomeInMonth(year, month, dek);
+    const [cfgRow] = await db.select().from(settings);
+    const cfg = cfgRow ? openSettings(cfgRow, dek) : null;
 
     const rows = cats
       .filter((c) => c.kind === "expense")
@@ -72,7 +76,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json()) as {
       year: number;
       month: number;
@@ -81,13 +85,13 @@ export async function PUT(request: Request) {
       items?: { categoryId: string; plannedCents: number }[];
     };
     const db = await getDb();
-    const monthRow = await getOrCreateBudgetMonth(body.year, body.month);
+    const monthRow = await getOrCreateBudgetMonth(body.year, body.month, dek);
     if (body.plannedIncomeCents != null) {
       await db
         .update(budgetMonths)
-        .set({ plannedIncomeCents: body.plannedIncomeCents })
+        .set(sealedBudgetMonthWrite(body.plannedIncomeCents, dek))
         .where(eq(budgetMonths.id, monthRow.id));
-      await db.update(settings).set({ plannedIncomeCents: body.plannedIncomeCents }).where(eq(settings.id, "default"));
+      await db.update(settings).set(sealedSettingsIncome(body.plannedIncomeCents, dek)).where(eq(settings.id, "default"));
     }
     if (body.mode) {
       await db.update(settings).set({ budgetMode: body.mode }).where(eq(settings.id, "default"));
@@ -97,17 +101,17 @@ export async function PUT(request: Request) {
         const existing = await db.select().from(budgetItems);
         const found = existing.find((i) => i.budgetMonthId === monthRow.id && i.categoryId === item.categoryId);
         if (found) {
+          const opened = openBudgetItem(found, dek);
           await db
             .update(budgetItems)
-            .set({ plannedCents: item.plannedCents })
+            .set(sealedBudgetItemWrite(item.plannedCents, opened.rolloverInCents, dek))
             .where(eq(budgetItems.id, found.id));
         } else {
           await db.insert(budgetItems).values({
             id: nid(),
             budgetMonthId: monthRow.id,
             categoryId: item.categoryId,
-            plannedCents: item.plannedCents,
-            rolloverInCents: 0,
+            ...sealedBudgetItemWrite(item.plannedCents, 0, dek),
           });
         }
       }
@@ -121,21 +125,22 @@ export async function PUT(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json()) as { year: number; month: number; apply?: boolean };
-    const suggested = await suggestBudget(body.year, body.month);
+    const suggested = await suggestBudget(body.year, body.month, dek);
     if (body.apply) {
       const db = await getDb();
-      const monthRow = await getOrCreateBudgetMonth(body.year, body.month);
+      const monthRow = await getOrCreateBudgetMonth(body.year, body.month, dek);
       await db
         .update(budgetMonths)
-        .set({ plannedIncomeCents: suggested.suggestedIncome })
+        .set(sealedBudgetMonthWrite(suggested.suggestedIncome, dek))
         .where(eq(budgetMonths.id, monthRow.id));
       for (const [categoryId, plannedCents] of Object.entries(suggested.suggested)) {
         const existing = await db.select().from(budgetItems);
         const found = existing.find((i) => i.budgetMonthId === monthRow.id && i.categoryId === categoryId);
         if (found) {
-          await db.update(budgetItems).set({ plannedCents }).where(eq(budgetItems.id, found.id));
+          const opened = openBudgetItem(found, dek);
+          await db.update(budgetItems).set(sealedBudgetItemWrite(plannedCents, opened.rolloverInCents, dek)).where(eq(budgetItems.id, found.id));
         }
       }
     }

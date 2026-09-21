@@ -33,24 +33,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col md:flex-row">
-      <aside className="hidden w-60 shrink-0 border-r border-[var(--line)] p-4 md:block">
-        <Link href="/" className="mb-6 block px-2 pt-2">
-          <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--terracotta)]">Shelf</div>
-          <div className="mt-1 text-2xl font-bold tracking-tight">Money room</div>
+    <div className="flex min-h-dvh bg-[var(--parchment)]">
+      <aside className="sticky top-0 hidden h-dvh w-[250px] shrink-0 flex-col border-r-[0.5px] border-[var(--line-strong)] px-3 py-5 md:flex">
+        <Link href="/" className="mb-4 block px-2.5">
+          <div className="text-[22px] font-bold leading-7 tracking-[-0.26px]">Shelf</div>
+          <div className="text-[13px] leading-[18px] text-[var(--muted)]">Money room</div>
         </Link>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-0.5">
           {ALL.map((item) => {
             const active = isActive(path, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-[15px] font-semibold ${
-                  active ? "bg-white text-[var(--terracotta)] shadow-[var(--shadow-xs)]" : "text-[var(--muted)]"
+                aria-current={active ? "page" : undefined}
+                className={`flex min-h-10 items-center gap-2.5 rounded-[10px] px-2.5 text-[17px] tracking-[-0.41px] ${
+                  active ? "bg-[rgba(120,120,128,0.16)] font-semibold" : "font-normal"
                 }`}
               >
-                <Icon name={item.icon} size={18} />
+                <span className={active ? "text-[var(--terracotta)]" : "text-[var(--muted)]"}>
+                  <Icon name={item.icon} size={20} />
+                </span>
                 {item.label}
               </Link>
             );
@@ -59,19 +62,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="flex-1 px-4 pb-6 pt-[max(12px,env(safe-area-inset-top))] md:px-8 md:pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-8 pt-[max(8px,env(safe-area-inset-top))] md:px-8 md:pb-12 md:pt-7">
+          {children}
+        </main>
         <nav className="ios-tabbar md:hidden">
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);
             return (
               <Link key={item.href} href={item.href} className={`ios-tab ${active ? "active" : ""}`}>
-                <Icon name={item.icon} size={22} />
+                <Icon name={item.icon} size={24} />
                 {item.label}
               </Link>
             );
           })}
           <button type="button" className={`ios-tab ${moreActive ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
-            <Icon name="more" size={22} />
+            <Icon name="more" size={24} />
             More
           </button>
         </nav>
@@ -81,23 +86,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="ios-sheet-backdrop md:hidden" onClick={() => setMoreOpen(false)}>
           <div className="ios-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="ios-sheet-handle" />
-            <h2 className="mb-3 text-xl font-bold tracking-tight">More</h2>
+            <h2 className="mb-3 px-4 text-[22px] font-bold tracking-[-0.26px]">More</h2>
             <div className="ios-group">
               {MORE.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="ios-row justify-between text-[17px]"
+                  className="ios-row justify-between"
                   onClick={() => setMoreOpen(false)}
                 >
                   <span className="flex items-center gap-3">
-                    <span className="text-[var(--sage)]">
-                      <Icon name={item.icon} size={18} />
+                    <span className="text-[var(--terracotta)]">
+                      <Icon name={item.icon} size={20} />
                     </span>
                     {item.label}
                   </span>
-                  <span className="text-[var(--muted)]">
-                    <Icon name="chevron" size={16} />
+                  <span className="text-[var(--tertiary)]">
+                    <Icon name="chevron" size={14} />
                   </span>
                 </Link>
               ))}

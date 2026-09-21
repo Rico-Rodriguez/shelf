@@ -64,32 +64,27 @@ export default function HomePage() {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--terracotta)]">Today</p>
-        <h1 className="mt-1 text-[34px] font-bold tracking-tight">Home</h1>
-        <p className="mt-1 text-[15px] text-[var(--muted)]">
-          {dash.plaidConfigured ? `${dash.itemCount}/${dash.trialLimit} bank logins` : "Sample house"}
-        </p>
+        <h1>Home</h1>
+        <p>{dash.plaidConfigured ? `${dash.itemCount}/${dash.trialLimit} bank logins` : "Sample house"}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {dash.layout.map((id) => (
-          <section key={id} className="pixel-panel p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-                {LABELS[id] ?? id}
-              </h2>
-              <div className="flex gap-1">
-                <button className="pixel-btn ghost min-h-9 px-3 text-sm" onClick={() => move(id, -1)} type="button">
+          <section key={id} className="pixel-panel p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-[17px] font-semibold tracking-[-0.41px]">{LABELS[id] ?? id}</h2>
+              <div className="flex">
+                <button className="ios-icon-btn" onClick={() => move(id, -1)} type="button" aria-label="Move up">
                   ↑
                 </button>
-                <button className="pixel-btn ghost min-h-9 px-3 text-sm" onClick={() => move(id, 1)} type="button">
+                <button className="ios-icon-btn" onClick={() => move(id, 1)} type="button" aria-label="Move down">
                   ↓
                 </button>
               </div>
             </div>
             {id === "netWorth" && (
               <div>
-                <div className="text-[32px] font-bold tracking-tight">
+                <div className="text-[34px] font-bold leading-[41px] tracking-[-0.4px]">
                   <MoneyText cents={dash.netWorth.netWorthCents} />
                 </div>
                 <p className="mt-1 text-[15px] text-[var(--muted)]">
@@ -104,7 +99,7 @@ export default function HomePage() {
                 <p className="text-[15px]">
                   Spent <MoneyText cents={dash.budget.spentCents} /> of <MoneyText cents={dash.budget.plannedCents} />
                 </p>
-                <Link href="/budget" className="text-[15px] font-semibold text-[var(--sage)]">
+                <Link href="/budget" className="text-[17px] text-[var(--terracotta)]">
                   Open budget
                 </Link>
               </div>
@@ -122,7 +117,7 @@ export default function HomePage() {
                     </div>
                   ))}
                 </div>
-                <Link href="/transactions" className="text-[15px] font-semibold text-[var(--sage)]">
+                <Link href="/transactions" className="text-[17px] text-[var(--terracotta)]">
                   Review all
                 </Link>
               </div>
@@ -152,11 +147,11 @@ export default function HomePage() {
             )}
             {id === "investments" && (
               <div>
-                <div className="text-[28px] font-bold tracking-tight">
+                <div className="text-[28px] font-bold leading-8 tracking-[-0.36px]">
                   <MoneyText cents={dash.investments.totalCents} />
                 </div>
                 <p className="text-[15px] text-[var(--muted)]">{dash.investments.count} holdings</p>
-                <Link href="/investments" className="text-[15px] font-semibold text-[var(--sage)]">
+                <Link href="/investments" className="text-[17px] text-[var(--terracotta)]">
                   Open investments
                 </Link>
               </div>

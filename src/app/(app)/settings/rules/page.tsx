@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { api } from "@/lib/client";
 
 type Rule = {
@@ -63,8 +64,11 @@ export default function RulesPage() {
 
   return (
     <div className="space-y-4">
-      <Link href="/settings" className="text-sm underline">
-        ← Settings
+      <Link href="/settings" className="ios-back">
+        <span className="inline-flex rotate-180" aria-hidden>
+          <Icon name="chevron" size={18} />
+        </span>
+        Settings
       </Link>
       <h1 className="pixel-title text-3xl">Rules</h1>
       <p className="text-sm text-ink-soft">If a shop name matches, put the item on the right shelf automatically.</p>

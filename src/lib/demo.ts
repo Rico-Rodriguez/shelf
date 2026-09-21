@@ -16,8 +16,9 @@ import {
 import { nid } from "./ids";
 import { addDays, addMonths, todayISO, yearMonth } from "./dates";
 import { snapshotNetWorth } from "./networth";
+import { prepareVault } from "./secrets";
 
-export async function seedDemoHouse() {
+export async function seedDemoHouse(dek: Buffer) {
   const db = await getDb();
   const [cfg] = await db.select().from(settings);
   if (cfg?.demoLoaded) return { ok: true, already: true };
@@ -123,7 +124,7 @@ export async function seedDemoHouse() {
     await db.insert(transactionTags).values({ transactionId: firstGroc.id, tagId: cozy });
   }
 
-  await snapshotNetWorth();
+  await snapshotNetWorth(dek);
   const prev = addMonths(year, month, -1);
   await db.insert(netWorthSnapshots).values({
     id: nid(),
@@ -134,5 +135,6 @@ export async function seedDemoHouse() {
   }).onConflictDoNothing();
 
   await db.update(settings).set({ demoLoaded: true, plannedIncomeCents: 320000 }).where(eq(settings.id, "default"));
+  await prepareVault(dek);
   return { ok: true, already: false };
 }

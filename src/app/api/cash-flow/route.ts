@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { accounts, categories, categoryGroups, transactions } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { addMonths, monthKey, yearMonth } from "@/lib/dates";
+import { openAccount, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const url = new URL(request.url);
     const grain = url.searchParams.get("grain") ?? "month";
     const accountId = url.searchParams.get("accountId");
@@ -17,12 +18,14 @@ export async function GET(request: Request) {
     const months = Number(url.searchParams.get("months") ?? 12);
     const now = yearMonth();
     const db = await getDb();
-    const [txs, cats, groups, accts] = await Promise.all([
+    const [txRows, cats, groups, acctRows] = await Promise.all([
       db.select().from(transactions),
       db.select().from(categories),
       db.select().from(categoryGroups),
       db.select().from(accounts),
     ]);
+    const txs = txRows.map((row) => openTx(row, dek));
+    const accts = acctRows.map((row) => openAccount(row, dek));
     const incomeIds = new Set(cats.filter((c) => c.kind === "income").map((c) => c.id));
 
     const buckets: Record<string, { income: number; spending: number; savings: number; key: string }> = {};

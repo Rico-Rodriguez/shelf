@@ -13,9 +13,9 @@ export function MoneyText({
   const prefix = signed ? (cents > 0 ? "+" : cents < 0 ? "-" : "") : "";
   const tone = signed
     ? cents > 0
-      ? "text-moss"
+      ? "text-[var(--sage)]"
       : cents < 0
-        ? "text-rose"
+        ? "text-[var(--danger)]"
         : ""
     : "";
   return (

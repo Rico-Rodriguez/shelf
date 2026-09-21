@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { categories, categoryGroups } from "@/db/schema";
 import { AuthError, requireUnlocked } from "@/lib/auth";
 import { nid } from "@/lib/ids";
+import { shelfColor } from "@/lib/palette";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export async function GET() {
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((g) => ({
           ...g,
+          color: shelfColor(g.color),
           categories: cats.filter((c) => c.groupId === g.id).sort((a, b) => a.sortOrder - b.sortOrder),
         })),
     });

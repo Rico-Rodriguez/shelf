@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
 
@@ -61,8 +62,11 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
 
   return (
     <div className="space-y-4">
-      <Link href="/accounts" className="text-sm underline">
-        ← Back to jars
+      <Link href="/accounts" className="ios-back">
+        <span className="inline-flex rotate-180" aria-hidden>
+          <Icon name="chevron" size={18} />
+        </span>
+        Accounts
       </Link>
       <h1 className="pixel-title text-3xl">{acct.name}</h1>
       <div className="pixel-panel max-w-lg space-y-3 p-4">

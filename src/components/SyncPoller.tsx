@@ -8,6 +8,7 @@ export function SyncPoller({ enabled }: { enabled: boolean }) {
     const tick = () => {
       void fetch("/api/plaid/sync", { method: "POST", body: "{}" });
     };
+    tick();
     const onFocus = () => tick();
     window.addEventListener("focus", onFocus);
     const id = window.setInterval(tick, 15 * 60 * 1000);

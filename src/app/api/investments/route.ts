@@ -1,23 +1,27 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { accounts, holdings, securities } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
+import { openAccount, openHolding, openSecurity } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const db = await getDb();
     const [holds, secs, accts] = await Promise.all([
       db.select().from(holdings),
       db.select().from(securities),
       db.select().from(accounts),
     ]);
-    const rows = holds.map((h) => ({
+    const openedHolds = holds.map((row) => openHolding(row, dek));
+    const openedSecs = secs.map((row) => openSecurity(row, dek));
+    const openedAccounts = accts.map((row) => openAccount(row, dek));
+    const rows = openedHolds.map((h) => ({
       ...h,
-      security: secs.find((s) => s.id === h.securityId) ?? null,
-      account: accts.find((a) => a.id === h.accountId) ?? null,
+      security: openedSecs.find((s) => s.id === h.securityId) ?? null,
+      account: openedAccounts.find((a) => a.id === h.accountId) ?? null,
     }));
     const total = rows.reduce((s, r) => s + r.institutionValueCents, 0);
     const byType: Record<string, number> = {};

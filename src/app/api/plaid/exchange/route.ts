@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { plaidItems } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { nid } from "@/lib/ids";
 import { getPlaidClient, plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
+import { sealText } from "@/lib/secrets";
 import { syncItem } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     if (!plaidConfigured()) {
       return NextResponse.json({ error: "Plaid is not configured." }, { status: 400 });
     }
@@ -33,12 +34,12 @@ export async function POST(request: Request) {
     await db.insert(plaidItems).values({
       id,
       itemId: exchanged.data.item_id,
-      accessTokenEnc: encryptSecret(exchanged.data.access_token),
+      accessTokenEnc: encryptSecret(exchanged.data.access_token, dek),
       institutionId: body.metadata?.institution?.institution_id,
-      institutionName: body.metadata?.institution?.name,
+      institutionName: sealText(body.metadata?.institution?.name ?? null, dek),
       status: "ok",
     });
-    const sync = await syncItem(id);
+    const sync = await syncItem(id, dek);
     return NextResponse.json({ ok: true, itemId: id, sync });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });

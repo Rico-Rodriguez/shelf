@@ -40,3 +40,13 @@ export function dollarsFromPlaid(amount: number | null | undefined): number {
   if (amount == null) return 0;
   return Math.round(amount * 100);
 }
+
+export function plaidErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "response" in err) {
+    const data = (err as { response?: { data?: { error_code?: string; error_message?: string } } }).response?.data;
+    if (data?.error_code) {
+      return data.error_message ? `${data.error_code}: ${data.error_message}` : data.error_code;
+    }
+  }
+  return err instanceof Error ? err.message : "Plaid error";
+}

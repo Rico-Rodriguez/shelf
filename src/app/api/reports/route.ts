@@ -1,28 +1,31 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { categories, categoryGroups, netWorthSnapshots, transactions } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { computeNetWorth } from "@/lib/networth";
 import { monthRange, yearMonth } from "@/lib/dates";
+import { openSnapshot, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const url = new URL(request.url);
     const now = yearMonth();
     const year = Number(url.searchParams.get("year") ?? now.year);
     const month = Number(url.searchParams.get("month") ?? now.month);
     const { start, end } = monthRange(year, month);
     const db = await getDb();
-    const [txs, cats, groups, snaps, nw] = await Promise.all([
+    const [txRows, cats, groups, snapRows, nw] = await Promise.all([
       db.select().from(transactions),
       db.select().from(categories),
       db.select().from(categoryGroups),
       db.select().from(netWorthSnapshots),
-      computeNetWorth(),
+      computeNetWorth(dek),
     ]);
+    const txs = txRows.map((row) => openTx(row, dek));
+    const snaps = snapRows.map((row) => openSnapshot(row, dek));
 
     const incomeIds = new Set(cats.filter((c) => c.kind === "income").map((c) => c.id));
     const monthTx = txs.filter((t) => t.date >= start && t.date <= end && !t.hidden && !t.pending && !t.isTransfer);

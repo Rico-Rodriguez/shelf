@@ -95,7 +95,7 @@ export default function TransactionsPage() {
         </button>
       </div>
 
-      <input className="pixel-input" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="pixel-input ios-search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="ios-seg">
         <button type="button" className={reviewed === "" ? "active" : ""} onClick={() => setReviewed("")}>
           All

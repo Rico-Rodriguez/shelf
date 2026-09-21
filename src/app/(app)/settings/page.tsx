@@ -84,8 +84,11 @@ export default function SettingsPage() {
 
       <form onSubmit={changePw} className="pixel-panel grid gap-2 p-4 md:grid-cols-2">
         <h2 className="pixel-title md:col-span-2">Change the lock</h2>
+        <p className="text-[15px] text-[var(--muted)] md:col-span-2">
+          This password opens the sealed balances and transactions.
+        </p>
         <input className="pixel-input" type="password" placeholder="Current" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
-        <input className="pixel-input" type="password" placeholder="New (8+)" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
+        <input className="pixel-input" type="password" placeholder="New (12+)" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
         <button className="pixel-btn md:col-span-2">Change</button>
       </form>
 

@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { recurrences } from "@/db/schema";
-import { AuthError, requireUnlocked } from "@/lib/auth";
+import { AuthError, requireDek } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { detectRecurring, markRecurrencePaid } from "@/lib/recurring";
 import { dollarsToCents } from "@/lib/money";
 import { todayISO } from "@/lib/dates";
+import { openRecurrence, sealedRecurrenceWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const db = await getDb();
-    const rows = await db.select().from(recurrences);
+    const rows = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
     return NextResponse.json({ recurrences: rows.sort((a, b) => a.nextDate.localeCompare(b.nextDate)) });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
@@ -24,7 +25,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json()) as {
       action?: "detect" | "paid" | "create";
       id?: string;
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       isIncome?: boolean;
     };
     if (body.action === "detect") {
-      return NextResponse.json(await detectRecurring());
+      return NextResponse.json(await detectRecurring(dek));
     }
     if (body.action === "paid" && body.id) {
       await markRecurrencePaid(body.id);
@@ -47,8 +48,10 @@ export async function POST(request: Request) {
     const id = nid();
     await db.insert(recurrences).values({
       id,
-      merchantName: body.merchantName || "Untitled",
-      amountCents: dollarsToCents(body.amount ?? 0),
+      ...sealedRecurrenceWrite(
+        { merchantName: body.merchantName || "Untitled", amountCents: dollarsToCents(body.amount ?? 0) },
+        dek,
+      ),
       cadence: body.cadence || "monthly",
       nextDate: body.nextDate || todayISO(),
       categoryId: body.categoryId,
@@ -65,15 +68,23 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    await requireUnlocked();
+    const dek = await requireDek();
     const body = (await request.json()) as { id: string; isActive?: boolean; nextDate?: string; amount?: number };
     const db = await getDb();
+    const [existing] = await db.select().from(recurrences).where(eq(recurrences.id, body.id));
+    if (!existing) return NextResponse.json({ error: "missing" }, { status: 404 });
+    const opened = openRecurrence(existing, dek);
     await db
       .update(recurrences)
       .set({
+        ...(body.amount == null
+          ? {}
+          : sealedRecurrenceWrite(
+              { merchantName: opened.merchantName, amountCents: dollarsToCents(body.amount) },
+              dek,
+            )),
         isActive: body.isActive,
         nextDate: body.nextDate,
-        amountCents: body.amount == null ? undefined : dollarsToCents(body.amount),
       })
       .where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });
@@ -85,7 +96,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireUnlocked();
+    await requireDek();
     const body = (await request.json()) as { id: string };
     const db = await getDb();
     await db.delete(recurrences).where(eq(recurrences.id, body.id));

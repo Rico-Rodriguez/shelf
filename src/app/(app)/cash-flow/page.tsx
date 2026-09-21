@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
 
@@ -10,6 +10,16 @@ type Flow = {
   byCategory: Record<string, number>;
   byMerchant: Record<string, number>;
 };
+
+type Point = { name: string; Income: number; Spending: number; Saved: number };
+
+const SERIES = [
+  { key: "Income", color: "#34C759" },
+  { key: "Saved", color: "#007AFF" },
+  { key: "Spending", color: "#E15A3A" },
+] as const;
+
+const tick = { fill: "rgba(60, 60, 67, 0.6)", fontSize: 11 };
 
 export default function CashFlowPage() {
   const [data, setData] = useState<Flow | null>(null);
@@ -22,43 +32,77 @@ export default function CashFlowPage() {
     void api<Flow>(`/api/cash-flow?${qs}`).then(setData);
   }, [grain, merchant]);
 
-  if (!data) return <p className="pixel-title text-ink-soft">Watching the current…</p>;
+  if (!data) return <p className="pixel-title">Watching the current…</p>;
 
-  const chart = data.series.map((s) => ({
-    name: s.key,
-    Income: s.income / 100,
-    Spending: s.spending / 100,
-    Saved: s.savings / 100,
-  }));
+  const chart = visible(
+    data.series.map((s) => ({
+      name: s.key,
+      Income: s.income / 100,
+      Spending: s.spending / 100,
+      Saved: s.savings / 100,
+    })),
+  );
+  const multiYear = new Set(chart.map((d) => d.name.slice(0, 4))).size > 1;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <h1 className="pixel-title text-3xl">Cash flow</h1>
-        <p className="text-sm text-ink-soft">What came in, what went out, what stayed in the jar.</p>
+        <h1 className="pixel-title">Cash flow</h1>
+        <p>What came in, what went out, what stayed in the jar.</p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <select className="pixel-input max-w-40" value={grain} onChange={(e) => setGrain(e.target.value)}>
-          <option value="month">Monthly</option>
-          <option value="quarter">Quarterly</option>
-        </select>
-        <input className="pixel-input max-w-xs" placeholder="Filter merchant" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="ios-seg sm:w-56">
+          <button type="button" className={grain === "month" ? "active" : ""} onClick={() => setGrain("month")}>
+            Monthly
+          </button>
+          <button type="button" className={grain === "quarter" ? "active" : ""} onClick={() => setGrain("quarter")}>
+            Quarterly
+          </button>
+        </div>
+        <input
+          className="pixel-input ios-search sm:max-w-xs"
+          placeholder="Filter merchant"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value)}
+        />
       </div>
-      <div className="pixel-panel h-80 p-3">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chart}>
-            <CartesianGrid stroke="#e8d4b0" />
-            <XAxis dataKey="name" tick={{ fill: "#3d2c29", fontSize: 11 }} />
-            <YAxis tick={{ fill: "#3d2c29", fontSize: 11 }} />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="Income" fill="#6A9985" />
-            <Bar dataKey="Spending" fill="#D97757" />
-            <Bar dataKey="Saved" fill="#7A9EAF" />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="pixel-panel px-1 pb-3 pt-2">
+        <div className="h-[240px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chart} barGap={3} barCategoryGap="28%" margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.1)" />
+              <XAxis
+                dataKey="name"
+                tick={tick}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(key: string) => axisLabel(key, multiYear)}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={tick}
+                axisLine={false}
+                tickLine={false}
+                width={48}
+                tickFormatter={axisMoney}
+              />
+              <Tooltip content={<FlowTip />} cursor={{ fill: "rgba(120,120,128,0.08)" }} />
+              {SERIES.map((s) => (
+                <Bar key={s.key} dataKey={s.key} fill={s.color} maxBarSize={28} radius={[3, 3, 3, 3]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-1 flex items-center justify-center gap-4">
+          {SERIES.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">
+              <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
+              {s.key}
+            </span>
+          ))}
+        </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <List title="By shelf" rows={data.byCategory} />
         <List title="By shop" rows={data.byMerchant} />
       </div>
@@ -69,16 +113,76 @@ export default function CashFlowPage() {
 function List({ title, rows }: { title: string; rows: Record<string, number> }) {
   const sorted = Object.entries(rows).sort((a, b) => b[1] - a[1]).slice(0, 12);
   return (
-    <section className="pixel-panel p-4">
-      <h2 className="pixel-title mb-2">{title}</h2>
-      <ul className="space-y-1 text-sm">
+    <section>
+      <h2 className="ios-section">{title}</h2>
+      <ul className="ios-group">
         {sorted.map(([name, cents]) => (
-          <li key={name} className="flex justify-between">
-            <span>{name}</span>
-            <MoneyText cents={cents} />
+          <li key={name} className="ios-row justify-between gap-3">
+            <span className="min-w-0 truncate">{name}</span>
+            <MoneyText className="shrink-0 text-[var(--muted)]" cents={cents} />
           </li>
         ))}
+        {sorted.length === 0 ? <li className="ios-row text-[var(--muted)]">Nothing yet.</li> : null}
       </ul>
     </section>
+  );
+}
+
+function visible(chart: Point[]) {
+  const first = chart.findIndex((d) => d.Income || d.Spending || d.Saved);
+  if (first === -1) return chart.slice(-6);
+  return chart.slice(first);
+}
+
+function axisMoney(value: number) {
+  const sign = value < 0 ? "−" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    const n = abs / 1000;
+    return `${sign}$${n.toFixed(n >= 10 ? 0 : 1)}k`;
+  }
+  return `${sign}$${Math.round(abs)}`;
+}
+
+function axisLabel(key: string, multiYear: boolean) {
+  const month = /^(\d{4})-(\d{2})$/.exec(key);
+  if (!month) return key.replace("-", " ");
+  const short = new Date(Number(month[1]), Number(month[2]) - 1, 1).toLocaleString("en-US", { month: "short" });
+  return multiYear ? `${short} ’${month[1].slice(2)}` : short;
+}
+
+function tipLabel(key: string) {
+  const month = /^(\d{4})-(\d{2})$/.exec(key);
+  if (!month) return key.replace("-", " ");
+  return new Date(Number(month[1]), Number(month[2]) - 1, 1).toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function usd(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function FlowTip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ name?: string; value?: number; color?: string }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl bg-white px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+      <div className="mb-1 text-[13px] font-semibold tracking-[-0.08px]">{tipLabel(String(label ?? ""))}</div>
+      {payload.map((row) => (
+        <div key={row.name} className="flex items-center justify-between gap-4 text-[13px] leading-[18px]">
+          <span style={{ color: row.color }}>{row.name}</span>
+          <span className="tabular-nums">{usd(Number(row.value ?? 0))}</span>
+        </div>
+      ))}
+    </div>
   );
 }

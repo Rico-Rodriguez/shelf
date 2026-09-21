@@ -20,7 +20,12 @@ async function createDb(): Promise<AppDb> {
   const url = process.env.DATABASE_URL;
   if (url) {
     const postgres = (await import("postgres")).default;
-    const client = postgres(url, { max: 4 });
+    const pooled = url.includes("-pooler");
+    const client = postgres(url, {
+      max: pooled ? 1 : 4,
+      prepare: !pooled,
+      ...(pooled ? { idle_timeout: 20, connect_timeout: 30 } : {}),
+    });
     const db = drizzlePg(client, { schema });
     await client.unsafe(SCHEMA_SQL);
     await seedCategoriesIfNeeded(db);

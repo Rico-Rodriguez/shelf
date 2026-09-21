@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import { ZoomLock } from "@/components/ZoomLock";
 import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
+
+const inter = localFont({
+  src: "../fonts/InterVariable.woff2",
+  variable: "--font-inter",
+  display: "swap",
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
   title: "Shelf",
@@ -20,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FAF7F2",
+  themeColor: "#F2F2F7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -30,14 +38,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className="antialiased"
-        style={{
-          fontFamily:
-            '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
-        }}
-      >
+    <html lang="en" className={inter.variable}>
+      <body className="antialiased">
         <ZoomLock />
         <PwaRegister />
         {children}

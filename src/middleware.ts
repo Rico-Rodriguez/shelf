@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { gateMatches, gateToken, publicOrigin } from "@/lib/gate";
+import { googleConfigured } from "@/lib/google-config";
 
 const PUBLIC = [
   "/login",
@@ -6,6 +8,8 @@ const PUBLIC = [
   "/api/auth/session",
   "/api/auth/login",
   "/api/auth/setup",
+  "/api/auth/totp",
+  "/api/auth/google",
   "/api/health",
   "/api/plaid/webhook",
   "/api/plaid/oauth",
@@ -17,15 +21,24 @@ const PUBLIC = [
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  if (pathname === "/api/plaid/webhook" || pathname.startsWith("/g/")) {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith("/api/auth/google")) return NextResponse.next();
+  if (!googleConfigured() && !gateMatches(request.cookies.get("shelf_gate")?.value, gateToken())) {
+    return new NextResponse(null, { status: 404 });
+  }
   if (
-    PUBLIC.some((p) => pathname === p || pathname.startsWith("/_next") || pathname.startsWith("/icon"))
+    PUBLIC.some((p) => pathname === p || pathname.startsWith("/_next") || pathname.startsWith("/icon")) ||
+    pathname.startsWith("/setup/two-factor") ||
+    pathname.startsWith("/api/auth/totp/")
   ) {
     return NextResponse.next();
   }
   if (pathname.startsWith("/api/auth")) return NextResponse.next();
   const cookie = request.cookies.get("shelf_lock");
   if (!cookie && !pathname.startsWith("/api/")) {
-    const login = new URL("/login", request.url);
+    const login = new URL("/login", publicOrigin(request));
     return NextResponse.redirect(login);
   }
   return NextResponse.next();
