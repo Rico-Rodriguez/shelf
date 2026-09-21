@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConnectBank } from "@/components/ConnectBank";
 import { MoneyText } from "@/components/MoneyText";
+import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
 
@@ -17,12 +18,14 @@ type Account = {
   isManual: boolean;
   isHidden: boolean;
   includeInNetWorth: boolean;
-  liabilityJson: string | null;
+  plaidItemId: string | null;
 };
+
+type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
 
 type Payload = {
   accounts: Account[];
-  items: { id: string; institutionName: string | null; status: string }[];
+  items: Item[];
   itemCount: number;
   trialLimit: number;
   plaidConfigured: boolean;
@@ -30,6 +33,7 @@ type Payload = {
 
 export default function AccountsPage() {
   const [data, setData] = useState<Payload | null>(null);
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState("depository");
   const [balance, setBalance] = useState("");
@@ -42,6 +46,25 @@ export default function AccountsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const visible = useMemo(() => data?.accounts.filter((account) => !account.isHidden) ?? [], [data]);
+  const assets = visible.filter((account) => classifyAccount(account.type) === "asset");
+  const debts = visible.filter((account) => classifyAccount(account.type) === "liability");
+  const assetTotal = assets.reduce((sum, account) => sum + account.currentBalanceCents, 0);
+  const debtTotal = debts.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
+
+  const institutions = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, { key: string; name: string; rows: Account[] }>();
+    for (const account of visible) {
+      const item = account.plaidItemId ? data.items.find((row) => row.id === account.plaidItemId) : null;
+      const key = item?.id ?? "manual";
+      const bucket = map.get(key) ?? { key, name: item?.institutionName || (account.isManual ? "Manual" : "Bank"), rows: [] };
+      bucket.rows.push(account);
+      map.set(key, bucket);
+    }
+    return [...map.values()];
+  }, [data, visible]);
 
   async function addManual(e: FormEvent) {
     e.preventDefault();
@@ -56,6 +79,7 @@ export default function AccountsPage() {
     });
     setName("");
     setBalance("");
+    setOpen(false);
     load();
   }
 
@@ -64,18 +88,16 @@ export default function AccountsPage() {
     load();
   }
 
-  if (!data) return <p className="pixel-title text-ink-soft">Counting jars…</p>;
-
-  const assets = data.accounts.filter((a) => classifyAccount(a.type) === "asset" && !a.isHidden);
-  const debts = data.accounts.filter((a) => classifyAccount(a.type) === "liability" && !a.isHidden);
+  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="pixel-title text-3xl">Accounts</h1>
-          <p className="text-sm text-ink-soft">
-            Institution logins {data.itemCount}/{data.trialLimit}. Removing one does not free a Trial slot.
+          <h1>Accounts</h1>
+          <p>
+            Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
+            {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} bank logins` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -86,66 +108,83 @@ export default function AccountsPage() {
                 Refresh
               </button>
             </>
-          ) : (
-            <p className="max-w-xs text-sm text-ink-soft">
-              Add Plaid keys in <code>.env</code> to connect real banks. Until then, add jars by hand or load the sample house in Settings.
-            </p>
-          )}
+          ) : null}
+          <button className="pixel-btn" type="button" onClick={() => setOpen(true)}>
+            Add
+          </button>
         </div>
       </div>
 
-      {data.items.length > 0 && (
-        <div className="pixel-panel p-3 text-sm">
-          Linked: {data.items.map((i) => i.institutionName || i.id).join(" · ")}
-        </div>
-      )}
+      {!data.plaidConfigured ? (
+        <p className="text-[15px] text-[var(--muted)]">Add Plaid keys to connect a bank, or add an account by hand.</p>
+      ) : null}
 
-      <Group title="Assets" rows={assets} />
-      <Group title="Owed" rows={debts} />
+      {data.items.some((item) => item.status !== "ok") ? (
+        <p className="text-[15px] text-[var(--terracotta)]">
+          {data.items
+            .filter((item) => item.status !== "ok")
+            .map((item) => `${item.institutionName || "Bank"} needs attention${item.errorCode ? ` (${item.errorCode})` : ""}`)
+            .join(" · ")}
+        </p>
+      ) : null}
 
-      <form onSubmit={addManual} className="pixel-panel grid gap-2 p-4 md:grid-cols-5">
-        <h2 className="pixel-title md:col-span-5">Add a jar by hand</h2>
-        <input className="pixel-input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-        <select className="pixel-input" value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="cash">Cash / bank</option>
-          <option value="property">Home</option>
-          <option value="vehicle">Car</option>
-          <option value="other">Other</option>
-        </select>
-        <select className="pixel-input" value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="depository">Deposit</option>
-          <option value="investment">Investment</option>
-          <option value="credit">Credit card</option>
-          <option value="loan">Loan</option>
-          <option value="other">Other</option>
-        </select>
-        <input className="pixel-input" placeholder="Balance" value={balance} onChange={(e) => setBalance(e.target.value)} />
-        <button className="pixel-btn">Put it on the shelf</button>
-      </form>
-    </div>
-  );
-}
+      {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No accounts yet.</p> : null}
 
-function Group({ title, rows }: { title: string; rows: Account[] }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="ios-section">{title}</h2>
-      <div className="ios-group">
-        {rows.map((a) => (
-          <Link key={a.id} href={`/accounts/${a.id}`} className="ios-row justify-between">
-            <div>
-              <div className="text-[17px] font-medium">{a.name}</div>
-              <div className="text-[13px] text-[var(--muted)]">
-                {a.subtype || a.type}
-                {a.mask ? ` · ${a.mask}` : ""}
-                {a.isManual ? " · manual" : ""}
-              </div>
+      {institutions.map((group) => {
+        const total = group.rows.reduce((sum, account) => {
+          const amount = Math.abs(account.currentBalanceCents);
+          return sum + (classifyAccount(account.type) === "liability" ? -amount : amount);
+        }, 0);
+        return (
+          <section key={group.key}>
+            <h2 className="ios-section flex justify-between">
+              <span>{group.name}</span>
+              <MoneyText cents={total} signed />
+            </h2>
+            <div className="ios-group">
+              {group.rows.map((account) => (
+                <Link key={account.id} href={`/accounts/${account.id}`} className="ios-row justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[17px] font-medium">{account.name}</div>
+                    <div className="truncate text-[13px] text-[var(--muted)]">
+                      {account.subtype || account.type}
+                      {account.mask ? ` · ${account.mask}` : ""}
+                      {account.isManual ? " · manual" : ""}
+                    </div>
+                  </div>
+                  <MoneyText
+                    cents={classifyAccount(account.type) === "liability" ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents}
+                    signed={classifyAccount(account.type) === "liability"}
+                  />
+                </Link>
+              ))}
             </div>
-            <MoneyText cents={classifyAccount(a.type) === "liability" ? -Math.abs(a.currentBalanceCents) : a.currentBalanceCents} signed={classifyAccount(a.type) === "liability"} />
-          </Link>
-        ))}
-        {rows.length === 0 ? <div className="ios-row text-[var(--muted)]">None yet.</div> : null}
-      </div>
-    </section>
+          </section>
+        );
+      })}
+
+      {open ? (
+        <Sheet title="Add an account" onClose={() => setOpen(false)}>
+          <form className="space-y-3" onSubmit={addManual}>
+            <input className="pixel-input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <select className="pixel-input" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kind">
+              <option value="cash">Cash / bank</option>
+              <option value="property">Home</option>
+              <option value="vehicle">Car</option>
+              <option value="other">Other</option>
+            </select>
+            <select className="pixel-input" value={type} onChange={(e) => setType(e.target.value)} aria-label="Type">
+              <option value="depository">Deposit</option>
+              <option value="investment">Investment</option>
+              <option value="credit">Credit card</option>
+              <option value="loan">Loan</option>
+              <option value="other">Other</option>
+            </select>
+            <input className="pixel-input" inputMode="decimal" placeholder="Balance" value={balance} onChange={(e) => setBalance(e.target.value)} />
+            <button className="pixel-btn w-full">Add account</button>
+          </form>
+        </Sheet>
+      ) : null}
+    </div>
   );
 }

@@ -2,8 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
+import { MonthNav } from "@/components/MonthNav";
+import { Sheet } from "@/components/Sheet";
 import { api } from "@/lib/client";
-import { yearMonth } from "@/lib/dates";
+import { monthName, occurrencesInMonth, yearMonth } from "@/lib/dates";
 
 type Rec = {
   id: string;
@@ -17,10 +19,35 @@ type Rec = {
   lastPaidDate: string | null;
 };
 
+type Draft = {
+  merchantName: string;
+  amountCents: number;
+  cadence: string;
+  nextDate: string;
+  categoryId: string | null;
+  accountId: string | null;
+  isIncome: boolean;
+  lastPaidDate: string;
+};
+
+const CADENCES = [
+  ["weekly", "Weekly"],
+  ["biweekly", "Biweekly"],
+  ["monthly", "Monthly"],
+  ["quarterly", "Quarterly"],
+  ["yearly", "Yearly"],
+] as const;
+
+const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false };
+
 export default function RecurringPage() {
+  const now = yearMonth();
+  const [cursor, setCursor] = useState(now);
   const [rows, setRows] = useState<Rec[]>([]);
   const [view, setView] = useState<"list" | "calendar">("calendar");
-  const [form, setForm] = useState({ merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false });
+  const [suggestions, setSuggestions] = useState<Draft[]>([]);
+  const [editing, setEditing] = useState<Rec | "new" | null>(null);
+  const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(() => {
     void api<{ recurrences: Rec[] }>("/api/recurring").then((r) => setRows(r.recurrences));
@@ -30,35 +57,106 @@ export default function RecurringPage() {
     load();
   }, [load]);
 
+  const active = rows.filter((row) => row.isActive);
+  const projected = useMemo(() => {
+    return active.flatMap((row) =>
+      occurrencesInMonth(row.nextDate, row.cadence, cursor.year, cursor.month).map((date) => ({ ...row, date })),
+    );
+  }, [active, cursor]);
+
+  const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
+  const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
+
+  const days = new Date(cursor.year, cursor.month, 0).getDate();
+  const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
+
   async function detect() {
-    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
+    const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
+    setSuggestions(res.suggestions);
+  }
+
+  async function confirm(drafts: Draft[]) {
+    if (!drafts.length) {
+      setSuggestions([]);
+      return;
+    }
+    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: drafts }) });
+    setSuggestions([]);
     load();
   }
 
-  async function add(e: FormEvent) {
-    e.preventDefault();
-    await api("/api/recurring", {
-      method: "POST",
-      body: JSON.stringify({ ...form, amount: Number(form.amount) }),
+  function openNew() {
+    setForm(emptyForm);
+    setEditing("new");
+  }
+
+  function openEdit(row: Rec) {
+    setForm({
+      merchantName: row.merchantName,
+      amount: (row.amountCents / 100).toFixed(2),
+      cadence: row.cadence,
+      nextDate: row.nextDate,
+      isIncome: row.isIncome,
     });
-    setForm({ merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false });
+    setEditing(row);
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (editing === "new") {
+      await api("/api/recurring", {
+        method: "POST",
+        body: JSON.stringify({ ...form, amount: Number(form.amount) }),
+      });
+    } else if (editing) {
+      await api("/api/recurring", {
+        method: "PATCH",
+        body: JSON.stringify({
+          id: editing.id,
+          merchantName: form.merchantName,
+          amount: Number(form.amount),
+          cadence: form.cadence,
+          nextDate: form.nextDate,
+          isIncome: form.isIncome,
+        }),
+      });
+    }
+    setEditing(null);
     load();
   }
 
-  const { year, month } = yearMonth();
-  const days = new Date(year, month, 0).getDate();
-  const cells = useMemo(() => {
-    const startPad = new Date(year, month - 1, 1).getDay();
-    return { startPad, days };
-  }, [year, month, days]);
+  async function pause(row: Rec) {
+    await api("/api/recurring", { method: "PATCH", body: JSON.stringify({ id: row.id, isActive: !row.isActive }) });
+    load();
+  }
+
+  async function remove(row: Rec) {
+    await api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: row.id }) });
+    setEditing(null);
+    load();
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="pixel-title text-3xl">Bills & rhythm</h1>
-          <p className="text-sm text-ink-soft">Subscriptions, rent, paycheck — on a calendar like a wall planner.</p>
+          <h1>Bills</h1>
+          <p>
+            {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In <MoneyText cents={income} />
+          </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="pixel-btn secondary" type="button" onClick={detect}>
+            Detect
+          </button>
+          <button className="pixel-btn" type="button" onClick={openNew}>
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
         <div className="ios-seg w-full max-w-xs">
           <button className={view === "calendar" ? "active" : ""} type="button" onClick={() => setView("calendar")}>
             Calendar
@@ -67,31 +165,58 @@ export default function RecurringPage() {
             List
           </button>
         </div>
-        <button className="pixel-btn secondary" type="button" onClick={detect}>
-          Detect
-        </button>
       </div>
+
+      {suggestions.length ? (
+        <section className="pixel-panel space-y-3 p-4">
+          <h2 className="text-[17px] font-semibold">Detected</h2>
+          <p className="text-[15px] text-[var(--muted)]">These are not on the calendar until you keep them.</p>
+          <ul className="ios-group">
+            {suggestions.map((draft) => (
+              <li key={draft.merchantName} className="ios-row justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate">{draft.merchantName}</div>
+                  <div className="text-[13px] text-[var(--muted)]">
+                    {draft.cadence} · next {draft.nextDate}
+                  </div>
+                </div>
+                <span className="flex shrink-0 items-center gap-3">
+                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} signed />
+                  <button className="text-[15px] font-semibold text-[var(--terracotta)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
+                    Skip
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <button className="pixel-btn" type="button" onClick={() => confirm(suggestions)}>
+            Keep these
+          </button>
+        </section>
+      ) : null}
 
       {view === "calendar" ? (
         <div className="pixel-panel p-3">
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
-            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-              <div key={i} className="text-[11px] font-medium text-[var(--muted)]">{d}</div>
+            {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+              <div key={index} className="text-[11px] font-medium text-[var(--muted)]">
+                {day}
+              </div>
             ))}
-            {Array.from({ length: cells.startPad }).map((_, i) => (
-              <div key={`p${i}`} />
+            {Array.from({ length: startPad }).map((_, index) => (
+              <div key={`pad-${index}`} />
             ))}
-            {Array.from({ length: cells.days }).map((_, i) => {
-              const day = i + 1;
-              const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const hits = rows.filter((r) => r.isActive && r.nextDate === iso);
+            {Array.from({ length: days }).map((_, index) => {
+              const day = index + 1;
+              const iso = `${cursor.year}-${String(cursor.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+              const hits = projected.filter((row) => row.date === iso);
               return (
-                <div key={iso} className="min-h-16 rounded-[16px] bg-[rgba(120,120,128,0.08)] p-1 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-                  <div className="text-[10px] text-ink-soft">{day}</div>
-                  {hits.map((h) => (
-                    <div key={h.id} className="truncate text-[10px]">
-                      {h.merchantName}
-                    </div>
+                <div key={iso} className="min-h-16 rounded-[16px] bg-[rgba(120,120,128,0.08)] p-1 text-left">
+                  <div className="text-[11px] text-[var(--muted)]">{day}</div>
+                  {hits.map((hit) => (
+                    <button key={hit.id + hit.date} type="button" className="block w-full truncate text-left text-[11px]" onClick={() => openEdit(hit)}>
+                      {hit.merchantName}
+                    </button>
                   ))}
                 </div>
               );
@@ -99,49 +224,56 @@ export default function RecurringPage() {
           </div>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => (
-            <li key={r.id} className="pixel-panel flex flex-wrap items-center justify-between gap-2 p-3">
-              <div>
-                <div className="font-semibold">{r.merchantName}</div>
-                <div className="text-xs text-ink-soft">
-                  {r.cadence} · next {r.nextDate} · {r.source}
+        <ul className="ios-group">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <button type="button" className="ios-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
+                <div className="min-w-0">
+                  <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
+                  <div className="text-[13px] text-[var(--muted)]">
+                    {row.cadence} · next {row.nextDate}
+                    {row.isActive ? "" : " · paused"}
+                  </div>
                 </div>
-              </div>
-              <MoneyText cents={r.isIncome ? -r.amountCents : r.amountCents} signed />
-              <div className="flex gap-2">
-                <button className="pixel-btn" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: r.id }) }).then(load)}>
-                  Paid
-                </button>
-                <button className="pixel-btn ghost" type="button" onClick={() => api("/api/recurring", { method: "PATCH", body: JSON.stringify({ id: r.id, isActive: !r.isActive }) }).then(load)}>
-                  {r.isActive ? "Pause" : "Resume"}
-                </button>
-                <button className="pixel-btn danger" type="button" onClick={() => api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: r.id }) }).then(load)}>
-                  Toss
-                </button>
-              </div>
+                <MoneyText cents={row.isIncome ? -row.amountCents : row.amountCents} signed />
+              </button>
             </li>
           ))}
+          {rows.length === 0 ? <li className="ios-row text-[var(--muted)]">No bills yet.</li> : null}
         </ul>
       )}
 
-      <form onSubmit={add} className="pixel-panel grid gap-2 p-4 md:grid-cols-5">
-        <h2 className="pixel-title md:col-span-5">Pin a new bill</h2>
-        <input className="pixel-input" placeholder="Name" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
-        <input className="pixel-input" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-        <select className="pixel-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>
-          <option value="weekly">Weekly</option>
-          <option value="biweekly">Biweekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-        <input className="pixel-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.isIncome} onChange={(e) => setForm({ ...form, isIncome: e.target.checked })} />
-          Income
-        </label>
-        <button className="pixel-btn md:col-span-5">Add</button>
-      </form>
+      {editing ? (
+        <Sheet title={editing === "new" ? "New bill" : form.merchantName || "Bill"} onClose={() => setEditing(null)}>
+          <form className="space-y-3" onSubmit={save}>
+            <input className="pixel-input" placeholder="Name" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
+            <input className="pixel-input" inputMode="decimal" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+            <select className="pixel-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })} aria-label="Cadence">
+              {CADENCES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input className="pixel-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required aria-label="Next date" />
+            <button type="button" className="ios-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
+              Income
+              <span className={`switch ${form.isIncome ? "on" : ""}`} />
+            </button>
+            <button className="pixel-btn w-full">Save</button>
+          </form>
+          {editing !== "new" ? (
+            <div className="flex gap-2">
+              <button className="pixel-btn ghost flex-1" type="button" onClick={() => pause(editing)}>
+                {editing.isActive ? "Pause" : "Resume"}
+              </button>
+              <button className="pixel-btn danger flex-1" type="button" onClick={() => remove(editing)}>
+                Delete
+              </button>
+            </div>
+          ) : null}
+        </Sheet>
+      ) : null}
     </div>
   );
 }

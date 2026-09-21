@@ -37,8 +37,8 @@ export async function GET(request: Request) {
       buckets[key] = { income: 0, spending: 0, savings: 0, key };
     }
 
-    const byCategory: Record<string, number> = {};
-    const byMerchant: Record<string, number> = {};
+    const byCategory = new Map<string, { id: string; name: string; cents: number }>();
+    const byMerchant = new Map<string, { name: string; cents: number }>();
 
     for (const tx of txs) {
       if (tx.hidden || tx.pending || tx.isTransfer) continue;
@@ -51,10 +51,15 @@ export async function GET(request: Request) {
         buckets[key].income += Math.abs(tx.amountCents);
       } else if (tx.amountCents > 0) {
         buckets[key].spending += tx.amountCents;
-        const catName = cats.find((c) => c.id === tx.categoryId)?.name ?? "Uncategorized";
-        byCategory[catName] = (byCategory[catName] ?? 0) + tx.amountCents;
+        const cat = cats.find((c) => c.id === tx.categoryId);
+        const catKey = cat?.id ?? "uncat";
+        const catRow = byCategory.get(catKey) ?? { id: cat?.id ?? "", name: cat?.name ?? "Uncategorized", cents: 0 };
+        catRow.cents += tx.amountCents;
+        byCategory.set(catKey, catRow);
         const merch = tx.merchantName || tx.name;
-        byMerchant[merch] = (byMerchant[merch] ?? 0) + tx.amountCents;
+        const merchRow = byMerchant.get(merch) ?? { name: merch, cents: 0 };
+        merchRow.cents += tx.amountCents;
+        byMerchant.set(merch, merchRow);
       }
     }
 
@@ -63,6 +68,8 @@ export async function GET(request: Request) {
     }
 
     const series = Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+    const categoryRows = [...byCategory.values()].sort((a, b) => b.cents - a.cents);
+    const merchantRows = [...byMerchant.values()].sort((a, b) => b.cents - a.cents);
     if (grain === "quarter") {
       const q: Record<string, { income: number; spending: number; savings: number; key: string }> = {};
       for (const s of series) {
@@ -74,15 +81,15 @@ export async function GET(request: Request) {
         q[qk].savings += s.savings;
       }
       return NextResponse.json({
-        series: Object.values(q),
-        byCategory,
-        byMerchant,
+        series: Object.values(q).sort((a, b) => a.key.localeCompare(b.key)),
+        byCategory: categoryRows,
+        byMerchant: merchantRows,
         accounts: accts,
         groups,
       });
     }
 
-    return NextResponse.json({ series, byCategory, byMerchant, accounts: accts, groups });
+    return NextResponse.json({ series, byCategory: categoryRows, byMerchant: merchantRows, accounts: accts, groups });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
     throw err;

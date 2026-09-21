@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
+import { activityHref } from "@/lib/activity";
+import { periodRange } from "@/lib/dates";
+
+type Row = { id?: string; name: string; cents: number };
 
 type Flow = {
   series: { key: string; income: number; spending: number; savings: number }[];
-  byCategory: Record<string, number>;
-  byMerchant: Record<string, number>;
+  byCategory: Row[];
+  byMerchant: Row[];
 };
 
 type Point = { name: string; Income: number; Spending: number; Saved: number };
@@ -22,6 +28,7 @@ const SERIES = [
 const tick = { fill: "rgba(60, 60, 67, 0.6)", fontSize: 11 };
 
 export default function CashFlowPage() {
+  const router = useRouter();
   const [data, setData] = useState<Flow | null>(null);
   const [grain, setGrain] = useState("month");
   const [merchant, setMerchant] = useState("");
@@ -32,7 +39,7 @@ export default function CashFlowPage() {
     void api<Flow>(`/api/cash-flow?${qs}`).then(setData);
   }, [grain, merchant]);
 
-  if (!data) return <p className="pixel-title">Watching the current…</p>;
+  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
 
   const chart = visible(
     data.series.map((s) => ({
@@ -43,12 +50,19 @@ export default function CashFlowPage() {
     })),
   );
   const multiYear = new Set(chart.map((d) => d.name.slice(0, 4))).size > 1;
+  const span = spanOf(data.series.map((row) => row.key));
+
+  function openPeriod(key: string) {
+    const range = periodRange(key);
+    if (!range) return;
+    router.push(activityHref(range));
+  }
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="pixel-title">Cash flow</h1>
-        <p>What came in, what went out, what stayed in the jar.</p>
+        <h1>Cash flow</h1>
+        <p>What came in, what went out, and what was left. Tap a month or a row to see the transactions.</p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="ios-seg sm:w-56">
@@ -64,12 +78,22 @@ export default function CashFlowPage() {
           placeholder="Filter merchant"
           value={merchant}
           onChange={(e) => setMerchant(e.target.value)}
+          aria-label="Filter merchant"
         />
       </div>
       <div className="pixel-panel px-1 pb-3 pt-2">
         <div className="h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chart} barGap={3} barCategoryGap="28%" margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+            <BarChart
+              data={chart}
+              barGap={3}
+              barCategoryGap="28%"
+              margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
+              onClick={(state) => {
+                const key = state?.activeLabel;
+                if (typeof key === "string") openPeriod(key);
+              }}
+            >
               <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.1)" />
               <XAxis
                 dataKey="name"
@@ -79,13 +103,7 @@ export default function CashFlowPage() {
                 tickFormatter={(key: string) => axisLabel(key, multiYear)}
                 interval="preserveStartEnd"
               />
-              <YAxis
-                tick={tick}
-                axisLine={false}
-                tickLine={false}
-                width={48}
-                tickFormatter={axisMoney}
-              />
+              <YAxis tick={tick} axisLine={false} tickLine={false} width={48} tickFormatter={axisMoney} />
               <Tooltip content={<FlowTip />} cursor={{ fill: "rgba(120,120,128,0.08)" }} />
               {SERIES.map((s) => (
                 <Bar key={s.key} dataKey={s.key} fill={s.color} maxBarSize={28} radius={[3, 3, 3, 3]} />
@@ -103,23 +121,37 @@ export default function CashFlowPage() {
         </div>
       </div>
       <div className="grid gap-6 md:grid-cols-2">
-        <List title="By shelf" rows={data.byCategory} />
-        <List title="By shop" rows={data.byMerchant} />
+        <List
+          title="By category"
+          rows={data.byCategory}
+          hrefFor={(row) => activityHref({ categoryId: row.id || undefined, ...span })}
+        />
+        <List title="By merchant" rows={data.byMerchant} hrefFor={(row) => activityHref({ q: row.name, ...span })} />
       </div>
     </div>
   );
 }
 
-function List({ title, rows }: { title: string; rows: Record<string, number> }) {
-  const sorted = Object.entries(rows).sort((a, b) => b[1] - a[1]).slice(0, 12);
+function spanOf(keys: string[]): { start?: string; end?: string } {
+  if (!keys.length) return {};
+  const first = periodRange(keys[0]);
+  const last = periodRange(keys[keys.length - 1]);
+  if (!first || !last) return {};
+  return { start: first.start, end: last.end };
+}
+
+function List({ title, rows, hrefFor }: { title: string; rows: Row[]; hrefFor: (row: Row) => string }) {
+  const sorted = rows.slice(0, 12);
   return (
     <section>
       <h2 className="ios-section">{title}</h2>
       <ul className="ios-group">
-        {sorted.map(([name, cents]) => (
-          <li key={name} className="ios-row justify-between gap-3">
-            <span className="min-w-0 truncate">{name}</span>
-            <MoneyText className="shrink-0 text-[var(--muted)]" cents={cents} />
+        {sorted.map((row) => (
+          <li key={row.id || row.name}>
+            <Link href={hrefFor(row)} className="ios-row justify-between gap-3">
+              <span className="min-w-0 truncate">{row.name}</span>
+              <MoneyText className="shrink-0 text-[var(--muted)]" cents={row.cents} />
+            </Link>
           </li>
         ))}
         {sorted.length === 0 ? <li className="ios-row text-[var(--muted)]">Nothing yet.</li> : null}

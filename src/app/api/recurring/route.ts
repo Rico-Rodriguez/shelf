@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { recurrences } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
 import { nid } from "@/lib/ids";
-import { detectRecurring, markRecurrencePaid } from "@/lib/recurring";
+import { confirmRecurring, markRecurrencePaid, previewRecurring, type RecurrenceDraft } from "@/lib/recurring";
 import { dollarsToCents } from "@/lib/money";
 import { todayISO } from "@/lib/dates";
 import { openRecurrence, sealedRecurrenceWrite } from "@/lib/secrets";
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   try {
     const dek = await requireDek();
     const body = (await request.json()) as {
-      action?: "detect" | "paid" | "create";
+      action?: "detect" | "confirm" | "paid" | "create";
       id?: string;
       merchantName?: string;
       amount?: number;
@@ -36,9 +36,13 @@ export async function POST(request: Request) {
       categoryId?: string;
       accountId?: string;
       isIncome?: boolean;
+      suggestions?: RecurrenceDraft[];
     };
     if (body.action === "detect") {
-      return NextResponse.json(await detectRecurring(dek));
+      return NextResponse.json({ suggestions: await previewRecurring(dek) });
+    }
+    if (body.action === "confirm") {
+      return NextResponse.json(await confirmRecurring(dek, body.suggestions ?? []));
     }
     if (body.action === "paid" && body.id) {
       await markRecurrencePaid(body.id);
@@ -69,22 +73,36 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const dek = await requireDek();
-    const body = (await request.json()) as { id: string; isActive?: boolean; nextDate?: string; amount?: number };
+    const body = (await request.json()) as {
+      id: string;
+      isActive?: boolean;
+      nextDate?: string;
+      amount?: number;
+      merchantName?: string;
+      cadence?: string;
+      isIncome?: boolean;
+    };
     const db = await getDb();
     const [existing] = await db.select().from(recurrences).where(eq(recurrences.id, body.id));
     if (!existing) return NextResponse.json({ error: "missing" }, { status: 404 });
     const opened = openRecurrence(existing, dek);
+    const sensitive = body.amount != null || body.merchantName != null;
     await db
       .update(recurrences)
       .set({
-        ...(body.amount == null
-          ? {}
-          : sealedRecurrenceWrite(
-              { merchantName: opened.merchantName, amountCents: dollarsToCents(body.amount) },
+        ...(sensitive
+          ? sealedRecurrenceWrite(
+              {
+                merchantName: body.merchantName ?? opened.merchantName,
+                amountCents: body.amount == null ? opened.amountCents : dollarsToCents(body.amount),
+              },
               dek,
-            )),
+            )
+          : {}),
         isActive: body.isActive,
         nextDate: body.nextDate,
+        cadence: body.cadence,
+        isIncome: body.isIncome,
       })
       .where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });

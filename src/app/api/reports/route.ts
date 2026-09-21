@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     let income = 0;
     const groupSpend: Record<string, number> = {};
-    const catSpend: Record<string, { name: string; group: string; cents: number; color: string }> = {};
+    const catSpend: Record<string, { id: string; name: string; group: string; cents: number; color: string }> = {};
 
     for (const tx of monthTx) {
       if (tx.categoryId && incomeIds.has(tx.categoryId) && tx.amountCents < 0) {
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       groupSpend[gName] = (groupSpend[gName] ?? 0) + tx.amountCents;
       const key = cat?.id ?? "uncat";
       catSpend[key] = catSpend[key] ?? {
+        id: cat?.id ?? "",
         name: cat?.name ?? "Uncategorized",
         group: gName,
         cents: 0,

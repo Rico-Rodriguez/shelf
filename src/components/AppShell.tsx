@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sticky top-0 z-10 hidden h-dvh w-[220px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--linen)] px-3 py-6 md:flex">
         <Link href="/" className="mb-5 block px-3">
           <div className="text-[22px] font-bold leading-7 tracking-[-0.26px]">Shelf</div>
-          <div className="text-[13px] leading-[18px] text-[var(--muted)]">Money room</div>
+          <div className="text-[13px] leading-[18px] text-[var(--muted)]">Finances</div>
         </Link>
         <nav className="flex flex-col gap-0.5">
           {ALL.map((item) => {
