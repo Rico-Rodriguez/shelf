@@ -152,7 +152,7 @@ export default function HomePage() {
         </EmptyState>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         {rest.map((item) => (
           <Card key={item.id} className="p-5">
             <h2 className="mb-3 text-[13px] font-medium text-[var(--muted)]">{LABELS[item.id] ?? item.id}</h2>
