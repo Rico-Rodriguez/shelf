@@ -43,8 +43,10 @@ export async function GET() {
 
     let layout = DEFAULT_LAYOUT;
     try {
-      const parsed = JSON.parse(cfg?.dashboardLayout ?? "[]");
-      if (Array.isArray(parsed) && parsed.length) layout = parsed;
+      const parsed = JSON.parse(cfg?.dashboardLayout ?? "null");
+      if (Array.isArray(parsed)) {
+        layout = parsed.filter((id): id is string => typeof id === "string" && DEFAULT_LAYOUT.includes(id));
+      }
     } catch {
       layout = DEFAULT_LAYOUT;
     }
@@ -58,7 +60,11 @@ export async function GET() {
         remainingCents: planned - spentTotal,
         mode: cfg?.budgetMode ?? "category",
       },
-      unreviewed: { count: unreviewed.length, items: unreviewed.slice(0, 6) },
+      unreviewed: {
+        count: unreviewed.length,
+        amountCents: unreviewed.reduce((sum, tx) => sum + tx.amountCents, 0),
+        items: unreviewed.slice(0, 6),
+      },
       recurring: upcoming,
       transactions: recent,
       investments: { totalCents: investTotal, count: holds.length },

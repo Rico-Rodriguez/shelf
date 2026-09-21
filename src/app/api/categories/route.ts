@@ -72,15 +72,17 @@ export async function PATCH(request: Request) {
       groupId?: string;
     };
     const db = await getDb();
-    await db
-      .update(categories)
-      .set({
-        name: body.name,
-        flexBucket: body.flexBucket,
-        rollover: body.rollover,
-        groupId: body.groupId,
-      })
-      .where(eq(categories.id, body.id));
+    const patch: {
+      name?: string;
+      flexBucket?: string | null;
+      rollover?: boolean;
+      groupId?: string;
+    } = {};
+    if (body.name != null) patch.name = body.name;
+    if (body.flexBucket !== undefined) patch.flexBucket = body.flexBucket;
+    if (body.rollover !== undefined) patch.rollover = body.rollover;
+    if (body.groupId != null) patch.groupId = body.groupId;
+    await db.update(categories).set(patch).where(eq(categories.id, body.id));
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });

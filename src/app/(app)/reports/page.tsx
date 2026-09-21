@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
+import { MonthNav } from "@/components/MonthNav";
 import { SankeyChart } from "@/components/SankeyChart";
+import { Stat } from "@/components/Stat";
 import { api } from "@/lib/client";
-import { addMonths, monthName, yearMonth } from "@/lib/dates";
+import { activityHref } from "@/lib/activity";
+import { monthRange, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 
 type Report = {
@@ -13,7 +17,7 @@ type Report = {
   month: number;
   incomeCents: number;
   spendingCents: number;
-  byCategory: { name: string; group: string; cents: number; color: string }[];
+  byCategory: { id: string; name: string; group: string; cents: number; color: string }[];
   sankey: { nodes: { id: string; color: string }[]; links: { source: string; target: string; value: number }[] };
   netWorth: { netWorthCents: number; assetsCents: number; liabilitiesCents: number };
   snapshots: { date: string; netWorthCents: number; assetsCents: number; liabilitiesCents: number }[];
@@ -28,22 +32,17 @@ export default function ReportsPage() {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`).then(setData);
   }, [cursor]);
 
-  if (!data) return <p className="pixel-title text-ink-soft">Laying out the maps…</p>;
-  const prev = addMonths(cursor.year, cursor.month, -1);
-  const next = addMonths(cursor.year, cursor.month, 1);
+  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
+  const range = monthRange(cursor.year, cursor.month);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="pixel-title">Reports</h1>
-          <p>Income, spending, and net worth.</p>
+          <h1>Reports</h1>
+          <p>Income, spending, and net worth. Tap a category to see its transactions.</p>
         </div>
-        <div className="flex gap-2">
-          <button className="ios-icon-btn size-11 text-[22px] text-[var(--terracotta)]" type="button" onClick={() => setCursor(prev)} aria-label="Previous month">‹</button>
-          <span className="min-w-36 text-center text-[17px] font-semibold tracking-[-0.41px]">{monthName(cursor.year, cursor.month)}</span>
-          <button className="ios-icon-btn size-11 text-[22px] text-[var(--terracotta)]" type="button" onClick={() => setCursor(next)} aria-label="Next month">›</button>
-        </div>
+        <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
       </div>
 
       <div className="pixel-panel grid grid-cols-3 divide-x divide-[var(--line)]">
@@ -51,27 +50,32 @@ export default function ReportsPage() {
         <Stat label="Spending" cents={data.spendingCents} />
         <Stat label="Net worth" cents={data.netWorth.netWorthCents} />
       </div>
+      <p className="text-[13px] text-[var(--muted)]">
+        Assets <MoneyText cents={data.netWorth.assetsCents} /> · Debts <MoneyText cents={data.netWorth.liabilitiesCents} />
+      </p>
 
       <section>
         <h2 className="ios-section">Flow</h2>
         <div className="pixel-panel px-2 py-3">
-          <SankeyChart
-            nodes={data.sankey.nodes.map((n) => ({ ...n, color: shelfColor(n.color) }))}
-            links={data.sankey.links}
-          />
+          <SankeyChart nodes={data.sankey.nodes.map((n) => ({ ...n, color: shelfColor(n.color) }))} links={data.sankey.links} />
         </div>
       </section>
 
       <section>
         <h2 className="ios-section">Spending</h2>
         <ul className="ios-group">
-          {data.byCategory.map((c) => (
-            <li key={c.name} className="ios-row justify-between gap-3">
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: shelfColor(c.color) }} />
-                <span className="truncate">{c.name}</span>
-              </span>
-              <MoneyText className="shrink-0 text-[var(--muted)]" cents={c.cents} />
+          {data.byCategory.map((category) => (
+            <li key={category.id || category.name}>
+              <Link
+                href={activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
+                className="ios-row justify-between gap-3"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: shelfColor(category.color) }} />
+                  <span className="truncate">{category.name}</span>
+                </span>
+                <MoneyText className="shrink-0 text-[var(--muted)]" cents={category.cents} />
+              </Link>
             </li>
           ))}
           {data.byCategory.length === 0 ? <li className="ios-row text-[var(--muted)]">Nothing this month.</li> : null}
@@ -101,17 +105,6 @@ export default function ReportsPage() {
           </ResponsiveContainer>
         </div>
       </section>
-    </div>
-  );
-}
-
-function Stat({ label, cents }: { label: string; cents: number }) {
-  return (
-    <div className="px-4 py-3">
-      <div className="text-[13px] leading-[18px] text-[var(--muted)]">{label}</div>
-      <div className="mt-0.5 text-[22px] font-bold leading-7 tracking-[-0.26px]">
-        <MoneyText cents={cents} />
-      </div>
     </div>
   );
 }

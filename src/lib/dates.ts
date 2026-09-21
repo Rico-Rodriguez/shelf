@@ -39,3 +39,51 @@ export function inMonth(iso: string, year: number, month: number): boolean {
   const { start, end } = monthRange(year, month);
   return iso >= start && iso <= end;
 }
+
+const CADENCE_DAYS: Record<string, number> = {
+  weekly: 7,
+  biweekly: 14,
+  monthly: 30,
+  quarterly: 91,
+  yearly: 365,
+};
+
+export function dayLabel(iso: string, today = todayISO()): string {
+  if (iso === today) return "Today";
+  if (iso === addDays(today, -1)) return "Yesterday";
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** Every date this cadence lands inside the month, stepping from an anchor the same way bills advance. */
+export function occurrencesInMonth(anchor: string, cadence: string, year: number, month: number): string[] {
+  const step = CADENCE_DAYS[cadence] ?? 30;
+  const { start, end } = monthRange(year, month);
+  let cursor = anchor;
+  let guard = 0;
+  while (cursor > start && guard < 500) {
+    cursor = addDays(cursor, -step);
+    guard += 1;
+  }
+  const hits: string[] = [];
+  while (cursor <= end && guard < 1000) {
+    if (cursor >= start) hits.push(cursor);
+    cursor = addDays(cursor, step);
+    guard += 1;
+  }
+  return hits;
+}
+
+/** Month key `2026-03` or quarter key `2026-Q2` to an inclusive date range. */
+export function periodRange(key: string): { start: string; end: string } | null {
+  const month = /^(\d{4})-(\d{2})$/.exec(key);
+  if (month) return monthRange(Number(month[1]), Number(month[2]));
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(key);
+  if (!quarter) return null;
+  const year = Number(quarter[1]);
+  const startMonth = (Number(quarter[2]) - 1) * 3 + 1;
+  return { start: monthRange(year, startMonth).start, end: monthRange(year, startMonth + 2).end };
+}

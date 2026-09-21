@@ -83,6 +83,7 @@ export async function PATCH(request: Request) {
     const body = (await request.json()) as {
       id: string;
       name?: string;
+      kind?: "save_up" | "pay_down";
       target?: number;
       targetDate?: string | null;
       accountIds?: string[];
@@ -91,22 +92,23 @@ export async function PATCH(request: Request) {
     const [existing] = await db.select().from(goals).where(eq(goals.id, body.id));
     if (!existing) return NextResponse.json({ error: "missing" }, { status: 404 });
     const opened = openGoal(existing, dek);
+    const patch: Record<string, unknown> = {};
     if (body.name != null || body.target != null) {
-      await db
-        .update(goals)
-        .set({
-          ...sealedGoalWrite(
-            {
-              name: body.name ?? opened.name,
-              targetCents: body.target == null ? opened.targetCents : dollarsToCents(body.target),
-            },
-            dek,
-          ),
-          targetDate: body.targetDate,
-        })
-        .where(eq(goals.id, body.id));
-    } else if (body.targetDate !== undefined) {
-      await db.update(goals).set({ targetDate: body.targetDate }).where(eq(goals.id, body.id));
+      Object.assign(
+        patch,
+        sealedGoalWrite(
+          {
+            name: body.name ?? opened.name,
+            targetCents: body.target == null ? opened.targetCents : dollarsToCents(body.target),
+          },
+          dek,
+        ),
+      );
+    }
+    if (body.targetDate !== undefined) patch.targetDate = body.targetDate;
+    if (body.kind) patch.kind = body.kind;
+    if (Object.keys(patch).length) {
+      await db.update(goals).set(patch).where(eq(goals.id, body.id));
     }
     if (body.accountIds) {
       await db.delete(goalAccounts).where(eq(goalAccounts.goalId, body.id));

@@ -42,7 +42,18 @@ export function nextFromCadence(last: string, cadence: string): string {
   return addDays(last, map[cadence] ?? 30);
 }
 
-export async function detectRecurring(dek: Buffer) {
+export type RecurrenceDraft = {
+  merchantName: string;
+  amountCents: number;
+  cadence: string;
+  nextDate: string;
+  categoryId: string | null;
+  accountId: string | null;
+  isIncome: boolean;
+  lastPaidDate: string;
+};
+
+async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
   const db = await getDb();
   const txs = (await db.select().from(transactions)).map((tx) => openTx(tx, dek));
   const groups = new Map<string, typeof txs>();
@@ -56,7 +67,7 @@ export async function detectRecurring(dek: Buffer) {
   }
 
   const existing = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
-  let created = 0;
+  const drafts: RecurrenceDraft[] = [];
 
   for (const [merchant, list] of groups) {
     if (list.length < 3) continue;
@@ -76,18 +87,46 @@ export async function detectRecurring(dek: Buffer) {
     const already = existing.find((r) => normalizeMerchant(r.merchantName) === merchant);
     if (already) continue;
     const sample = similar[0];
-    await db.insert(recurrences).values({
-      id: nid(),
-      ...sealedRecurrenceWrite({ merchantName: sample.merchantName || sample.name, amountCents: mid }, dek),
-      categoryId: sample.categoryId,
-      accountId: sample.accountId,
+    drafts.push({
+      merchantName: sample.merchantName || sample.name,
+      amountCents: mid,
       cadence,
       nextDate: nextFromCadence(last, cadence),
+      categoryId: sample.categoryId,
+      accountId: sample.accountId,
       isIncome: sample.amountCents < 0,
-      isActive: true,
-      source: "detected",
       lastPaidDate: last,
     });
+  }
+  return drafts;
+}
+
+export async function previewRecurring(dek: Buffer) {
+  return collectDrafts(dek);
+}
+
+export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
+  const db = await getDb();
+  const existing = new Set(
+    (await db.select().from(recurrences)).map((row) => normalizeMerchant(openRecurrence(row, dek).merchantName)),
+  );
+  let created = 0;
+  for (const draft of drafts) {
+    const merchant = normalizeMerchant(draft.merchantName);
+    if (!merchant || existing.has(merchant)) continue;
+    await db.insert(recurrences).values({
+      id: nid(),
+      ...sealedRecurrenceWrite({ merchantName: draft.merchantName, amountCents: draft.amountCents }, dek),
+      categoryId: draft.categoryId,
+      accountId: draft.accountId,
+      cadence: draft.cadence,
+      nextDate: draft.nextDate,
+      isIncome: draft.isIncome,
+      isActive: true,
+      source: "detected",
+      lastPaidDate: draft.lastPaidDate,
+    });
+    existing.add(merchant);
     created += 1;
   }
   return { created };
