@@ -34,31 +34,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-3 z-10 my-3 ml-3 hidden h-[calc(100dvh-1.5rem)] w-[242px] shrink-0 md:block">
-        <div className="glass flex h-full flex-col overflow-y-auto rounded-[28px] px-3 py-5">
-          <Link href="/" className="mb-4 block px-3">
-            <div className="text-[22px] font-bold leading-7 tracking-[-0.26px]">Shelf</div>
-            <div className="text-[13px] leading-[18px] text-[var(--muted)]">Money room</div>
-          </Link>
-          <nav className="flex flex-col gap-0.5">
-            {ALL.map((item) => {
-              const active = isActive(path, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`ios-nav ${active ? "active" : ""}`}
-                >
-                  <span className={active ? "text-[var(--terracotta)]" : "text-[var(--muted)]"}>
-                    <Icon name={item.icon} size={20} />
-                  </span>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+      <aside className="sticky top-0 z-10 hidden h-dvh w-[220px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--linen)] px-3 py-6 md:flex">
+        <Link href="/" className="mb-5 block px-3">
+          <div className="text-[22px] font-bold leading-7 tracking-[-0.26px]">Shelf</div>
+          <div className="text-[13px] leading-[18px] text-[var(--muted)]">Money room</div>
+        </Link>
+        <nav className="flex flex-col gap-0.5">
+          {ALL.map((item) => {
+            const active = isActive(path, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`ios-nav ${active ? "active" : ""}`}
+              >
+                <span className={active ? "text-[var(--terracotta)]" : "text-[var(--muted)]"}>
+                  <Icon name={item.icon} size={20} />
+                </span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

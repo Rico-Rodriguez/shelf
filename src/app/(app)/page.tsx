@@ -111,7 +111,7 @@ export default function HomePage() {
                   {dash.unreviewed.items.map((tx) => (
                     <div key={tx.id} className="ios-row justify-between">
                       <span className="truncate text-[16px]">{tx.name}</span>
-                      <button className="pixel-btn min-h-9 px-3 text-sm" type="button" onClick={() => place(tx.id)}>
+                      <button className="shrink-0 text-[15px] font-semibold text-[var(--terracotta)]" type="button" onClick={() => place(tx.id)}>
                         Done
                       </button>
                     </div>

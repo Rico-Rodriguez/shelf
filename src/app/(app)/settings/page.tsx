@@ -11,6 +11,17 @@ type Group = {
   categories: { id: string; name: string; flexBucket: string | null; rollover: boolean }[];
 };
 
+const BUCKETS: Record<string, string> = {
+  fixed: "Fixed",
+  flex: "Flex",
+  non_monthly: "Non-monthly",
+};
+
+function shelfMeta(bucket: string | null, rollover: boolean) {
+  const parts = [bucket ? (BUCKETS[bucket] ?? bucket) : "", rollover ? "Rolls over" : ""].filter(Boolean);
+  return parts.join(" · ");
+}
+
 export default function SettingsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -89,7 +100,7 @@ export default function SettingsPage() {
         </p>
         <input className="pixel-input" type="password" placeholder="Current" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
         <input className="pixel-input" type="password" placeholder="New (12+)" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
-        <button className="pixel-btn md:col-span-2">Change</button>
+        <button className="pixel-btn justify-self-start md:col-span-2">Change</button>
       </form>
 
       <section className="pixel-panel space-y-3 p-4">
@@ -103,15 +114,15 @@ export default function SettingsPage() {
           <input className="pixel-input max-w-xs" placeholder="New category" value={newCat.name} onChange={(e) => setNewCat({ ...newCat, name: e.target.value })} />
           <button className="pixel-btn">Add</button>
         </form>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
           {groups.map((g) => (
             <div key={g.id}>
-              <div className="pixel-title text-sm" style={{ color: g.color }}>{g.name}</div>
+              <div className="pixel-title mb-1 text-sm" style={{ color: g.color }}>{g.name}</div>
               <ul className="text-sm">
                 {g.categories.map((c) => (
-                  <li key={c.id} className="flex justify-between gap-3">
+                  <li key={c.id} className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] py-1.5 last:border-0">
                     <span className="min-w-0 truncate">{c.name}</span>
-                    <span className="shrink-0 whitespace-nowrap text-xs text-ink-soft">{c.flexBucket ?? ""}{c.rollover ? " · roll" : ""}</span>
+                    <span className="shrink-0 text-xs text-ink-soft">{shelfMeta(c.flexBucket, c.rollover)}</span>
                   </li>
                 ))}
               </ul>
