@@ -261,7 +261,7 @@ function Activity() {
         </Hint>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Account">
           <select className="pixel-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
             <option value="">All accounts</option>

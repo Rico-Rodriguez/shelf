@@ -172,17 +172,31 @@ export default function HomePage() {
             )}
             {item.id === "budget" && (
               <div className="space-y-3">
-                <div className="text-[28px] font-semibold tracking-[-0.03em]">
-                  <MoneyText cents={dash.budget.remainingCents} signed />
-                </div>
-                <p className="text-[14px] text-[var(--muted)]">Left this month</p>
-                <ProgressBar value={dash.budget.spentCents} max={dash.budget.plannedCents || 1} />
-                <p className="text-[14px]">
-                  Spent <MoneyText cents={dash.budget.spentCents} /> of <MoneyText cents={dash.budget.plannedCents} />
-                </p>
-                <Link href="/budget" className="text-link text-[14px]">
-                  Open budget
-                </Link>
+                {dash.budget.plannedCents <= 0 ? (
+                  <>
+                    <p className="text-[15px] text-[var(--muted)]">No plan for this month yet.</p>
+                    <p className="text-[14px]">
+                      Spent so far <MoneyText cents={dash.budget.spentCents} />
+                    </p>
+                    <Link href="/budget" className="pixel-btn soft inline-flex">
+                      Set up budget
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[28px] font-semibold tracking-[-0.03em]">
+                      <MoneyText cents={dash.budget.remainingCents} signed />
+                    </div>
+                    <p className="text-[14px] text-[var(--muted)]">Left this month</p>
+                    <ProgressBar value={dash.budget.spentCents} max={dash.budget.plannedCents || 1} />
+                    <p className="text-[14px]">
+                      Spent <MoneyText cents={dash.budget.spentCents} /> of <MoneyText cents={dash.budget.plannedCents} />
+                    </p>
+                    <Link href="/budget" className="text-link text-[14px]">
+                      Open budget
+                    </Link>
+                  </>
+                )}
               </div>
             )}
             {item.id === "unreviewed" && (
