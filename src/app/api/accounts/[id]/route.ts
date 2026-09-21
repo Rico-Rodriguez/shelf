@@ -1,17 +1,42 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { accounts, transactions } from "@/db/schema";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
+import { balancesForAccount } from "@/lib/balances";
+import { summarizeLiability } from "@/lib/liability";
 import { dollarsToCents } from "@/lib/money";
 import { snapshotNetWorth } from "@/lib/networth";
-import { openAccount, sealedAccountWrite } from "@/lib/secrets";
+import { openAccount, openTx, sealedAccountWrite } from "@/lib/secrets";
+import { desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const dek = await requireDek();
+    const { id } = await context.params;
+    const db = await getDb();
+    const [existing] = await db.select().from(accounts).where(eq(accounts.id, id));
+    if (!existing) return NextResponse.json({ error: "missing" }, { status: 404 });
+    const account = openAccount(existing, dek);
+    const recent = (await db.select().from(transactions).where(eq(transactions.accountId, id)).orderBy(desc(transactions.date)).limit(12)).map(
+      (row) => openTx(row, dek),
+    );
+    return NextResponse.json({
+      account,
+      snapshots: await balancesForAccount(id, dek),
+      liability: summarizeLiability(account.liabilityJson),
+      transactions: recent,
+    });
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
+    throw err;
+  }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const dek = await requireWriter();
     const { id } = await context.params;
     const body = (await request.json()) as {
       name?: string;
@@ -50,21 +75,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     await snapshotNetWorth(dek);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const { id } = await context.params;
     const db = await getDb();
     await db.delete(accounts).where(eq(accounts.id, id));
     await snapshotNetWorth(dek);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

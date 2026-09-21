@@ -15,6 +15,7 @@ export async function GET() {
     needsSetup: existing.length === 0,
     needsGoogle: googleConfigured() && !googleSessionOk(session),
     googleEmail: session.googleEmail ?? null,
+    role: session.role ?? "owner",
     unlocked: Boolean(session.unlocked && vaultOpen && !session.pendingTotp && !session.pendingEnroll),
     needsEnroll: Boolean(session.pendingEnroll && vaultOpen),
     needsTotp: Boolean(session.pendingTotp && vaultOpen && !googleConfigured()),

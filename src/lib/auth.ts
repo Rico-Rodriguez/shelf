@@ -3,9 +3,13 @@ import { getIronSession, type IronSession } from "iron-session";
 import { sessionSecret } from "./crypto";
 import { prepareVault } from "./secrets";
 
+export type MemberRole = "owner" | "member" | "advisor";
+
 export type SessionData = {
   unlocked: boolean;
   dek?: string;
+  userId?: string;
+  role?: MemberRole;
   pendingTotp?: boolean;
   pendingEnroll?: boolean;
   totpSetupSecret?: string;
@@ -37,6 +41,22 @@ export async function requireUnlocked(): Promise<IronSession<SessionData>> {
 
 export async function requireDek(): Promise<Buffer> {
   const session = await requireUnlocked();
+  const dek = Buffer.from(session.dek!, "base64");
+  await prepareVault(dek);
+  return dek;
+}
+
+export async function requireWriter(): Promise<Buffer> {
+  const session = await requireUnlocked();
+  if (session.role === "advisor") throw new AuthError("forbidden");
+  const dek = Buffer.from(session.dek!, "base64");
+  await prepareVault(dek);
+  return dek;
+}
+
+export async function requireOwner(): Promise<Buffer> {
+  const session = await requireUnlocked();
+  if (session.role && session.role !== "owner") throw new AuthError("forbidden");
   const dek = Buffer.from(session.dek!, "base64");
   await prepareVault(dek);
   return dek;

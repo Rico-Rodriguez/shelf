@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { rules } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { openRule, sealedRuleWrite } from "@/lib/secrets";
 
@@ -14,14 +14,14 @@ export async function GET() {
     const rows = (await db.select().from(rules)).map((row) => openRule(row, dek));
     return NextResponse.json({ rules: rows.sort((a, b) => a.priority - b.priority) });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const body = (await request.json()) as typeof rules.$inferInsert;
     const db = await getDb();
     const id = nid();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ id });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

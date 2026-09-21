@@ -16,7 +16,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `New password must be at least ${MIN_PASSWORD} characters.` }, { status: 400 });
     }
     const db = await getDb();
-    const [user] = await db.select().from(users);
+    const [user] = session.userId
+      ? await db.select().from(users).where(eq(users.id, session.userId))
+      : await db.select().from(users);
     if (!user || !body.current || !verifyPassword(body.current, user.passwordHash)) {
       return NextResponse.json({ error: "Current password is wrong." }, { status: 400 });
     }

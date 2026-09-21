@@ -39,7 +39,9 @@ export async function POST(request: Request) {
     }
     const dek = Buffer.from(session.dek!, "base64");
     const db = await getDb();
-    const [user] = await db.select().from(users);
+    const [user] = session.userId
+      ? await db.select().from(users).where(eq(users.id, session.userId))
+      : await db.select().from(users);
     if (!user) return NextResponse.json({ error: "locked" }, { status: 401 });
     await db
       .update(users)

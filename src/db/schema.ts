@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   googleSub: text("google_sub"),
   googleEmail: text("google_email"),
+  displayName: text("display_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -117,6 +118,7 @@ export const transactions = pgTable("transactions", {
   notes: text("notes"),
   goalId: text("goal_id"),
   isTransfer: boolean("is_transfer").notNull().default(false),
+  transferPairId: text("transfer_pair_id"),
   pfcPrimary: text("pfc_primary"),
   pfcDetailed: text("pfc_detailed"),
   secretEnc: text("secret_enc"),
@@ -181,6 +183,7 @@ export const budgetMonths = pgTable("budget_months", {
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   plannedIncomeCents: integer("planned_income_cents").notNull().default(0),
+  flexPoolCents: integer("flex_pool_cents").notNull().default(0),
   secretEnc: text("secret_enc"),
 }, (t) => [uniqueIndex("budget_months_ym_idx").on(t.year, t.month)]);
 
@@ -260,6 +263,70 @@ export const holdings = pgTable("holdings", {
   institutionPriceCents: integer("institution_price_cents"),
   secretEnc: text("secret_enc"),
 });
+
+export const accountBalanceSnapshots = pgTable(
+  "account_balance_snapshots",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    balanceCents: integer("balance_cents").notNull().default(0),
+    secretEnc: text("secret_enc"),
+  },
+  (t) => [uniqueIndex("acct_balance_day_idx").on(t.accountId, t.date)],
+);
+
+export const households = pgTable("households", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().default("Household"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const householdMembers = pgTable(
+  "household_members",
+  {
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.householdId, t.userId] })],
+);
+
+export const householdInvites = pgTable("household_invites", {
+  id: text("id").primaryKey(),
+  householdId: text("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  codeHash: text("code_hash").notNull(),
+  dekSalt: text("dek_salt").notNull(),
+  dekWrapped: text("dek_wrapped").notNull(),
+  createdBy: text("created_by"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id"),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    href: text("href"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    dedupeKey: text("dedupe_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("notifications_dedupe_idx").on(t.dedupeKey)],
+);
 
 export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   id: text("id").primaryKey(),

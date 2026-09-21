@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { plaidItems } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { nid } from "@/lib/ids";
 import { getPlaidClient, plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     if (!plaidConfigured()) {
       return NextResponse.json({ error: "Plaid is not configured." }, { status: 400 });
     }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const sync = await syncItem(id, dek);
     return NextResponse.json({ ok: true, itemId: id, sync });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     const message = err instanceof Error ? err.message : "Plaid error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

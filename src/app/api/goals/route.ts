@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, goalAccounts, goals, transactions } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { classifyAccount } from "@/lib/networth";
@@ -30,27 +30,32 @@ export async function GET() {
         progressCents = linked.reduce((s, a) => s + (classifyAccount(a.type) === "asset" ? a.currentBalanceCents : 0), 0);
       } else {
         const owed = linked.reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
-        progressCents = Math.max(0, (g.targetCents || owed) - owed);
+        const paid = openedTxs
+          .filter((t) => t.goalId === g.id && t.amountCents > 0 && !t.pending)
+          .reduce((s, t) => s + t.amountCents, 0);
+        progressCents = g.targetCents > 0 ? Math.max(0, g.targetCents - owed) : paid;
       }
       const linkedTx = openedTxs.filter((t) => t.goalId === g.id);
+      const owed = linked.reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
+      const remainingCents = g.kind === "pay_down" ? owed : Math.max(0, g.targetCents - progressCents);
       return {
         ...g,
         accounts: linked,
         progressCents,
-        remainingCents: Math.max(0, g.targetCents - progressCents),
+        remainingCents,
         transactions: linkedTx,
       };
     });
     return NextResponse.json({ goals: data, accounts: openedAccounts });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const body = (await request.json()) as {
       name: string;
       kind: "save_up" | "pay_down";
@@ -72,14 +77,14 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ id });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const body = (await request.json()) as {
       id: string;
       name?: string;
@@ -118,20 +123,20 @@ export async function PATCH(request: Request) {
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireDek();
+    await requireWriter();
     const body = (await request.json()) as { id: string };
     const db = await getDb();
     await db.delete(goals).where(eq(goals.id, body.id));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

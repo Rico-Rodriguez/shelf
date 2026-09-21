@@ -363,15 +363,29 @@ export function openBudgetMonth<T extends BudgetMonthRow>(row: T, dek: Buffer): 
   return {
     ...row,
     plannedIncomeCents: pickNum(bag, "plannedIncomeCents", row.plannedIncomeCents),
+    flexPoolCents: pickNum(bag, "flexPoolCents", row.flexPoolCents ?? 0),
     secretEnc: null,
   };
 }
 
-export function sealedBudgetMonthWrite(plannedIncomeCents: number, dek: Buffer) {
+export function sealedBudgetMonthWrite(plannedIncomeCents: number, dek: Buffer, flexPoolCents = 0) {
   return {
     plannedIncomeCents: 0,
-    secretEnc: sealBag({ plannedIncomeCents }, dek),
+    flexPoolCents: 0,
+    secretEnc: sealBag({ plannedIncomeCents, flexPoolCents }, dek),
   };
+}
+
+export function sealedBalanceSnapshot(balanceCents: number, dek: Buffer) {
+  return {
+    balanceCents: 0,
+    secretEnc: sealBag({ balanceCents }, dek),
+  };
+}
+
+export function openBalanceSnapshot<T extends { balanceCents: number; secretEnc: string | null }>(row: T, dek: Buffer): T {
+  const bag = openBag(row.secretEnc, dek);
+  return { ...row, balanceCents: pickNum(bag, "balanceCents", row.balanceCents), secretEnc: null };
 }
 
 type SettingsRow = typeof settings.$inferSelect;
@@ -612,7 +626,7 @@ export async function prepareVault(dek: Buffer) {
       const opened = openBudgetMonth(row, dek);
       await db
         .update(budgetMonths)
-        .set(sealedBudgetMonthWrite(opened.plannedIncomeCents, dek))
+        .set(sealedBudgetMonthWrite(opened.plannedIncomeCents, dek, opened.flexPoolCents ?? 0))
         .where(eq(budgetMonths.id, row.id));
     }
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { recurrences } from "@/db/schema";
-import { AuthError, requireDek } from "@/lib/auth";
+import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { confirmRecurring, markRecurrencePaid, previewRecurring, type RecurrenceDraft } from "@/lib/recurring";
 import { dollarsToCents } from "@/lib/money";
@@ -18,14 +18,14 @@ export async function GET() {
     const rows = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
     return NextResponse.json({ recurrences: rows.sort((a, b) => a.nextDate.localeCompare(b.nextDate)) });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const body = (await request.json()) as {
       action?: "detect" | "confirm" | "paid" | "create";
       id?: string;
@@ -65,14 +65,14 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ id });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const dek = await requireDek();
+    const dek = await requireWriter();
     const body = (await request.json()) as {
       id: string;
       isActive?: boolean;
@@ -107,20 +107,20 @@ export async function PATCH(request: Request) {
       .where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    await requireDek();
+    await requireWriter();
     const body = (await request.json()) as { id: string };
     const db = await getDb();
     await db.delete(recurrences).where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;
   }
 }

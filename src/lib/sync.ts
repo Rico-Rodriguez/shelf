@@ -24,14 +24,21 @@ import {
   sealText,
 } from "./secrets";
 
-export async function syncAllItems(dek: Buffer) {
+export async function syncAllItems(dek: Buffer, opts?: { pendingOnly?: boolean }) {
   const db = await getDb();
   const items = await db.select().from(plaidItems);
+  const targets = opts?.pendingOnly ? items.filter((item) => item.status === "pending_sync") : items;
   const results = [];
-  for (const item of items) {
+  for (const item of targets) {
     results.push(await syncItem(item.id, dek));
   }
-  await snapshotNetWorth(dek);
+  if (targets.length) {
+    await snapshotNetWorth(dek);
+    const { confirmRecurring, previewRecurring } = await import("./recurring");
+    const { refreshNotifications } = await import("./notify");
+    await confirmRecurring(dek, await previewRecurring(dek));
+    await refreshNotifications(dek);
+  }
   return results;
 }
 
