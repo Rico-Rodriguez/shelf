@@ -46,8 +46,10 @@ function build(nodes: Node[], links: Link[]) {
 
   const targets = new Set(seriesLinks.map((link) => link.target));
   const sources = new Set(seriesLinks.map((link) => link.source));
-  const right = [...targets].filter((name) => !sources.has(name)).length;
-  const height = Math.max(420, Math.max(right, 1) * 34 + 48);
+  const leaves = [...targets].filter((name) => !sources.has(name));
+  const longest = leaves.reduce((max, name) => Math.max(max, name.length), 8);
+  const rightPad = Math.min(240, Math.max(148, longest * 8 + 28));
+  const height = Math.max(420, Math.max(leaves.length, 1) * 34 + 48);
 
   const option = {
     backgroundColor: "transparent",
@@ -69,7 +71,7 @@ function build(nodes: Node[], links: Link[]) {
       {
         type: "sankey",
         left: 12,
-        right: 16,
+        right: rightPad,
         top: 12,
         bottom: 12,
         nodeWidth: 14,
@@ -83,8 +85,8 @@ function build(nodes: Node[], links: Link[]) {
           fontSize: 13,
           fontWeight: 500,
           fontFamily: "inherit",
+          overflow: "none",
         },
-        labelLayout: { hideOverlap: true },
         lineStyle: { color: "gradient", curveness: 0.5, opacity: 0.4 },
         itemStyle: { borderWidth: 0 },
         data,
