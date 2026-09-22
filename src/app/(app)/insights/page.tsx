@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { monthRange, shortDate, yearMonth } from "@/lib/dates";
@@ -31,7 +31,7 @@ export default function InsightsPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
-  const { data, loading } = useQuery<Report>(
+  const { data, loading, error, reload } = useQuery<Report>(
     `insights:${cursor.year}-${cursor.month}`,
     `/api/reports?year=${cursor.year}&month=${cursor.month}`,
     { keepPrevious: true },
@@ -44,7 +44,7 @@ export default function InsightsPage() {
   const latest = points.length ? points[points.length - 1] : null;
 
   if (!data && loading) return <PageSkeleton title="Insights" rows={5} />;
-  if (!data) return <PageSkeleton title="Insights" rows={5} />;
+  if (!data) return <PageError title="Insights" message={error} onRetry={() => void reload()} />;
 
   const range = monthRange(data.year, data.month);
   const spendTotal = data.byCategory.reduce((sum, row) => sum + row.cents, 0) || 1;

@@ -7,7 +7,7 @@ import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
@@ -65,7 +65,7 @@ export default function BudgetPage() {
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
-  const { data, loading, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
+  const { data, loading, refreshing, error, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
   const { data: bills } = useQuery<{ recurrences: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean; isActive: boolean }[] }>(
     "bills",
     "/api/recurring",
@@ -99,7 +99,7 @@ export default function BudgetPage() {
   }, [data]);
 
   if (!data && loading) return <PageSkeleton variant="plan" />;
-  if (!data) return <PageSkeleton variant="plan" />;
+  if (!data) return <PageError title="Budget" message={error} onRetry={() => void reload()} />;
 
   const budget = data;
   const flexPlan = budget.flexPoolCents > 0 ? budget.flexPoolCents : flexRows.reduce((sum, row) => sum + row.availableCents, 0);
@@ -160,7 +160,7 @@ export default function BudgetPage() {
   const rolled = closeMonth?.rows.filter((row) => row.category.rollover && row.remainingCents > 0) ?? [];
 
   return (
-    <PageShell>
+    <PageShell refreshing={refreshing}>
       <div className="space-y-4">
         <PageHeader title="Budget">
           <MonthNav

@@ -5,7 +5,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
@@ -32,7 +32,7 @@ type GoalForm = { name: string; kind: "save_up" | "pay_down"; target: string; ta
 const empty: GoalForm = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [], categoryId: "" };
 
 export default function GoalsPage() {
-  const { data, loading, reload } = useQuery<{ goals: Goal[]; accounts: Account[] }>("goals", "/api/goals");
+  const { data, loading, error, reload } = useQuery<{ goals: Goal[]; accounts: Account[] }>("goals", "/api/goals");
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
@@ -93,6 +93,7 @@ export default function GoalsPage() {
   }
 
   if (!data && loading) return <PageSkeleton title="Goals" rows={3} />;
+  if (!data) return <PageError title="Goals" message={error} onRetry={() => void reload()} />;
 
   return (
     <div className="space-y-4">

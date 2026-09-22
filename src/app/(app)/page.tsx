@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
@@ -35,12 +35,12 @@ type Dash = {
 };
 
 export default function HomePage() {
-  const { data: dash, loading, reload } = useQuery<Dash>("dashboard", "/api/dashboard");
+  const { data: dash, loading, refreshing, error, reload } = useQuery<Dash>("dashboard", "/api/dashboard");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [seeding, setSeeding] = useState(false);
 
   if (!dash && loading) return <PageSkeleton variant="home" />;
-  if (!dash) return <PageSkeleton variant="home" />;
+  if (!dash) return <PageError title="Home" message={error} onRetry={() => void reload()} />;
 
   const now = yearMonth();
   const range = monthRange(now.year, now.month);
@@ -76,7 +76,7 @@ export default function HomePage() {
   }
 
   return (
-    <PageShell>
+    <PageShell refreshing={refreshing}>
       <div className="space-y-6">
         <SummaryCard
           className="is-hero"

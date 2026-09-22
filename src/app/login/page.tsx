@@ -39,7 +39,7 @@ export default function LoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ password }),
     });
-    const body = await res.json().catch(() => ({ error: "Nope." }));
+    const body = await res.json().catch(() => ({ error: "That didn’t work. Try again." }));
     setBusy(false);
     if (!res.ok) {
       setError(body.error);
@@ -66,7 +66,7 @@ export default function LoginPage() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ code }),
     });
-    const body = await res.json().catch(() => ({ error: "Nope." }));
+    const body = await res.json().catch(() => ({ error: "That didn’t work. Try again." }));
     setBusy(false);
     if (!res.ok) {
       setError(body.error);
