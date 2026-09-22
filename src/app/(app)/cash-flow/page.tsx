@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { Segment } from "@/components/ui/Segment";
@@ -24,7 +22,7 @@ type Point = { name: string; Income: number; Spending: number; Saved: number };
 
 const SERIES = [
   { key: "Income", color: "#1b7a62" },
-  { key: "Saved", color: "#14181f" },
+  { key: "Saved", color: "#5c6570" },
   { key: "Spending", color: "#d94a2e" },
 ] as const;
 
@@ -44,10 +42,7 @@ const tick = { fill: "rgba(13, 13, 13, 0.45)", fontSize: 11 };
 export default function CashFlowPage() {
   const router = useRouter();
   const [grain, setGrain] = useState("month");
-  const [merchant, setMerchant] = useState("");
-  const [draft, setDraft] = useState("");
   const qs = new URLSearchParams({ grain, months: "12" });
-  if (merchant) qs.set("merchant", merchant);
   const { data, loading, refreshing } = useQuery<Flow>(`cash-flow:${qs}`, `/api/cash-flow?${qs}`);
 
   if (!data && loading) return <PageSkeleton title="Cash flow" rows={5} />;
@@ -62,7 +57,6 @@ export default function CashFlowPage() {
     })),
   );
   const multiYear = new Set(chart.map((d) => d.name.slice(0, 4))).size > 1;
-  const span = spanOf(data.series.map((row) => row.key));
 
   function openPeriod(key: string) {
     const range = periodRange(key);
@@ -84,17 +78,6 @@ export default function CashFlowPage() {
               { value: "month", label: "Monthly" },
               { value: "quarter", label: "Quarterly" },
             ]}
-          />
-          <input
-            className="shelf-input ios-search"
-            placeholder="Filter merchant"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => setMerchant(draft.trim())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setMerchant(draft.trim());
-            }}
-            aria-label="Filter merchant"
           />
         </div>
         <div className="shelf-panel chart-frame px-2 pb-3 pt-2">
@@ -137,40 +120,8 @@ export default function CashFlowPage() {
             ))}
           </div>
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
-          <List title="By category" rows={data.byCategory} hrefFor={(row) => activityHref({ categoryId: row.id || undefined, ...span })} />
-          <List title="By merchant" rows={data.byMerchant} hrefFor={(row) => activityHref({ q: row.name, ...span })} />
-        </div>
       </div>
     </PageShell>
-  );
-}
-
-function spanOf(keys: string[]): { start?: string; end?: string } {
-  if (!keys.length) return {};
-  const first = periodRange(keys[0]);
-  const last = periodRange(keys[keys.length - 1]);
-  if (!first || !last) return {};
-  return { start: first.start, end: last.end };
-}
-
-function List({ title, rows, hrefFor }: { title: string; rows: Row[]; hrefFor: (row: Row) => string }) {
-  const sorted = rows.slice(0, 12);
-  return (
-    <section>
-      <h2 className="ios-section">{title}</h2>
-      <ul className="card">
-        {sorted.map((row) => (
-          <li key={row.id || row.name}>
-            <Link href={hrefFor(row)} className="data-row justify-between gap-3">
-              <span className="min-w-0 truncate">{row.name}</span>
-              <MoneyText className="shrink-0 text-[var(--muted)]" cents={row.cents} />
-            </Link>
-          </li>
-        ))}
-        {sorted.length === 0 ? <li className="data-row text-[var(--muted)]">Nothing yet.</li> : null}
-      </ul>
-    </section>
   );
 }
 
@@ -221,7 +172,7 @@ function FlowTip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-[14px] border border-[var(--line)] bg-white px-3 py-2 shadow-sm">
+    <div className="rounded-[14px] border border-[var(--line)] bg-[var(--paper)] px-3 py-2 shadow-sm">
       <div className="mb-1 text-[13px] font-semibold tracking-[-0.08px]">{tipLabel(String(label ?? ""))}</div>
       {payload.map((row) => (
         <div key={row.name} className="flex items-center justify-between gap-4 text-[13px] leading-[18px]">

@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, budgetItems, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
+import { accounts, budgetItems, categories, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory } from "@/lib/budget";
-import { yearMonth } from "@/lib/dates";
+import { addDays, todayISO, yearMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
 import { openAccount, openBudgetItem, openGoal, openHolding, openRecurrence, openSnapshot, openTx } from "@/lib/secrets";
 import { goalPace } from "@/lib/goal-pace";
 import { classifyAccount } from "@/lib/networth";
+import { inferRecurringKind, monthlyNeed, netWorthDelta, projectBalances } from "@/lib/plan";
+import { previewRecurring } from "@/lib/recurring";
 
 export const dynamic = "force-dynamic";
 
@@ -64,11 +66,21 @@ export async function GET() {
     const unreviewed = (await db.select().from(transactions).where(eq(transactions.reviewed, false)))
       .map((row) => openTx(row, dek))
       .filter((t) => !t.hidden);
-    const upcoming = (await db.select().from(recurrences))
+    const activeRecurring = (await db.select().from(recurrences))
       .map((row) => openRecurrence(row, dek))
       .filter((r) => r.isActive)
-      .sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-      .slice(0, 6);
+      .sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+    const upcoming = activeRecurring.slice(0, 6);
+    const cats = await db.select().from(categories);
+    const fixedIds = new Set(
+      cats.filter((cat) => cat.kind === "expense" && (cat.flexBucket === "fixed" || cat.flexBucket === "non_monthly")).map((cat) => cat.id),
+    );
+    const fixedPlanned = plannedRows
+      .filter((row) => fixedIds.has(row.categoryId))
+      .reduce((sum, row) => sum + row.plannedCents + row.rolloverInCents, 0);
+    const variableSpent = Object.entries(spent)
+      .filter(([id]) => !fixedIds.has(id))
+      .reduce((sum, [, cents]) => sum + cents, 0);
     const holds = (await db.select().from(holdings)).map((row) => openHolding(row, dek));
     const investTotal = holds.reduce((s, h) => s + h.institutionValueCents, 0);
     const nw = await computeNetWorth(dek);
@@ -79,40 +91,70 @@ export async function GET() {
     const openedAccounts = (await db.select().from(accounts)).map((row) => openAccount(row, dek));
     const snapshots = (await db.select().from(netWorthSnapshots)).map((row) => openSnapshot(row, dek)).sort((a, b) => a.date.localeCompare(b.date)).slice(-18);
     const layout = parseLayout(cfg?.dashboardLayout);
+    const goalViews = goalRows.map((goal) => {
+      const linked = links
+        .filter((link) => link.goalId === goal.id)
+        .map((link) => openedAccounts.find((account) => account.id === link.accountId))
+        .filter((account): account is (typeof openedAccounts)[number] => Boolean(account));
+      const progressCents =
+        goal.kind === "save_up"
+          ? linked.reduce((sum, account) => sum + (classifyAccount(account.type) === "asset" ? account.currentBalanceCents : 0), 0)
+          : Math.max(0, goal.targetCents - linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0));
+      const remainingCents =
+        goal.kind === "pay_down"
+          ? linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0)
+          : Math.max(0, goal.targetCents - progressCents);
+      return {
+        id: goal.id,
+        name: goal.name,
+        targetCents: goal.targetCents,
+        targetDate: goal.targetDate,
+        kind: goal.kind,
+        categoryId: goal.categoryId,
+        progressCents,
+        remainingCents,
+        monthlyCents: monthlyNeed(remainingCents, goal.targetDate),
+        pace: goalPace({ targetCents: goal.targetCents, targetDate: goal.targetDate, progressCents, remainingCents }),
+      };
+    });
+    const goalsMonthly = goalViews.reduce((sum, goal) => sum + (goal.monthlyCents ?? 0), 0);
+    const today = todayISO();
+    const horizon = addDays(today, 30);
+    const upcomingBills = activeRecurring
+      .filter((row) => !row.isIncome && row.nextDate >= today && row.nextDate <= horizon)
+      .reduce((sum, row) => sum + row.amountCents, 0);
+    const incomeBase = monthRow.plannedIncomeCents > 0 ? monthRow.plannedIncomeCents : income;
+    const committed = fixedPlanned > 0 ? fixedPlanned : upcomingBills;
+    const cash = openedAccounts
+      .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"))
+      .reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
+    let suggestedSubscriptions: { merchantName: string; amountCents: number; cadence: string }[] = [];
+    try {
+      suggestedSubscriptions = (await previewRecurring(dek))
+        .filter((draft) => inferRecurringKind(draft) === "subscription")
+        .slice(0, 4)
+        .map((draft) => ({ merchantName: draft.merchantName, amountCents: draft.amountCents, cadence: draft.cadence }));
+    } catch {
+      suggestedSubscriptions = [];
+    }
     await refreshNotifications(dek);
 
     return NextResponse.json({
       layout,
       netWorth: nw,
+      netWorthDelta: netWorthDelta(snapshots),
       snapshots: snapshots.map((row) => ({ date: row.date, netWorthCents: row.netWorthCents })),
       cashFlow: { incomeCents: income, spendingCents: spentTotal, savedCents: income - spentTotal },
-      goals: goalRows.slice(0, 4).map((goal) => {
-        const linked = links
-          .filter((link) => link.goalId === goal.id)
-          .map((link) => openedAccounts.find((account) => account.id === link.accountId))
-          .filter((account): account is (typeof openedAccounts)[number] => Boolean(account));
-        const progressCents =
-          goal.kind === "save_up"
-            ? linked.reduce((sum, account) => sum + (classifyAccount(account.type) === "asset" ? account.currentBalanceCents : 0), 0)
-            : Math.max(
-                0,
-                goal.targetCents - linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0),
-              );
-        const remainingCents =
-          goal.kind === "pay_down"
-            ? linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0)
-            : Math.max(0, goal.targetCents - progressCents);
-        return {
-          id: goal.id,
-          name: goal.name,
-          targetCents: goal.targetCents,
-          targetDate: goal.targetDate,
-          kind: goal.kind,
-          progressCents,
-          remainingCents,
-          pace: goalPace({ targetCents: goal.targetCents, targetDate: goal.targetDate, progressCents, remainingCents }),
-        };
-      }),
+      safeToSpend: {
+        cents: incomeBase - committed - goalsMonthly - variableSpent,
+        incomeCents: incomeBase,
+        committedCents: committed,
+        goalsCents: goalsMonthly,
+        spentCents: variableSpent,
+      },
+      forecast: projectBalances(cash, activeRecurring, 30).filter((_, index) => index % 3 === 0 || index === 29),
+      suggestedSubscriptions,
+      goals: goalViews.slice(0, 4),
       accountCount: openedAccounts.filter((account) => !account.isHidden).length,
       budget: {
         plannedCents: planned,

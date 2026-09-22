@@ -76,6 +76,7 @@ export default function RulesPage() {
 function Rules() {
   const params = useSearchParams();
   const [rules, setRules] = useState<Rule[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
@@ -242,7 +243,21 @@ function Rules() {
 
       <ul className="card">
         {rules.map((rule, index) => (
-          <li key={rule.id} className="data-row items-start justify-between gap-3">
+          <li
+            key={rule.id}
+            className="data-row items-start justify-between gap-3"
+            draggable
+            onDragStart={() => setDragIndex(index)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (dragIndex == null || dragIndex === index) return;
+              const next = rules.slice();
+              const [row] = next.splice(dragIndex, 1);
+              next.splice(index, 0, row);
+              setDragIndex(null);
+              void Promise.all(next.map((item, order) => api(`/api/rules/${item.id}`, { method: "PATCH", body: JSON.stringify({ priority: order }) }))).then(load);
+            }}
+          >
             <button type="button" className="min-w-0 flex-1 py-1 text-left" onClick={() => openEdit(rule)}>
               <div className={`font-semibold ${rule.enabled ? "" : "text-[var(--muted)]"}`}>{rule.name}</div>
               <div className="text-[13px] text-[var(--muted)]">{describe(rule)}</div>

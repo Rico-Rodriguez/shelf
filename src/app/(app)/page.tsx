@@ -39,12 +39,17 @@ type Dash = {
     kind: string;
     progressCents: number;
     remainingCents: number;
+    monthlyCents?: number | null;
     pace: { label: string; tone: "on" | "behind" | "ahead" | "muted" };
   }[];
   accountCount: number;
   transactions: { id: string; name: string; amountCents: number; date: string }[];
   investments: { totalCents: number; count: number };
   plaidConfigured: boolean;
+  netWorthDelta: { cents: number; from: string } | null;
+  safeToSpend: { cents: number; incomeCents: number; committedCents: number; goalsCents: number; spentCents: number };
+  forecast: { date: string; balanceCents: number }[];
+  suggestedSubscriptions: { merchantName: string; amountCents: number; cadence: string }[];
 };
 
 const WIDGETS = [
@@ -114,7 +119,10 @@ export default function HomePage() {
 
   const visible = dash.layout.filter((item) => !item.hidden);
   const netWorthWidget = visible.find((item) => item.id === "netWorth");
-  const rest = visible.filter((item) => item.id !== "netWorth");
+  const rest = visible.filter((item) => item.id !== "netWorth" && item.id !== "unreviewed");
+  const heroIsPlan = dash.budget.plannedCents > 0;
+  const heroCents = dash.safeToSpend ? dash.safeToSpend.cents : heroIsPlan ? dash.budget.remainingCents : dash.netWorth.netWorthCents;
+  const heroLabel = dash.safeToSpend ? "Safe to spend" : heroIsPlan ? "Left in the plan" : "Net worth";
 
   return (
     <PageShell refreshing={refreshing}>
@@ -134,16 +142,47 @@ export default function HomePage() {
         </button>
       </PageHeader>
 
-      {netWorthWidget ? (
+      {dash.unreviewed.count > 0 ? (
         <Card className="p-5">
-          <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">
-            {dash.budget.plannedCents > 0 ? "Left in the plan" : "Net worth"}
-          </p>
-          <Link href={dash.budget.plannedCents > 0 ? "/budget" : "/insights?tab=worth"} className="block">
-            <MoneyText hero cents={dash.budget.plannedCents > 0 ? dash.budget.remainingCents : dash.netWorth.netWorthCents} signed={dash.budget.plannedCents > 0} />
+          <p className="text-[13px] font-medium text-[var(--muted)]">To review</p>
+          <p className="mt-1 text-[28px] font-semibold tracking-[-0.03em]">{dash.unreviewed.count}</p>
+          <ul className="mt-3 space-y-2">
+            {dash.unreviewed.items.slice(0, 3).map((tx) => (
+              <li key={tx.id} className="flex items-center justify-between gap-3 text-[14px]">
+                <span className="flex min-w-0 items-center gap-2">
+                  <MerchantMark name={tx.name} />
+                  <span className="truncate">{tx.name}</span>
+                </span>
+                <MoneyText cents={-tx.amountCents} signed />
+              </li>
+            ))}
+          </ul>
+          <Link href="/transactions?reviewed=false&focus=1" className="shelf-btn soft mt-4 inline-flex">
+            Review
           </Link>
+        </Card>
+      ) : null}
+
+      {netWorthWidget && dash.unreviewed.count === 0 ? (
+        <Card className="p-5">
+          <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">{heroLabel}</p>
+          <Link href={dash.safeToSpend || heroIsPlan ? "/budget" : "/insights?tab=month"} className="block">
+            <MoneyText hero cents={heroCents} signed={Boolean(dash.safeToSpend) || heroIsPlan} />
+          </Link>
+          {dash.safeToSpend ? (
+            <p className="mt-2 text-[14px] text-[var(--muted)]">
+              Income <MoneyText cents={dash.safeToSpend.incomeCents} /> · Bills <MoneyText cents={dash.safeToSpend.committedCents} /> · Goals{" "}
+              <MoneyText cents={dash.safeToSpend.goalsCents} />
+            </p>
+          ) : null}
           <p className="mt-2 text-[14px] text-[var(--muted)]">
-            Assets <MoneyText cents={dash.netWorth.assetsCents} /> · Debts <MoneyText cents={dash.netWorth.liabilitiesCents} />
+            Net worth <MoneyText cents={dash.netWorth.netWorthCents} />
+            {dash.netWorthDelta ? (
+              <>
+                {" "}
+                · <MoneyText cents={dash.netWorthDelta.cents} signed /> since {dash.netWorthDelta.from}
+              </>
+            ) : null}
           </p>
           {dash.snapshots.length > 1 ? (
             <div className="mt-4 h-20">
@@ -172,25 +211,33 @@ export default function HomePage() {
         </EmptyState>
       ) : null}
 
-      {dash.unreviewed.count > 0 ? (
-        <Hint tone="action" title={`${dash.unreviewed.count} purchase${dash.unreviewed.count === 1 ? "" : "s"} need a quick look`}>
-          <p>
-            Review means: open each one, fix the category if it&apos;s wrong, then tap <strong>Done</strong>. That keeps your budget honest.
+      {dash.forecast.length > 1 ? (
+        <Card className="p-5">
+          <p className="text-[13px] font-medium text-[var(--muted)]">Cash if bills post as expected</p>
+          <p className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">
+            <MoneyText cents={dash.forecast[dash.forecast.length - 1].balanceCents} />
+            <span className="ml-2 text-[14px] font-normal text-[var(--muted)]">in 30 days</span>
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={activityHref({ reviewed: "false" })} className="shelf-btn soft">
-              Start reviewing
-            </Link>
-            <span className="self-center text-[13px] text-[var(--muted)]">
-              <MoneyText cents={dash.unreviewed.amountCents} /> total
-            </span>
+          <div className="mt-3 h-16">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dash.forecast.map((row) => ({ ...row, value: row.balanceCents / 100 }))}>
+                <YAxis hide domain={["dataMin", "dataMax"]} />
+                <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} labelFormatter={(label) => String(label)} />
+                <Area dataKey="value" stroke="#1b7a62" fill="rgba(27,122,98,0.14)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
+        </Card>
+      ) : null}
+
+      {dash.suggestedSubscriptions?.length ? (
+        <Hint tone="action" title={`${dash.suggestedSubscriptions.length} possible subscription${dash.suggestedSubscriptions.length === 1 ? "" : "s"}`}>
+          <p>{dash.suggestedSubscriptions.map((row) => row.merchantName).join(", ")}</p>
+          <Link href="/recurring" className="shelf-btn soft mt-3 inline-flex">
+            Review recurring
+          </Link>
         </Hint>
-      ) : (
-        <Hint tone="success" title="Inbox clear">
-          Nothing waiting to review. New purchases will show up here after sync.
-        </Hint>
-      )}
+      ) : null}
 
       {visible.length === 0 ? (
         <EmptyState title="Home is empty" action={<button className="shelf-btn" type="button" onClick={() => setCustomizing(true)}>Show cards</button>}>
@@ -305,6 +352,12 @@ export default function HomePage() {
                     <ProgressBar value={goal.progressCents} max={Math.max(goal.targetCents, goal.progressCents + goal.remainingCents, 1)} />
                     <p className="mt-1 text-[13px] text-[var(--muted)]">
                       <MoneyText cents={goal.remainingCents} /> left
+                      {goal.monthlyCents ? (
+                        <>
+                          {" "}
+                          · <MoneyText cents={goal.monthlyCents} />/mo
+                        </>
+                      ) : null}
                     </p>
                   </Link>
                 ))}

@@ -212,6 +212,7 @@ export const recurrences = pgTable("recurrences", {
   isActive: boolean("is_active").notNull().default(true),
   source: text("source").notNull().default("manual"),
   lastPaidDate: text("last_paid_date"),
+  kind: text("kind").notNull().default("bill"),
   secretEnc: text("secret_enc"),
 });
 
@@ -221,6 +222,7 @@ export const goals = pgTable("goals", {
   kind: text("kind").notNull(),
   targetCents: integer("target_cents").notNull().default(0),
   targetDate: text("target_date"),
+  categoryId: text("category_id"),
   secretEnc: text("secret_enc"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

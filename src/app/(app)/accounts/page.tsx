@@ -18,6 +18,7 @@ type Account = {
   subtype: string | null;
   mask: string | null;
   currentBalanceCents: number;
+  availableBalanceCents?: number | null;
   isManual: boolean;
   isHidden: boolean;
   includeInNetWorth: boolean;
@@ -127,12 +128,18 @@ export default function AccountsPage() {
       ) : null}
 
       {data.items.some((item) => item.status !== "ok") ? (
-        <p className="text-[15px] text-[var(--danger)]">
+        <div className="space-y-2">
           {data.items
             .filter((item) => item.status !== "ok")
-            .map((item) => `${item.institutionName || "Bank"} needs attention${item.errorCode ? ` (${item.errorCode})` : ""}`)
-            .join(" · ")}
-        </p>
+            .map((item) => (
+              <div key={item.id} className="shelf-panel flex flex-wrap items-center justify-between gap-3 p-4">
+                <p className="text-[15px] text-[var(--danger)]">
+                  {item.institutionName || "Bank"} needs attention{item.errorCode ? ` (${item.errorCode})` : ""}
+                </p>
+                <ConnectBank itemId={item.id} label="Reconnect" onLinked={reload} />
+              </div>
+            ))}
+        </div>
       ) : null}
 
       {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No accounts yet.</p> : null}
@@ -164,6 +171,7 @@ export default function AccountsPage() {
                       {account.subtype || account.type}
                       {account.mask ? ` · ${account.mask}` : ""}
                       {account.isManual ? " · manual" : ""}
+                      {creditUse(account)}
                     </div>
                   </div>
                   <MoneyText
@@ -219,4 +227,13 @@ export default function AccountsPage() {
     </div>
     </PageShell>
   );
+}
+
+function creditUse(account: { type: string; currentBalanceCents: number; availableBalanceCents?: number | null }) {
+  if (account.type !== "credit" || account.availableBalanceCents == null) return "";
+  const balance = Math.abs(account.currentBalanceCents);
+  const limit = balance + account.availableBalanceCents;
+  if (limit <= 0) return "";
+  const used = Math.round((balance / limit) * 100);
+  return ` · ${used}% of limit used`;
 }

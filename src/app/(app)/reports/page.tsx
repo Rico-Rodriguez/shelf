@@ -9,9 +9,10 @@ import { SankeyChart } from "@/components/SankeyChart";
 import { Stat } from "@/components/Stat";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageSkeleton } from "@/components/ui/PageShell";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { monthRange, yearMonth } from "@/lib/dates";
+import { addDays, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 
 type Report = {
@@ -19,7 +20,7 @@ type Report = {
   month: number;
   incomeCents: number;
   spendingCents: number;
-  byCategory: { id: string; name: string; group: string; cents: number; color: string }[];
+  byCategory: { id: string; name: string; group: string; cents: number; color: string; lastCents?: number; avgCents?: number; plannedCents?: number }[];
   sankey: { nodes: { id: string; color: string }[]; links: { source: string; target: string; value: number }[] };
   netWorth: { netWorthCents: number; assetsCents: number; liabilitiesCents: number };
   snapshots: { date: string; netWorthCents: number; assetsCents: number; liabilitiesCents: number }[];
@@ -29,6 +30,8 @@ export default function ReportsPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
   const [data, setData] = useState<Report | null>(null);
+  const [view, setView] = useState<"spend" | "flow">("spend");
+  const [span, setSpan] = useState<"90" | "365" | "all">("365");
 
   useEffect(() => {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`).then(setData);
@@ -52,39 +55,80 @@ export default function ReportsPage() {
         Assets <MoneyText cents={data.netWorth.assetsCents} /> · Debts <MoneyText cents={data.netWorth.liabilitiesCents} />
       </p>
 
-      <section>
-        <h2 className="ios-section">Flow</h2>
-        <div className="shelf-panel px-2 py-3">
-          <SankeyChart nodes={data.sankey.nodes.map((n) => ({ ...n, color: shelfColor(n.color) }))} links={data.sankey.links} />
-        </div>
-      </section>
+      <Segment
+        value={view}
+        onChange={(value) => setView(value as "spend" | "flow")}
+        options={[
+          { value: "spend", label: "Spending" },
+          { value: "flow", label: "Flow" },
+        ]}
+      />
 
+      {view === "flow" ? (
+        <section>
+          <h2 className="ios-section">Flow</h2>
+          <div className="shelf-panel px-2 py-3">
+            <SankeyChart nodes={data.sankey.nodes.map((n) => ({ ...n, color: shelfColor(n.color) }))} links={data.sankey.links} />
+          </div>
+        </section>
+      ) : (
       <section>
         <h2 className="ios-section">Spending</h2>
         <ul className="card">
-          {data.byCategory.map((category) => (
+          {data.byCategory.map((category) => {
+            const delta = category.cents - (category.lastCents ?? category.cents);
+            return (
             <li key={category.id || category.name}>
               <Link
                 href={activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
                 className="data-row justify-between gap-3"
               >
-                <span className="flex min-w-0 items-center gap-3">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: shelfColor(category.color) }} />
-                  <span className="truncate">{category.name}</span>
+                <span className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: shelfColor(category.color) }} />
+                    <span className="truncate">{category.name}</span>
+                  </span>
+                  <span className="mt-1 block pl-6 text-[12px] text-[var(--muted)]">
+                    Last month <MoneyText cents={category.lastCents ?? 0} /> · Avg <MoneyText cents={category.avgCents ?? 0} />
+                    {category.plannedCents ? (
+                      <>
+                        {" "}
+                        · Plan <MoneyText cents={category.plannedCents} />
+                      </>
+                    ) : null}
+                    {category.lastCents != null && category.lastCents > 0 ? (
+                      <>
+                        {" "}
+                        · <MoneyText cents={delta} signed />
+                      </>
+                    ) : null}
+                  </span>
                 </span>
                 <MoneyText className="shrink-0 text-[var(--muted)]" cents={category.cents} />
               </Link>
             </li>
-          ))}
+            );
+          })}
           {data.byCategory.length === 0 ? <li className="data-row text-[var(--muted)]">Nothing this month.</li> : null}
         </ul>
       </section>
+      )}
 
       <section>
         <h2 className="ios-section">Net worth</h2>
+        <Segment
+          className="mb-2 max-w-xs"
+          value={span}
+          onChange={(value) => setSpan(value as "90" | "365" | "all")}
+          options={[
+            { value: "90", label: "3M" },
+            { value: "365", label: "1Y" },
+            { value: "all", label: "All" },
+          ]}
+        />
         <div className="shelf-panel h-64 px-1 py-3">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data.snapshots.map((s) => ({ date: s.date, Worth: s.netWorthCents / 100 }))} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <AreaChart data={data.snapshots.filter((row) => span === "all" || row.date >= addDays(todayISO(), span === "90" ? -90 : -365)).map((s) => ({ date: s.date, Worth: s.netWorthCents / 100 }))} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.1)" />
               <XAxis dataKey="date" tick={{ fill: "rgba(60,60,67,0.6)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={shortDate} minTickGap={28} />
               <YAxis tick={{ fill: "rgba(60,60,67,0.6)", fontSize: 11 }} axisLine={false} tickLine={false} width={52} tickFormatter={axisMoney} />

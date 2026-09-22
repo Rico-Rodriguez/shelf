@@ -22,9 +22,9 @@ type Group = {
 
 const BUCKETS = [
   ["", "None"],
-  ["fixed", "Fixed"],
-  ["flex", "Flex"],
-  ["non_monthly", "Non-monthly"],
+  ["fixed", "Bills & fixed"],
+  ["flex", "Flexible"],
+  ["non_monthly", "Occasional"],
 ] as const;
 
 export default function SettingsPage() {
@@ -32,6 +32,10 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [pw, setPw] = useState({ current: "", next: "" });
   const [newCat, setNewCat] = useState({ groupId: "", name: "" });
+  const [demoLoaded, setDemoLoaded] = useState(true);
+  const [theme, setTheme] = useState("system");
+  const [importAccount, setImportAccount] = useState("");
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(() => {
     void api<{ groups: Group[] }>("/api/categories").then((r) => {
@@ -42,6 +46,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load();
+    void api<{ demoLoaded?: boolean }>("/api/auth/session").then((res) => setDemoLoaded(Boolean(res.demoLoaded))).catch(() => setDemoLoaded(false));
+    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => {
+      setAccounts(res.accounts);
+      if (res.accounts[0]) setImportAccount((current) => current || res.accounts[0].id);
+    }).catch(() => undefined);
+    const stored = window.localStorage.getItem("shelf-theme");
+    setTheme(stored === "dark" || stored === "light" ? stored : "system");
   }, [load]);
 
   async function seed() {
@@ -74,12 +85,50 @@ export default function SettingsPage() {
       {status ? <p className="shelf-panel p-3 text-[15px]">{status}</p> : null}
 
       <section className="shelf-panel space-y-3 p-4">
+        <h2 className="text-[20px] font-semibold tracking-tight">Appearance</h2>
+        <div className="flex flex-wrap gap-2">
+          {(["system", "light", "dark"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={`shelf-btn ${theme === mode ? "" : "ghost"}`}
+              type="button"
+              onClick={() => {
+                setTheme(mode);
+                if (mode === "system") {
+                  window.localStorage.removeItem("shelf-theme");
+                  delete document.documentElement.dataset.theme;
+                } else {
+                  window.localStorage.setItem("shelf-theme", mode);
+                  document.documentElement.dataset.theme = mode;
+                }
+              }}
+            >
+              {mode[0].toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
+        <button
+          className="shelf-btn ghost"
+          type="button"
+          onClick={() => {
+            if (typeof Notification === "undefined") return;
+            void Notification.requestPermission();
+          }}
+        >
+          Allow alerts
+        </button>
+        <p className="text-[13px] text-[var(--muted)]">Alerts cover large purchases, bill price changes, low cash, and anything waiting to review. Press Ctrl or Cmd K to search.</p>
+      </section>
+
+      {demoLoaded ? null : (
+      <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Sample data</h2>
         <p className="text-[15px] text-[var(--muted)]">Load sample accounts, bills, and holdings before a bank is connected.</p>
         <button className="shelf-btn" type="button" onClick={seed}>
           Load sample data
         </button>
       </section>
+      )}
 
       <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Rules</h2>
@@ -87,6 +136,33 @@ export default function SettingsPage() {
         <Link href="/settings/rules" className="shelf-btn inline-flex">
           Manage rules
         </Link>
+      </section>
+
+      <section className="shelf-panel space-y-3 p-4">
+        <h2 className="text-[20px] font-bold tracking-tight">Import</h2>
+        <p className="text-[15px] text-[var(--muted)]">CSV with date, name, and amount. Positive amounts are money out.</p>
+        <select className="shelf-input" value={importAccount} onChange={(event) => setImportAccount(event.target.value)} aria-label="Import account">
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </select>
+        <input
+          className="text-[14px]"
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="CSV file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file || !importAccount) return;
+            void file.text().then((csv) =>
+              api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId: importAccount, csv }) }).then((res) => {
+                setStatus(`Imported ${res.created} transactions.`);
+              }),
+            );
+          }}
+        />
       </section>
 
       <section className="shelf-panel space-y-3 p-4">
@@ -117,7 +193,7 @@ export default function SettingsPage() {
         <button className="shelf-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
-      <section className="space-y-3">
+      <section id="categories" className="space-y-3">
         <h2 className="text-[20px] font-bold tracking-tight">Categories</h2>
         <form
           className="flex flex-wrap gap-2"
@@ -271,7 +347,7 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
   return (
     <section className="shelf-panel space-y-3 p-4">
       <h2 className="text-[20px] font-semibold tracking-tight">Household</h2>
-      <p className="text-[15px] text-[var(--muted)]">Members share this vault and can edit. Advisors see the same screens and cannot change anything.</p>
+      <p className="text-[15px] text-[var(--muted)]">People you invite share this vault. The code works once.</p>
       <ul className="space-y-2 text-[15px]">
         {data.members.map((member) => (
           <li key={member.userId} className="flex items-center justify-between gap-3">
@@ -289,16 +365,13 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
       {data.role === "owner" ? (
         <div className="flex flex-wrap gap-2">
           <button className="shelf-btn" type="button" onClick={() => invite("member")}>
-            Invite member
-          </button>
-          <button className="shelf-btn secondary" type="button" onClick={() => invite("advisor")}>
-            Invite advisor
+            Invite someone
           </button>
         </div>
       ) : null}
       {code ? <p className="rounded-[10px] bg-[var(--fill)] p-3 font-mono text-[14px]">{code}</p> : null}
       <p className="text-[13px] text-[var(--muted)]">
-        New people open <span className="font-medium">/join</span> and enter the code.
+        They open Shelf, choose Join, and enter the code.
       </p>
     </section>
   );

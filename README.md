@@ -51,7 +51,7 @@ A `Dockerfile` is included if you prefer a container. Health check: `GET /api/he
 
 ## What Shelf includes
 
-Home answers whether this month is okay, then review, budget, bills, and goals. Insights combines cash flow, this month’s spending and net worth, and holdings. Rules can be edited, previewed, and ordered. JSON/CSV export stays in Settings.
+Home leads with safe-to-spend, a 30-day cash forecast, and a one-at-a-time review. Budget shows pace and can move money between categories. Insights compares this month with last month and a three-month average. Recurring splits bills from subscriptions. Settings has appearance, alerts, and CSV import. JSON/CSV export stays there too.
 
 ## Scripts
 

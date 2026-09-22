@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { monthName, occurrencesInMonth, yearMonth } from "@/lib/dates";
+import { annualizedCents } from "@/lib/plan";
 
 type Rec = {
   id: string;
@@ -22,6 +23,8 @@ type Rec = {
   lastPaidDate: string | null;
   categoryId: string | null;
   accountId: string | null;
+  kind?: "bill" | "subscription";
+  priceDeltaCents?: number | null;
 };
 
 type Draft = {
@@ -43,13 +46,14 @@ const CADENCES = [
   ["yearly", "Yearly"],
 ] as const;
 
-const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false, categoryId: "", accountId: "" };
+const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false, categoryId: "", accountId: "", kind: "bill" as "bill" | "subscription" };
 
 export default function RecurringPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
   const [rows, setRows] = useState<Rec[]>([]);
   const [view, setView] = useState<"list" | "calendar">("calendar");
+  const [bucket, setBucket] = useState<"all" | "bill" | "subscription">("all");
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Rec | "new" | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -66,7 +70,8 @@ export default function RecurringPage() {
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
   }, [load]);
 
-  const active = rows.filter((row) => row.isActive);
+  const active = rows.filter((row) => row.isActive && (bucket === "all" || (row.kind ?? "bill") === bucket));
+  const listed = rows.filter((row) => bucket === "all" || (row.kind ?? "bill") === bucket);
   const projected = useMemo(() => {
     return active.flatMap((row) =>
       occurrencesInMonth(row.nextDate, row.cadence, cursor.year, cursor.month).map((date) => ({ ...row, date })),
@@ -108,6 +113,7 @@ export default function RecurringPage() {
       isIncome: row.isIncome,
       categoryId: row.categoryId ?? "",
       accountId: row.accountId ?? "",
+      kind: row.kind ?? "bill",
     });
     setEditing(row);
   }
@@ -117,7 +123,7 @@ export default function RecurringPage() {
     if (editing === "new") {
       await api("/api/recurring", {
         method: "POST",
-        body: JSON.stringify({ ...form, amount: Number(form.amount) }),
+        body: JSON.stringify({ ...form, amount: Number(form.amount), kind: form.kind }),
       });
     } else if (editing) {
       await api("/api/recurring", {
@@ -131,6 +137,7 @@ export default function RecurringPage() {
           isIncome: form.isIncome,
           categoryId: form.categoryId || null,
           accountId: form.accountId || null,
+          kind: form.kind,
         }),
       });
     }
@@ -182,6 +189,15 @@ export default function RecurringPage() {
           ]}
         />
       </div>
+      <Segment
+        value={bucket}
+        onChange={(value) => setBucket(value as "all" | "bill" | "subscription")}
+        options={[
+          { value: "all", label: "All" },
+          { value: "bill", label: "Bills" },
+          { value: "subscription", label: "Subscriptions" },
+        ]}
+      />
 
       {suggestions.length ? (
         <section className="shelf-panel space-y-3 p-4">
@@ -241,14 +257,15 @@ export default function RecurringPage() {
         </div>
       ) : (
         <ul className="card">
-          {rows.map((row) => (
+          {listed.map((row) => (
             <li key={row.id}>
               <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
                 <div className="min-w-0">
                   <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
                   <div className="text-[13px] text-[var(--muted)]">
-                    {row.cadence} · next {row.nextDate}
+                    {(row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"} · {row.cadence} · <MoneyText cents={annualizedCents(row.amountCents, row.cadence)} />/yr · next {row.nextDate}
                     {row.isActive ? "" : " · paused"}
+                    {row.priceDeltaCents ? ` · price ${row.priceDeltaCents > 0 ? "up" : "down"}` : ""}
                   </div>
                 </div>
                 <MoneyText cents={row.isIncome ? -row.amountCents : row.amountCents} signed />
@@ -285,6 +302,10 @@ export default function RecurringPage() {
                 ))}
               </select>
             </label>
+            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.kind === "subscription"} onClick={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })}>
+              Subscription
+              <span className={`switch ${form.kind === "subscription" ? "on" : ""}`} />
+            </button>
             <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
               Income
               <span className={`switch ${form.isIncome ? "on" : ""}`} />
