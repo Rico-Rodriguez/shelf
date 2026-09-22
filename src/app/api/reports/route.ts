@@ -102,6 +102,25 @@ export async function GET(request: Request) {
       openBudgetItem(row, dek),
     );
     const plannedByCat = Object.fromEntries(plannedItems.map((item) => [item.categoryId, item.plannedCents + item.rolloverInCents]));
+    const byMerchant = new Map<string, number>();
+    let pendingCents = 0;
+    for (const tx of txs) {
+      if (tx.date < start || tx.date > end || tx.hidden || tx.isTransfer) continue;
+      if (tx.pending && tx.amountCents > 0) pendingCents += tx.amountCents;
+    }
+    for (const tx of monthTx) {
+      let spend = 0;
+      for (const part of transactionParts(tx, splits)) {
+        if (part.amountCents <= 0) continue;
+        if (part.categoryId && incomeIds.has(part.categoryId)) continue;
+        spend += part.amountCents;
+      }
+      if (spend <= 0) continue;
+      const name = tx.merchantName || tx.name;
+      byMerchant.set(name, (byMerchant.get(name) ?? 0) + spend);
+    }
+    const usualSum = Object.values(avgMap).reduce((sum, cents) => sum + cents, 0);
+
     const compared = Object.values(catSpend)
       .sort((a, b) => b.cents - a.cents)
       .map((row) => {
@@ -119,6 +138,12 @@ export async function GET(request: Request) {
       month,
       incomeCents: income,
       spendingCents: Object.values(catSpend).reduce((s, r) => s + r.cents, 0),
+      usualSpentCents: usualSum > 0 ? Math.round(usualSum / 3) : null,
+      pendingCents,
+      byMerchant: [...byMerchant.entries()]
+        .map(([name, cents]) => ({ name, cents }))
+        .sort((a, b) => b.cents - a.cents)
+        .slice(0, 8),
       byCategory: compared,
       byGroup: Object.entries(groupSpend).map(([name, cents]) => ({ name, cents })),
       sankey: { nodes, links },

@@ -54,6 +54,7 @@ export function CommandPalette() {
         const hits: Hit[] = [];
         for (const tx of txs.transactions.slice(0, 6)) {
           hits.push({ href: `/transactions?q=${encodeURIComponent(tx.name)}`, label: tx.name, hint: tx.date });
+          hits.push({ href: `/merchant?name=${encodeURIComponent(tx.name)}`, label: tx.name, hint: "Merchant" });
         }
         for (const account of accounts.accounts) {
           if (account.name.toLowerCase().includes(needle)) hits.push({ href: `/accounts/${account.id}`, label: account.name, hint: "Account" });

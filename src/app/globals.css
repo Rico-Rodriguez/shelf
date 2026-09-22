@@ -230,23 +230,52 @@ a:focus-visible {
 
 @layer components {
   .page-enter > * {
-    animation: rise-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: none;
   }
 
-  .page-enter > *:nth-child(2) {
-    animation-delay: 45ms;
+  .app-arrive {
+    animation: fade-in 280ms ease both;
   }
 
-  .page-enter > *:nth-child(3) {
-    animation-delay: 90ms;
+  .text-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
-  .page-enter > *:nth-child(4) {
-    animation-delay: 135ms;
+  .text-btn:active {
+    opacity: 0.6;
   }
 
-  .page-enter > *:nth-child(5) {
-    animation-delay: 180ms;
+  button.chip {
+    cursor: pointer;
+  }
+
+  .scrub-chart {
+    display: block;
+    width: 100%;
+    height: 140px;
+    touch-action: none;
+  }
+
+  .alloc-bar {
+    display: flex;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: var(--fill);
+  }
+
+  .alloc-bar span {
+    display: block;
+    height: 100%;
   }
 
   .page-header {
@@ -769,7 +798,7 @@ a:focus-visible {
     border: 0;
     border-top: 1px solid var(--line);
     border-radius: 0;
-    background: #ffffff;
+    background: var(--paper);
     box-shadow: 0 -1px 0 rgba(20, 24, 31, 0.02);
   }
 
@@ -1037,6 +1066,7 @@ main h1 + p,
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter > *,
+  .app-arrive,
   .hint,
   .empty-state,
   .ios-sheet,

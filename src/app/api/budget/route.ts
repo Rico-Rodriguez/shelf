@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, budgetMonths, categories, categoryGroups, settings } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory, suggestBudget } from "@/lib/budget";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spentByCategory, suggestBudget, trailingCategoryAverage } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
 import { nid } from "@/lib/ids";
 import { openBudgetItem, openSettings, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "@/lib/secrets";
@@ -26,6 +26,8 @@ export async function GET(request: Request) {
     const groups = await db.select().from(categoryGroups);
     const spent = await spentByCategory(year, month, dek);
     const actualIncome = await incomeInMonth(year, month, dek);
+    const trail = await trailingCategoryAverage(year, month, dek);
+    const pendingCents = await pendingOutflow(year, month, dek);
     const [cfgRow] = await db.select().from(settings);
     const cfg = cfgRow ? openSettings(cfgRow, dek) : null;
 
@@ -45,6 +47,7 @@ export async function GET(request: Request) {
           availableCents: planned + rolloverIn,
           spentCents: used,
           remainingCents: planned + rolloverIn - used,
+          usualCents: trail.total == null ? null : (trail.byCategory[c.id] ?? 0),
         };
       });
 
@@ -75,6 +78,8 @@ export async function GET(request: Request) {
       leftoverCents: monthRow.plannedIncomeCents - expensePlanned,
       expensePlannedCents: expensePlanned,
       expenseSpentCents: expenseSpent,
+      pendingCents,
+      usualSpentCents: trail.total,
       rows,
       flex,
     });

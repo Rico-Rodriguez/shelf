@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
@@ -10,20 +10,22 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { addMonths, monthRange } from "@/lib/dates";
+import { addMonths, monthName, monthRange, yearMonth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
+import { versusPhrase, versusShort } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Row = {
-  category: { id: string; name: string; flexBucket: string | null; rollover: boolean; sortOrder: number };
+  category: { id: string; name: string; flexBucket: string | null; rollover: boolean; sortOrder: number; groupId?: string };
   group: { id: string; name: string; color: string; sortOrder: number } | null;
   plannedCents: number;
   rolloverInCents: number;
   availableCents: number;
   spentCents: number;
   remainingCents: number;
+  usualCents?: number | null;
 };
 
 type Budget = {
@@ -38,9 +40,17 @@ type Budget = {
   leftoverCents: number;
   expensePlannedCents: number;
   expenseSpentCents: number;
+  pendingCents?: number;
+  usualSpentCents?: number | null;
   rows: Row[];
   flex: { fixed: Row[]; non_monthly: Row[]; flex: Row[] };
 };
+
+type Editor =
+  | { kind: "row"; row: Row; planned: string; name: string; rollover: boolean }
+  | { kind: "flex"; amount: string }
+  | { kind: "add"; groupId: string; name: string }
+  | null;
 
 export default function BudgetPage() {
   const [cursor, setCursor] = useState<{ year?: number; month?: number }>({});
@@ -48,6 +58,10 @@ export default function BudgetPage() {
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [moving, setMoving] = useState(false);
   const [moveForm, setMoveForm] = useState({ from: "", to: "", amount: "" });
+  const [editor, setEditor] = useState<Editor>(null);
+  const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
+  const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
+  const askedClose = useRef(false);
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, refreshing, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`);
 
@@ -55,10 +69,26 @@ export default function BudgetPage() {
     if (data) setIncome((data.plannedIncomeCents / 100).toFixed(0));
   }, [data]);
 
+  useEffect(() => {
+    if (!data || askedClose.current) return;
+    const now = yearMonth();
+    if (data.year !== now.year || data.month !== now.month) return;
+    const key = `shelf-month-close-${data.year}-${data.month}`;
+    if (window.localStorage.getItem(key)) return;
+    askedClose.current = true;
+    const prev = addMonths(data.year, data.month, -1);
+    void api<Budget>(`/api/budget?year=${prev.year}&month=${prev.month}`).then((previous) => {
+      if (previous.expensePlannedCents <= 0 && previous.expenseSpentCents <= 0) return;
+      setCloseMonth(previous);
+    });
+  }, [data]);
+
+  const flexRows = useMemo(() => data?.rows.filter((row) => row.category.flexBucket === "flex") ?? [], [data]);
   const groups = useMemo(() => {
     if (!data) return [];
     const map = new Map<string, { id: string; name: string; color: string; sortOrder: number; rows: Row[] }>();
     for (const row of data.rows) {
+      if (row.category.flexBucket === "flex") continue;
       const id = row.group?.id ?? "other";
       const bucket = map.get(id) ?? {
         id,
@@ -72,6 +102,7 @@ export default function BudgetPage() {
     }
     return [...map.values()]
       .map((group) => ({ ...group, rows: group.rows.sort((a, b) => a.category.sortOrder - b.category.sortOrder) }))
+      .filter((group) => group.rows.length > 0)
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [data]);
 
@@ -79,6 +110,12 @@ export default function BudgetPage() {
   if (!data) return <PageSkeleton title="Budget" rows={6} />;
 
   const budget = data;
+  const flexPlan = budget.flexPoolCents > 0 ? budget.flexPoolCents : flexRows.reduce((sum, row) => sum + row.availableCents, 0);
+  const flexSpent = flexRows.reduce((sum, row) => sum + row.spentCents, 0);
+  const flexUsual = flexRows.some((row) => row.usualCents != null)
+    ? flexRows.reduce((sum, row) => sum + (row.usualCents ?? 0), 0)
+    : null;
+  const range = monthRange(budget.year, budget.month);
 
   async function refreshMonth(year: number, month: number) {
     setCursor({ year, month });
@@ -95,45 +132,8 @@ export default function BudgetPage() {
     reload();
   }
 
-  async function setMode(mode: "category" | "flex") {
-    if (mode === budget.mode) return;
-    await api("/api/budget", { method: "PUT", body: JSON.stringify({ year: budget.year, month: budget.month, mode }) });
-    invalidateQueries("budget:");
-    reload();
-  }
-
-  async function saveItems(items: { categoryId: string; plannedCents: number }[]) {
-    await api("/api/budget", {
-      method: "PUT",
-      body: JSON.stringify({ year: budget.year, month: budget.month, items }),
-    });
-    invalidateQueries("budget:");
-    reload();
-  }
-
-  async function setPlanned(categoryId: string, plannedCents: number) {
-    await saveItems([{ categoryId, plannedCents }]);
-  }
-
   async function suggest() {
     await api("/api/budget", { method: "POST", body: JSON.stringify({ year: budget.year, month: budget.month, apply: true }) });
-    invalidateQueries("budget:");
-    reload();
-  }
-
-  async function copyLastMonth() {
-    const prev = addMonths(budget.year, budget.month, -1);
-    const previous = await api<Budget>(`/api/budget?year=${prev.year}&month=${prev.month}`);
-    await api("/api/budget", {
-      method: "PUT",
-      body: JSON.stringify({
-        year: budget.year,
-        month: budget.month,
-        plannedIncomeCents: previous.plannedIncomeCents,
-        flexPoolCents: previous.flexPoolCents,
-        items: previous.rows.map((row) => ({ categoryId: row.category.id, plannedCents: row.plannedCents })),
-      }),
-    });
     invalidateQueries("budget:");
     reload();
   }
@@ -147,12 +147,23 @@ export default function BudgetPage() {
     reload();
   }
 
-  const range = monthRange(budget.year, budget.month);
+  function dismissClose() {
+    window.localStorage.setItem(`shelf-month-close-${budget.year}-${budget.month}`, "1");
+    setCloseMonth(null);
+  }
+
+  async function openAdd() {
+    const res = await api<{ groups: { id: string; name: string }[] }>("/api/categories");
+    setGroupsList(res.groups);
+    setEditor({ kind: "add", groupId: res.groups[0]?.id ?? "", name: "" });
+  }
+
+  const rolled = closeMonth?.rows.filter((row) => row.category.rollover && row.remainingCents > 0) ?? [];
 
   return (
     <PageShell refreshing={refreshing}>
       <div className="space-y-4">
-        <PageHeader title="Budget" subtitle="Set a plan, then watch spending land in each category.">
+        <PageHeader title="Budget" subtitle={versusPhrase(budget.usualSpentCents == null ? null : budget.expenseSpentCents - budget.usualSpentCents) ?? undefined}>
           <MonthNav
             year={budget.year}
             month={budget.month}
@@ -162,38 +173,16 @@ export default function BudgetPage() {
           />
         </PageHeader>
 
-        <p className="story-line">
-          {budget.mode === "flex"
-            ? `${budget.flexRemainingCents >= 0 ? "Flex pot still has room." : "The flex pot is spent."} Rollover categories keep unused amounts for next month.`
-            : budget.expensePlannedCents > 0
-              ? budget.expenseSpentCents > budget.expensePlannedCents
-                ? "A few categories are past their plan. Open one and lower it, or move the extra into flex."
-                : "You are inside the category plan. Leftover amounts stay put unless rollover is on."
-              : "No amounts yet. Suggest from recent history, or copy last month to start the ritual."}
-        </p>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
-            <button className="text-link" type="button" onClick={() => setMode(budget.mode === "flex" ? "category" : "flex")}>
-              {budget.mode === "flex" ? "Budget each category" : "Use one flex pot"}
-            </button>
-            <span className="flex gap-3">
-              <button className="text-link" type="button" onClick={() => setMoving(true)}>
-                Move money
-              </button>
-              <Link href="/settings#categories" className="text-link">
-                Edit categories
-              </Link>
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button className="shelf-btn ghost w-full" type="button" onClick={copyLastMonth}>
-              Use last month
-            </button>
-            <button className="shelf-btn ghost w-full" type="button" onClick={suggest}>
-              Suggest
-            </button>
-          </div>
+        <div className="flex flex-wrap gap-x-4">
+          <button className="text-btn" type="button" onClick={() => void suggest()}>
+            Suggest
+          </button>
+          <button className="text-btn" type="button" onClick={() => setMoving(true)}>
+            Move money
+          </button>
+          <button className="text-btn" type="button" onClick={() => void openAdd()}>
+            Add category
+          </button>
         </div>
 
         <div className="shelf-panel overflow-hidden">
@@ -210,28 +199,91 @@ export default function BudgetPage() {
               />
             </label>
             <div className="min-w-0 border-b border-[var(--line)] px-3.5 py-3">
-              <div className="field-label">Budgeted</div>
-              <div className="mt-1 truncate text-[22px] font-semibold tracking-[-0.03em] tabular-nums">
-                <MoneyText cents={budget.expensePlannedCents} />
+              <div className="field-label">Left to budget</div>
+              <div className="mt-1 text-[15px] font-semibold tabular-nums">
+                <MoneyText cents={budget.leftoverCents} signed />
               </div>
             </div>
             <div className="min-w-0 border-r border-[var(--line)] px-3.5 py-3">
               <div className="field-label">Spent</div>
-              <div className="mt-1 truncate text-[22px] font-semibold tracking-[-0.03em] tabular-nums">
+              <div className="mt-1 text-[15px] font-semibold tabular-nums">
                 <MoneyText cents={budget.expenseSpentCents} />
               </div>
             </div>
             <div className="min-w-0 px-3.5 py-3">
-              <div className="field-label">Left to budget</div>
-              <div className="mt-1 truncate text-[22px] font-semibold tracking-[-0.03em] tabular-nums">
-                <MoneyText cents={budget.leftoverCents} signed />
+              <div className="field-label">Planned</div>
+              <div className="mt-1 text-[15px] font-semibold tabular-nums">
+                <MoneyText cents={budget.expensePlannedCents} />
               </div>
             </div>
           </div>
         </div>
-        <p className="text-[13px] text-[var(--muted)]">
-          Actual income <MoneyText cents={budget.actualIncomeCents} />
-        </p>
+        {budget.pendingCents ? (
+          <p className="text-[13px] text-[var(--tertiary)]">
+            Pending <MoneyText cents={budget.pendingCents} /> is not included.
+          </p>
+        ) : null}
+
+        {groups.map((group) => {
+          const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
+          const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
+          const isClosed = closed[group.id] ?? false;
+          return (
+            <section key={group.id}>
+              <button
+                type="button"
+                className="mb-2 flex w-full items-center justify-between gap-3 text-[13px] font-medium text-[var(--muted)]"
+                onClick={() => setClosed({ ...closed, [group.id]: !isClosed })}
+              >
+                <span>{group.name}</span>
+                <span className="tabular-nums">
+                  <MoneyText cents={spent} /> / <MoneyText cents={planned} />
+                </span>
+              </button>
+              {isClosed ? null : (
+                <div className="card">
+                  {group.rows.map((row) => (
+                    <CategoryRow
+                      key={row.category.id}
+                      row={row}
+                      color={shelfColor(group.color)}
+                      year={budget.year}
+                      month={budget.month}
+                      onOpen={() =>
+                        setEditor({
+                          kind: "row",
+                          row,
+                          planned: (row.plannedCents / 100).toFixed(0),
+                          name: row.category.name,
+                          rollover: row.category.rollover,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {flexRows.length > 0 ? (
+          <section>
+            <h2 className="mb-2 text-[13px] font-medium text-[var(--muted)]">Everything else</h2>
+            <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
+              <span className="flex items-start justify-between gap-3">
+                <span className="font-medium">Flex</span>
+                <MoneyText cents={flexPlan - flexSpent} signed />
+              </span>
+              <span className="my-2.5 block">
+                <ProgressBar value={flexSpent} max={flexPlan || 1} />
+              </span>
+              <span className="block text-[13px] text-[var(--muted)]">
+                <MoneyText cents={flexSpent} /> of <MoneyText cents={flexPlan} />
+                {versusShort(flexSpent, flexUsual) ? ` · ${versusShort(flexSpent, flexUsual)}` : ""}
+              </span>
+            </button>
+          </section>
+        ) : null}
 
         {moving ? (
           <Sheet title="Move money" onClose={() => setMoving(false)}>
@@ -286,177 +338,219 @@ export default function BudgetPage() {
           </Sheet>
         ) : null}
 
-        {budget.mode === "flex" ? (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Bucket title="Fixed" rows={rowsOf(budget.flex.fixed)} range={range} year={budget.year} month={budget.month} onSave={setPlanned} />
-            <Bucket title="Occasional" rows={rowsOf(budget.flex.non_monthly)} range={range} year={budget.year} month={budget.month} onSave={setPlanned} />
-            <FlexPot pool={budget.flexPoolCents} spent={budget.flexSpentCents} rows={budget.flex.flex} range={range} onSave={saveFlexTotal} />
-          </div>
-        ) : (
-          groups.map((group) => {
-            const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
-            const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
-            const isClosed = closed[group.id] ?? false;
-            return (
-              <section key={group.id}>
+        {editor?.kind === "row" ? (
+          <Sheet title={editor.name || "Category"} onClose={() => setEditor(null)}>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const row = editor.row;
+                const planned = dollarsToCents(editor.planned || 0);
+                const jobs: Promise<unknown>[] = [];
+                if (planned !== row.plannedCents) {
+                  jobs.push(
+                    api("/api/budget", {
+                      method: "PUT",
+                      body: JSON.stringify({ year: budget.year, month: budget.month, items: [{ categoryId: row.category.id, plannedCents: planned }] }),
+                    }),
+                  );
+                }
+                if (editor.name.trim() && editor.name.trim() !== row.category.name) {
+                  jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, name: editor.name.trim() }) }));
+                }
+                if (editor.rollover !== row.category.rollover) {
+                  jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
+                }
+                void Promise.all(jobs).then(() => {
+                  setEditor(null);
+                  invalidateQueries("budget:");
+                  reload();
+                });
+              }}
+            >
+              <p className="text-[13px] text-[var(--muted)]">{versusShort(editor.row.spentCents, editor.row.usualCents ?? null)}</p>
+              <label className="field">
+                <span className="field-label">Name</span>
+                <input className="shelf-input" value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">Planned</span>
+                <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => setEditor({ ...editor, planned: event.target.value })} />
+              </label>
+              <button type="button" className="data-row w-full justify-between" aria-pressed={editor.rollover} onClick={() => setEditor({ ...editor, rollover: !editor.rollover })}>
+                Rollover
+                <span className={`switch ${editor.rollover ? "on" : ""}`} />
+              </button>
+              <button className="shelf-btn w-full">Save</button>
+              <div className="flex flex-wrap gap-x-4">
+                <Link href={activityHref({ categoryId: editor.row.category.id, start: range.start, end: range.end })} className="text-btn">
+                  Transactions
+                </Link>
                 <button
+                  className="text-btn"
                   type="button"
-                  className="ios-section flex w-full items-center justify-between gap-3"
-                  onClick={() => setClosed({ ...closed, [group.id]: !isClosed })}
+                  onClick={() => {
+                    void api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: editor.row.category.id, flexBucket: "flex" }) }).then(() => {
+                      setEditor(null);
+                      invalidateQueries("budget:");
+                      reload();
+                    });
+                  }}
                 >
-                  <span>{group.name}</span>
-                  <span className="tabular-nums">
-                    <MoneyText cents={spent} /> / <MoneyText cents={planned} />
-                  </span>
+                  Share the flex amount
                 </button>
-                {isClosed ? null : (
-                  <div className="card">
-                    {group.rows.map((row) => (
-                      <CategoryRow key={row.category.id} row={row} range={range} year={budget.year} month={budget.month} color={shelfColor(group.color)} onSave={setPlanned} />
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-          })
-        )}
+                <button
+                  className="text-btn"
+                  type="button"
+                  onClick={() => {
+                    void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: editor.row.category.id, entity: "category" }) }).then(() => {
+                      setEditor(null);
+                      invalidateQueries("budget:");
+                      reload();
+                    });
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </form>
+          </Sheet>
+        ) : null}
+
+        {editor?.kind === "flex" ? (
+          <Sheet title="Everything else" onClose={() => setEditor(null)}>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveFlexTotal(dollarsToCents(editor.amount || 0)).then(() => setEditor(null));
+              }}
+            >
+              <label className="field">
+                <span className="field-label">Flex amount</span>
+                <input className="shelf-input" inputMode="decimal" value={editor.amount} onChange={(event) => setEditor({ ...editor, amount: event.target.value })} />
+              </label>
+              <ul className="card">
+                {flexRows.map((row) => (
+                  <li key={row.category.id} className="data-row justify-between gap-3">
+                    <Link href={activityHref({ categoryId: row.category.id, start: range.start, end: range.end })}>{row.category.name}</Link>
+                    <button
+                      className="text-btn"
+                      type="button"
+                      onClick={() => {
+                        void api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: "fixed" }) }).then(() => {
+                          invalidateQueries("budget:");
+                          reload();
+                        });
+                      }}
+                    >
+                      Own line
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button className="shelf-btn w-full">Save</button>
+            </form>
+          </Sheet>
+        ) : null}
+
+        {editor?.kind === "add" ? (
+          <Sheet title="New category" onClose={() => setEditor(null)}>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void api("/api/categories", {
+                  method: "POST",
+                  body: JSON.stringify({ groupId: editor.groupId, name: editor.name, flexBucket: "fixed" }),
+                }).then(() => {
+                  setEditor(null);
+                  invalidateQueries("budget:");
+                  reload();
+                });
+              }}
+            >
+              <label className="field">
+                <span className="field-label">Group</span>
+                <select className="shelf-input" value={editor.groupId} onChange={(event) => setEditor({ ...editor, groupId: event.target.value })}>
+                  {groupsList.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Name</span>
+                <input className="shelf-input" value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} required />
+              </label>
+              <button className="shelf-btn w-full">Add</button>
+            </form>
+          </Sheet>
+        ) : null}
+
+        {closeMonth ? (
+          <Sheet title={`${monthName(budget.year, budget.month).split(" ")[0]} is ready`} onClose={dismissClose}>
+            <p className="text-[15px]">
+              {monthName(closeMonth.year, closeMonth.month)} left <MoneyText cents={Math.max(0, closeMonth.expensePlannedCents - closeMonth.expenseSpentCents)} />.
+            </p>
+            {rolled.length ? (
+              <ul className="card">
+                {rolled.map((row) => (
+                  <li key={row.category.id} className="data-row justify-between">
+                    <span>{row.category.name}</span>
+                    <span className="text-[var(--muted)]">
+                      kept <MoneyText cents={row.remainingCents} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[15px] text-[var(--muted)]">Nothing rolled over.</p>
+            )}
+            <button className="shelf-btn w-full" type="button" onClick={dismissClose}>
+              Done
+            </button>
+          </Sheet>
+        ) : null}
       </div>
     </PageShell>
   );
 }
 
-function rowsOf(rows: Row[]) {
-  return [...rows].sort((a, b) => a.category.sortOrder - b.category.sortOrder);
-}
-
 function CategoryRow({
   row,
-  range,
+  color,
   year,
   month,
-  color,
-  onSave,
+  onOpen,
 }: {
   row: Row;
-  range: { start: string; end: string };
+  color: string;
   year: number;
   month: number;
-  color: string;
-  onSave: (id: string, cents: number) => void;
+  onOpen: () => void;
 }) {
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
+  const usual = versusShort(row.spentCents, row.usualCents ?? null);
   return (
-    <div className="border-b border-[var(--line)] px-4 py-3.5 last:border-0">
-      <div className="flex items-start justify-between gap-3">
-        <Link href={activityHref({ categoryId: row.category.id, start: range.start, end: range.end })} className="min-w-0 font-medium">
-          {row.category.name}
-        </Link>
+    <button type="button" className="block w-full border-b border-[var(--line)] px-4 py-3.5 text-left last:border-0" onClick={onOpen}>
+      <span className="flex items-start justify-between gap-3">
+        <span className="min-w-0 font-medium">{row.category.name}</span>
         <MoneyText className="shrink-0" cents={row.remainingCents} signed />
-      </div>
-      <div className="my-2.5">
+      </span>
+      <span className="my-2.5 block">
         <ProgressBar value={row.spentCents} max={row.availableCents || 1} color={color} />
-      </div>
-      <div className="mb-2 flex flex-wrap gap-x-3 text-[12px] text-[var(--muted)]">
+      </span>
+      <span className="flex flex-wrap gap-x-3 text-[13px] text-[var(--muted)]">
         {row.rolloverInCents > 0 ? (
           <span>
             +<MoneyText cents={row.rolloverInCents} /> carried in
           </span>
         ) : null}
         {pace.label ? <span className={pace.tone === "over" || pace.tone === "hot" ? "text-[var(--danger)]" : ""}>{pace.label}</span> : null}
-      </div>
-      <label className="field min-w-0">
-        <span className="field-label">Planned</span>
-        <input
-          className="shelf-input compact mt-1"
-          inputMode="decimal"
-          defaultValue={(row.plannedCents / 100).toFixed(0)}
-          key={`${row.category.id}-${row.plannedCents}`}
-          onBlur={(e) => {
-            const next = dollarsToCents(e.target.value || 0);
-            if (next !== row.plannedCents) onSave(row.category.id, next);
-          }}
-        />
-      </label>
-    </div>
-  );
-}
-
-function Bucket({
-  title,
-  rows,
-  range,
-  year,
-  month,
-  onSave,
-}: {
-  title: string;
-  rows: Row[];
-  range: { start: string; end: string };
-  year: number;
-  month: number;
-  onSave: (id: string, cents: number) => void;
-}) {
-  const planned = rows.reduce((sum, row) => sum + row.availableCents, 0);
-  const spent = rows.reduce((sum, row) => sum + row.spentCents, 0);
-  return (
-    <section className="shelf-panel p-4">
-      <h2 className="text-[17px] font-semibold">{title}</h2>
-      <p className="my-2 text-[15px]">
-        <MoneyText cents={spent} /> / <MoneyText cents={planned} />
-      </p>
-      <ProgressBar value={spent} max={planned || 1} />
-      <div className="mt-3">
-        {rows.map((row) => (
-          <CategoryRow key={row.category.id} row={row} range={range} year={year} month={month} color="var(--positive)" onSave={onSave} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FlexPot({
-  pool,
-  spent,
-  rows,
-  range,
-  onSave,
-}: {
-  pool: number;
-  spent: number;
-  rows: Row[];
-  range: { start: string; end: string };
-  onSave: (cents: number) => void;
-}) {
-  const planned = pool;
-  return (
-    <section className="shelf-panel p-4">
-      <h2 className="text-[17px] font-semibold">Flex</h2>
-      <p className="my-2 text-[13px] text-[var(--muted)]">One amount for everything in this bucket.</p>
-      <label className="field">
-        <span className="field-label">Flex budget</span>
-        <input
-          className="shelf-input compact mt-1"
-          inputMode="decimal"
-          key={planned}
-          defaultValue={(planned / 100).toFixed(0)}
-          onBlur={(e) => {
-            const next = dollarsToCents(e.target.value || 0);
-            if (next !== planned) onSave(next);
-          }}
-        />
-      </label>
-      <p className="my-2 text-[15px]">
-        <MoneyText cents={spent} /> / <MoneyText cents={planned} />
-      </p>
-      <ProgressBar value={spent} max={planned || 1} />
-      <ul className="mt-3">
-        {rows.map((row) => (
-          <li key={row.category.id} className="flex items-center justify-between gap-3 py-1.5 text-[15px]">
-            <Link href={activityHref({ categoryId: row.category.id, start: range.start, end: range.end })}>{row.category.name}</Link>
-            <MoneyText cents={row.spentCents} />
-          </li>
-        ))}
-      </ul>
-    </section>
+        {usual ? <span>{usual}</span> : null}
+      </span>
+    </button>
   );
 }

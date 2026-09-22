@@ -97,6 +97,39 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
   return out;
 }
 
+export async function trailingCategoryAverage(year: number, month: number, dek: Buffer) {
+  const samples: Record<string, number>[] = [];
+  for (let i = 1; i <= 3; i += 1) {
+    const prev = addMonths(year, month, -i);
+    const spent = await spentByCategory(prev.year, prev.month, dek);
+    if (Object.values(spent).some((cents) => cents > 0)) samples.push(spent);
+  }
+  const byCategory: Record<string, number> = {};
+  if (!samples.length) return { byCategory, total: null as number | null };
+  for (const spent of samples) {
+    for (const [id, cents] of Object.entries(spent)) byCategory[id] = (byCategory[id] ?? 0) + cents;
+  }
+  for (const id of Object.keys(byCategory)) byCategory[id] = Math.round(byCategory[id] / samples.length);
+  const total = Math.round(
+    samples.reduce((sum, spent) => sum + Object.values(spent).reduce((inner, cents) => inner + cents, 0), 0) / samples.length,
+  );
+  return { byCategory, total };
+}
+
+export async function pendingOutflow(year: number, month: number, dek: Buffer) {
+  const db = await getDb();
+  const { start, end } = monthRange(year, month);
+  const txs = (
+    await db
+      .select()
+      .from(transactions)
+      .where(and(gte(transactions.date, start), lte(transactions.date, end)))
+  ).map((tx) => openTx(tx, dek));
+  return txs
+    .filter((tx) => tx.pending && !tx.hidden && !tx.isTransfer && tx.amountCents > 0)
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+}
+
 export async function incomeInMonth(year: number, month: number, dek: Buffer): Promise<number> {
   const db = await getDb();
   const { start, end } = monthRange(year, month);

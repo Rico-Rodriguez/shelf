@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, budgetItems, categories, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory } from "@/lib/budget";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
 import { addDays, todayISO, yearMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
@@ -125,6 +125,8 @@ export async function GET() {
       .reduce((sum, row) => sum + row.amountCents, 0);
     const incomeBase = monthRow.plannedIncomeCents > 0 ? monthRow.plannedIncomeCents : income;
     const committed = fixedPlanned > 0 ? fixedPlanned : upcomingBills;
+    const trail = await trailingCategoryAverage(now.year, now.month, dek);
+    const pendingCents = await pendingOutflow(now.year, now.month, dek);
     const cash = openedAccounts
       .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"))
       .reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
@@ -151,6 +153,15 @@ export async function GET() {
         committedCents: committed,
         goalsCents: goalsMonthly,
         spentCents: variableSpent,
+        cashCents: cash,
+        billsDueCents: upcomingBills,
+        planOpenCents: planned - spentTotal,
+        pendingCents,
+      },
+      usual: {
+        spentCents: spentTotal,
+        usualCents: trail.total,
+        deltaCents: trail.total == null ? null : spentTotal - trail.total,
       },
       forecast: projectBalances(cash, activeRecurring, 30).filter((_, index) => index % 3 === 0 || index === 29),
       suggestedSubscriptions,

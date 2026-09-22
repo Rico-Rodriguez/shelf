@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { ReviewDeck } from "@/components/ReviewDeck";
@@ -11,9 +12,7 @@ import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
-import { FilterBar } from "@/components/ui/FilterBar";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
 
@@ -68,7 +67,6 @@ function Activity() {
   const [unreviewed, setUnreviewed] = useState(0);
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [tagNames, setTagNames] = useState<string[]>([]);
   const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
   const [pairs, setPairs] = useState<{ id: string; name: string; date: string; amountCents: number; account: string | null }[]>([]);
   const [edit, setEdit] = useState<EditState | null>(null);
@@ -77,6 +75,8 @@ function Activity() {
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState("");
   const [always, setAlways] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
 
   useEffect(() => {
@@ -111,9 +111,6 @@ function Activity() {
   useEffect(() => {
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
-    void api<{ tags: { name: string }[] }>("/api/tags")
-      .then((r) => setTagNames(r.tags.map((item) => item.name)))
-      .catch(() => undefined);
     void api<{ goals: { id: string; name: string }[] }>("/api/goals")
       .then((r) => setGoals(r.goals))
       .catch(() => undefined);
@@ -217,6 +214,7 @@ function Activity() {
   }
 
   function openEdit(tx: Tx) {
+    setShowMore(false);
     setPairs([]);
     void api<{ candidates: { id: string; name: string; date: string; amountCents: number; account: string | null }[] }>(
       `/api/transactions?pairFor=${tx.id}`,
@@ -228,18 +226,6 @@ function Activity() {
         .filter((part) => part.categoryId)
         .map((part) => ({ categoryId: part.categoryId!, amount: (part.amountCents / 100).toFixed(2) })),
     });
-  }
-
-  function makeRule() {
-    if (!edit) return;
-    const merchant = edit.merchantName || edit.name;
-    const qs = new URLSearchParams({
-      merchant,
-      rename: edit.name,
-      name: merchant,
-    });
-    if (edit.categoryId) qs.set("categoryId", edit.categoryId);
-    router.push(`/settings/rules?${qs}`);
   }
 
   async function addManual(e: FormEvent) {
@@ -259,19 +245,14 @@ function Activity() {
     load();
   }
 
+  const accountName = accounts.find((account) => account.id === accountId)?.name;
+  const categoryName = groups.flatMap((group) => group.categories).find((category) => category.id === categoryId)?.name;
+  const pendingCount = rows.filter((tx) => tx.pending).length;
+
   return (
-    <div className="page-enter space-y-4">
-      <PageHeader
-        title="Activity"
-        subtitle={
-          unreviewed
-            ? `${unreviewed} waiting for a quick look${rows.length ? ` · ${rows.length} shown` : ""}`
-            : rows.length
-              ? `${rows.length} shown · inbox clear`
-              : "Every purchase in one list"
-        }
-      >
-        <button className="shelf-btn" type="button" onClick={() => setShowAdd(true)}>
+    <div className="space-y-4">
+      <PageHeader title="Activity" subtitle={unreviewed ? `${unreviewed} to review` : undefined}>
+        <button className="text-btn" type="button" onClick={() => setShowAdd(true)}>
           Add
         </button>
       </PageHeader>
@@ -284,16 +265,51 @@ function Activity() {
         aria-label="Search transactions"
       />
 
-      <Segment
-        className="w-full max-w-md"
-        value={reviewed}
-        onChange={(value) => replaceQuery({ reviewed: value || null })}
-        options={[
-          { value: "", label: "All" },
-          { value: "false", label: "Needs review" },
-          { value: "true", label: "Reviewed" },
-        ]}
-      />
+      {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending stays out of spending.</p> : null}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
+          Filter
+        </button>
+        {unreviewed > 0 && reviewed !== "false" ? (
+          <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: "false", focus: "1" })}>
+            Needs review
+          </button>
+        ) : null}
+        {reviewed === "false" ? (
+          <button className="chip accent" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+            Needs review
+          </button>
+        ) : null}
+        {accountName ? (
+          <button className="chip" type="button" onClick={() => replaceQuery({ accountId: null })}>
+            {accountName}
+          </button>
+        ) : null}
+        {categoryId ? (
+          <button className="chip" type="button" onClick={() => replaceQuery({ categoryId: null })}>
+            {categoryName || "Category"}
+          </button>
+        ) : null}
+        {tag ? (
+          <button className="chip" type="button" onClick={() => replaceQuery({ tag: null })}>
+            {tag}
+          </button>
+        ) : null}
+        {month ? (
+          <button className="chip" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
+            Dates
+          </button>
+        ) : null}
+        <button className="text-btn" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
+          {selecting ? "Cancel" : "Select"}
+        </button>
+        {canAcceptAll ? (
+          <button className="text-btn" type="button" onClick={markVisibleDone}>
+            Accept {unreviewedRows.length}
+          </button>
+        ) : null}
+      </div>
 
       {focus && inReviewMode ? (
         <ReviewDeck
@@ -327,69 +343,52 @@ function Activity() {
         />
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Account">
-          <select className="shelf-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
-            <option value="">All accounts</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Category">
-          <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
-        </Field>
-        <Field label="Tag">
-          <select className="shelf-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })} aria-label="Tag">
-            <option value="">All tags</option>
-            {tagNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <FilterBar className="justify-between">
-        {month ? (
-          <MonthNav
-            year={month.year}
-            month={month.month}
-            onChange={(year, mon) => {
-              const range = monthRange(year, mon);
-              replaceQuery({ start: range.start, end: range.end });
-            }}
-          />
-        ) : (
-          <button
-            className="shelf-btn ghost"
-            type="button"
-            onClick={() => {
-              const now = yearMonth();
-              const range = monthRange(now.year, now.month);
-              replaceQuery({ start: range.start, end: range.end });
-            }}
-          >
-            This month
-          </button>
-        )}
-        {month ? (
-          <button className="shelf-btn ghost" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
-            All months
-          </button>
-        ) : null}
-        <button className="shelf-btn ghost" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
-          {selecting ? "Cancel" : "Select"}
-        </button>
-        {canAcceptAll ? (
-          <button className="shelf-btn soft" type="button" onClick={markVisibleDone}>
-            Accept {unreviewedRows.length} categorized
-          </button>
-        ) : null}
-      </FilterBar>
+      {filtersOpen ? (
+        <Sheet title="Filter" onClose={() => setFiltersOpen(false)}>
+          <Field label="Account">
+            <select className="shelf-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
+              <option value="">All accounts</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Category">
+            <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
+          </Field>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {month ? (
+              <MonthNav
+                year={month.year}
+                month={month.month}
+                onChange={(year, mon) => {
+                  const range = monthRange(year, mon);
+                  replaceQuery({ start: range.start, end: range.end });
+                }}
+              />
+            ) : (
+              <button
+                className="text-btn"
+                type="button"
+                onClick={() => {
+                  const now = yearMonth();
+                  const range = monthRange(now.year, now.month);
+                  replaceQuery({ start: range.start, end: range.end });
+                }}
+              >
+                This month
+              </button>
+            )}
+            {month ? (
+              <button className="text-btn" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
+                All months
+              </button>
+            ) : null}
+          </div>
+        </Sheet>
+      ) : null}
 
       {grouped.length === 0 ? (
         <EmptyState
@@ -448,15 +447,11 @@ function Activity() {
                   <span className="min-w-0">
                   <div className="tx-name flex items-center gap-2 truncate font-medium">
                     <span className="truncate">{tx.name}</span>
-                    {tx.pending ? <span className="chip">Pending</span> : null}
                     {!tx.reviewed && !tx.categoryId ? <span className="chip warn">Needs a category</span> : null}
-                    {!tx.reviewed && tx.categoryId ? <span className="chip">New</span> : null}
                   </div>
                   <div className="truncate text-[13px] text-[var(--muted)]">
                     {tx.category?.name ?? "Uncategorized"}
                     {tx.account?.name ? ` · ${tx.account.name}` : ""}
-                    {tx.splits.length ? ` · ${tx.splits.length} splits` : ""}
-                    {tx.tags.length ? ` · ${tx.tags.map((item) => item.name).join(", ")}` : ""}
                   </div>
                   </span>
                 </button>
@@ -495,17 +490,22 @@ function Activity() {
             {edit.originalDescription && edit.originalDescription !== edit.name ? (
               <p className="mt-1 text-[13px] text-[var(--muted)]">{edit.originalDescription}</p>
             ) : null}
-            {!edit.reviewed ? (
-              <p className="mt-2 text-[13px] text-[var(--muted)]">Fix the details below, then save — that marks it reviewed.</p>
-            ) : null}
+            <Link href={`/merchant?name=${encodeURIComponent(edit.merchantName || edit.name)}`} className="text-btn">
+              History
+            </Link>
           </div>
 
           <Field label="Name">
             <input className="shelf-input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
           </Field>
-          <Field label="Category" hint="Pick where this spending belongs in your budget.">
+          <Field label="Category">
             <CategoryPicker groups={groups} value={edit.categoryId ?? ""} onChange={(id) => setEdit({ ...edit, categoryId: id || null })} />
           </Field>
+          <button type="button" className="text-btn" onClick={() => setShowMore((value) => !value)}>
+            {showMore ? "Less" : "More"}
+          </button>
+          {showMore ? (
+            <>
           <Field label="Goal">
             <select className="shelf-input" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
               <option value="">No goal</option>
@@ -603,15 +603,14 @@ function Activity() {
             </button>
           </div>
 
+            </>
+          ) : null}
           <button type="button" className="data-row w-full justify-between" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
             Always categorize this merchant this way
             <span className={`switch ${always ? "on" : ""}`} />
           </button>
           <button className="shelf-btn w-full" type="button" onClick={saveEdit}>
-            {edit.reviewed ? "Save changes" : "Save & mark reviewed"}
-          </button>
-          <button className="shelf-btn ghost w-full" type="button" onClick={makeRule}>
-            Automate with a rule
+            {edit.reviewed ? "Save" : "Save"}
           </button>
         </Sheet>
       ) : null}
