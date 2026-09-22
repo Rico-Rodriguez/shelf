@@ -56,14 +56,13 @@ export default function HomePage() {
   const series = dash.safeSeries ?? [];
   const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
   const committedFromPlan = dash.safeToSpend?.committedFrom === "plan";
-  const committedLabel = committedFromPlan ? (goalsCents > 0 ? "Budgeted & goals" : "Budgeted") : goalsCents > 0 ? "Bills & goals" : "Bills";
+  const committedLabel = committedFromPlan ? (goalsCents > 0 ? "Set aside & goals" : "Set aside") : goalsCents > 0 ? "Bills & goals" : "Bills";
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
     restCents > 0
       ? [...categories.slice(0, 5), { id: "rest", name: "Everything else", cents: restCents, color: "#8B939E" }]
       : categories;
-  const barMax = Math.max(...spendRows.map((row) => row.cents), 1);
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
 
   async function loadSample() {
@@ -107,6 +106,9 @@ export default function HomePage() {
                     <span className="safe-kicker">Day to day</span>
                     <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
                   </span>
+                </span>
+                <span className="mt-3 block text-[13px] leading-snug text-[var(--muted)]">
+                  Income, minus what you set aside, minus day-to-day spending.
                 </span>
               </>
             )
@@ -175,7 +177,7 @@ export default function HomePage() {
                       <span className="flex items-baseline gap-3">
                         <MoneyText className="text-[15px] font-semibold" cents={dash.cashFlow.spendingCents} />
                         <Link href="/insights" className="text-btn">
-                          Insights
+                          Compare
                         </Link>
                       </span>
                     </div>
@@ -187,30 +189,20 @@ export default function HomePage() {
                           color: shelfColor(category.color),
                         }))}
                       />
-                      {spendRows.map((category) => {
-                        const pct = (category.cents / barMax) * 100;
-                        return (
-                          <Link
-                            key={category.id || category.name}
-                            href={category.id === "rest" ? "/insights" : activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
-                            className="spend-row"
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="flex min-w-0 items-center gap-2">
-                                <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
-                                <span className="truncate">{category.name}</span>
-                              </span>
-                              <MoneyText className="shrink-0" cents={category.cents} />
-                            </span>
-                            <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
-                              <span
-                                className="spend-bar"
-                                style={{ width: `${Math.max(pct, 2)}%`, background: shelfColor(category.color) }}
-                              />
-                            </span>
-                          </Link>
-                        );
-                      })}
+                      <p className="px-4 pt-3 text-[13px] text-[var(--muted)]">Each slice is that category’s share of this month.</p>
+                      {spendRows.map((category) => (
+                        <Link
+                          key={category.id || category.name}
+                          href={category.id === "rest" ? "/insights" : activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
+                          className="data-row justify-between gap-3"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
+                            <span className="truncate">{category.name}</span>
+                          </span>
+                          <MoneyText className="shrink-0" cents={category.cents} />
+                        </Link>
+                      ))}
                     </div>
                   </section>
                 ) : dash.cashFlow.spendingCents > 0 ? (

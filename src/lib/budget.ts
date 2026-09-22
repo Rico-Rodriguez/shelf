@@ -70,7 +70,35 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
   return openBudgetMonth({ ...row, plannedIncomeCents: income, secretEnc: row.secretEnc }, dek);
 }
 
+const TRANSFER_CATEGORIES = new Set(["cat-transfer", "cat-cc-payment", "cat-invest"]);
+
+/** Mortgage and rent payments were stored as transfers, so the budget never showed them. */
+export async function rehomeMisfiledBills() {
+  const db = await getDb();
+  const rows = await db
+    .select({
+      id: transactions.id,
+      categoryId: transactions.categoryId,
+      isTransfer: transactions.isTransfer,
+      pfcDetailed: transactions.pfcDetailed,
+    })
+    .from(transactions);
+  for (const row of rows) {
+    const categoryId =
+      row.pfcDetailed === "LOAN_PAYMENTS_MORTGAGE_PAYMENT" || row.pfcDetailed === "RENT_AND_UTILITIES_RENT"
+        ? "cat-rent"
+        : row.pfcDetailed === "LOAN_PAYMENTS_CAR_PAYMENT"
+          ? "cat-auto"
+          : null;
+    if (!categoryId) continue;
+    const misfiled = row.isTransfer || (row.categoryId != null && TRANSFER_CATEGORIES.has(row.categoryId));
+    if (!misfiled || (row.categoryId === categoryId && !row.isTransfer)) continue;
+    await db.update(transactions).set({ categoryId, isTransfer: false, updatedAt: new Date() }).where(eq(transactions.id, row.id));
+  }
+}
+
 export async function spentByCategory(year: number, month: number, dek: Buffer): Promise<Record<string, number>> {
+  await rehomeMisfiledBills();
   const db = await getDb();
   const { start, end } = monthRange(year, month);
   const txs = (
@@ -82,7 +110,7 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
   const splits = (await db.select().from(transactionSplits)).map((split) => openSplit(split, dek));
   const out: Record<string, number> = {};
   for (const tx of txs) {
-    if (tx.hidden || tx.isTransfer || tx.pending) continue;
+    if (tx.hidden || tx.isTransfer) continue;
     if (tx.amountCents <= 0) continue;
     const txSplits = splits.filter((s) => s.transactionId === tx.id);
     if (txSplits.length) {
@@ -90,8 +118,9 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
         if (!s.categoryId) continue;
         out[s.categoryId] = (out[s.categoryId] ?? 0) + s.amountCents;
       }
-    } else if (tx.categoryId) {
-      out[tx.categoryId] = (out[tx.categoryId] ?? 0) + tx.amountCents;
+    } else {
+      const categoryId = tx.categoryId || "cat-uncategorized";
+      out[categoryId] = (out[categoryId] ?? 0) + tx.amountCents;
     }
   }
   return out;
@@ -115,7 +144,7 @@ export async function spendByDay(
   const splits = (await db.select().from(transactionSplits)).map((split) => openSplit(split, dek));
   const daily: Record<string, number> = {};
   for (const tx of txs) {
-    if (tx.hidden || tx.isTransfer || tx.pending) continue;
+    if (tx.hidden || tx.isTransfer) continue;
     if (tx.amountCents <= 0) continue;
     const txSplits = splits.filter((split) => split.transactionId === tx.id);
     let cents = 0;
@@ -125,8 +154,9 @@ export async function spendByDay(
         if (includeCategory && !includeCategory(split.categoryId)) continue;
         cents += split.amountCents;
       }
-    } else if (tx.categoryId && (!includeCategory || includeCategory(tx.categoryId))) {
-      cents = tx.amountCents;
+    } else {
+      const categoryId = tx.categoryId || "cat-uncategorized";
+      if (!includeCategory || includeCategory(categoryId)) cents = tx.amountCents;
     }
     if (cents <= 0) continue;
     daily[tx.date] = (daily[tx.date] ?? 0) + cents;

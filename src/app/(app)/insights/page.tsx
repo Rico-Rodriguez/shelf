@@ -48,7 +48,7 @@ export default function InsightsPage() {
   if (!data) return <PageError title="Insights" message={error} onRetry={() => void reload()} />;
 
   const range = monthRange(data.year, data.month);
-  const max = Math.max(...data.byCategory.map((row) => row.cents), 1);
+  const total = data.byCategory.reduce((sum, row) => sum + row.cents, 0) || 1;
   const shown = scrub?.cents ?? latest?.cents ?? data.netWorth.netWorthCents;
   const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
   const movedStatus =
@@ -97,8 +97,9 @@ export default function InsightsPage() {
               color: shelfColor(category.color),
             }))}
           />
+          <p className="px-4 pt-3 text-[13px] text-[var(--muted)]">Same shares as Home, next to a usual month.</p>
           {data.byCategory.map((category) => {
-            const pct = (category.cents / max) * 100;
+            const pct = (category.cents / total) * 100;
             return (
             <Link
               key={category.id || category.name}
@@ -106,9 +107,16 @@ export default function InsightsPage() {
               className="spend-row"
             >
               <span className="flex items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
-                  <span className="truncate">{category.name}</span>
+                <span className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
+                    <span className="truncate">{category.name}</span>
+                  </span>
+                  {category.avgCents ? (
+                    <span className="mt-0.5 block pl-4 text-[12px] text-[var(--muted)]">
+                      Usual <MoneyText cents={category.avgCents} />
+                    </span>
+                  ) : null}
                 </span>
                 <MoneyText className="shrink-0" cents={category.cents} />
               </span>
