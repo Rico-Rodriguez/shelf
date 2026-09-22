@@ -6,6 +6,7 @@ import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
@@ -37,6 +38,7 @@ export default function GoalsPage() {
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
+  const { flash, run } = useConfirmFlash();
   const goals = data?.goals ?? [];
   const accounts = data?.accounts ?? [];
 
@@ -78,11 +80,13 @@ export default function GoalsPage() {
       accountIds: form.accountIds,
       categoryId: form.categoryId || null,
     };
-    if (editing === "new") {
-      await api("/api/goals", { method: "POST", body: JSON.stringify(body) });
-    } else if (editing) {
-      await api("/api/goals", { method: "PATCH", body: JSON.stringify({ id: editing.id, ...body }) });
-    }
+    await run(async () => {
+      if (editing === "new") {
+        await api("/api/goals", { method: "POST", body: JSON.stringify(body) });
+      } else if (editing) {
+        await api("/api/goals", { method: "PATCH", body: JSON.stringify({ id: editing.id, ...body }) });
+      }
+    });
     setEditing(null);
     reload();
   }
@@ -98,6 +102,7 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-4">
+      {flash}
       <PageHeader title="Goals">
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add

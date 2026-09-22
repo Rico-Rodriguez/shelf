@@ -8,6 +8,7 @@ import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
@@ -65,6 +66,7 @@ export default function RecurringPage() {
   const [form, setForm] = useState(emptyForm);
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const { flash, run } = useConfirmFlash();
 
   useEffect(() => {
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
@@ -126,27 +128,29 @@ export default function RecurringPage() {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (editing === "new") {
-      await api("/api/recurring", {
-        method: "POST",
-        body: JSON.stringify({ ...form, amount: Number(form.amount), kind: form.kind }),
-      });
-    } else if (editing) {
-      await api("/api/recurring", {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: editing.id,
-          merchantName: form.merchantName,
-          amount: Number(form.amount),
-          cadence: form.cadence,
-          nextDate: form.nextDate,
-          isIncome: form.isIncome,
-          categoryId: form.categoryId || null,
-          accountId: form.accountId || null,
-          kind: form.kind,
-        }),
-      });
-    }
+    await run(async () => {
+      if (editing === "new") {
+        await api("/api/recurring", {
+          method: "POST",
+          body: JSON.stringify({ ...form, amount: Number(form.amount), kind: form.kind }),
+        });
+      } else if (editing) {
+        await api("/api/recurring", {
+          method: "PATCH",
+          body: JSON.stringify({
+            id: editing.id,
+            merchantName: form.merchantName,
+            amount: Number(form.amount),
+            cadence: form.cadence,
+            nextDate: form.nextDate,
+            isIncome: form.isIncome,
+            categoryId: form.categoryId || null,
+            accountId: form.accountId || null,
+            kind: form.kind,
+          }),
+        });
+      }
+    });
     setEditing(null);
     reload();
   }
@@ -164,6 +168,7 @@ export default function RecurringPage() {
 
   return (
     <div className="space-y-4">
+      {flash}
       <PageHeader title="Bills">
         <button className="text-btn" type="button" onClick={detect}>
           Find bills
@@ -252,7 +257,9 @@ export default function RecurringPage() {
           </div>
         </div>
       ) : (
-        <ul className="card">
+        <section>
+          <h2 className="ios-section">Coming up</h2>
+          <ul className="card">
           {listed.map((row) => (
             <li key={row.id}>
               <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
@@ -269,7 +276,8 @@ export default function RecurringPage() {
             </li>
           ))}
           {rows.length === 0 ? <li className="data-row text-[var(--muted)]">No bills yet.</li> : null}
-        </ul>
+          </ul>
+        </section>
       )}
 
       {editing ? (
