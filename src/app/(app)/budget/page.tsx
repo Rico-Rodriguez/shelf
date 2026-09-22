@@ -514,7 +514,7 @@ function CategoryRow({
               {row.rolloverInCents > 0 ? (
                 <>
                   {" · "}
-                  <MoneyText cents={row.rolloverInCents} /> carried in
+                  <MoneyText cents={row.rolloverInCents} /> left from last month
                 </>
               ) : null}
             </span>
@@ -640,13 +640,19 @@ function CategorySheet({
         <Field label="Name">
           <input className="shelf-input" value={editor.name} onChange={(event) => onChange({ ...editor, name: event.target.value })} />
         </Field>
-        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
-          Rollover
-          <span className={`switch ${editor.rollover ? "on" : ""}`} />
+        <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
+          <span className="min-w-0">
+            <span className="block font-medium">Keep leftovers for next month</span>
+            <span className="block text-[13px] font-normal text-[var(--muted)]">Whatever you don’t spend is added to next month. Off, next month starts fresh.</span>
+          </span>
+          <span className={`switch shrink-0 ${editor.rollover ? "on" : ""}`} />
         </button>
-        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={inSafe} onClick={() => setInSafe((value) => !value)}>
-          Count in safe to spend
-          <span className={`switch ${inSafe ? "on" : ""}`} />
+        <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={inSafe} onClick={() => setInSafe((value) => !value)}>
+          <span className="min-w-0">
+            <span className="block font-medium">Leave the plan in safe to spend</span>
+            <span className="block text-[13px] font-normal text-[var(--muted)]">On, safe to spend drops only when a charge posts. Off, the whole plan comes out now, even with no charges.</span>
+          </span>
+          <span className={`switch shrink-0 ${inSafe ? "on" : ""}`} />
         </button>
         <button className="shelf-btn w-full">Save</button>
         <button
