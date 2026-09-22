@@ -25,6 +25,8 @@
   --radius-sm: 10px;
   --radius-sheet: 22px;
   --nav-height: 52px;
+  --tabbar-height: calc(62px + env(safe-area-inset-bottom, 0px));
+  --page-end: 36px;
   --font-ui: var(--font-outfit), "Segoe UI", sans-serif;
   --font-display: var(--font-fraunces), Georgia, serif;
   --space-field: 16px;
@@ -261,7 +263,8 @@ a:focus-visible {
   .scrub-chart {
     display: block;
     width: 100%;
-    height: 140px;
+    height: 112px;
+    margin-top: 4px;
     touch-action: none;
   }
 
@@ -280,24 +283,44 @@ a:focus-visible {
 
   .page-header {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .page-header-row {
+    display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px 12px;
+  }
+
+  .page-header-row h1 {
+    flex: 0 1 auto;
+    min-width: min(100%, max-content);
+    max-width: 100%;
+    margin: 0;
   }
 
   .page-header-actions {
     display: flex;
+    flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
+    min-width: min(100%, max-content);
+    max-width: 100%;
+    margin-left: auto;
   }
 
   .page-sub {
-    margin-top: 4px;
+    margin: 0;
+    max-width: 40rem;
     color: var(--muted);
     font-size: 15px;
-    line-height: 20px;
+    line-height: 21px;
   }
 
   .brand-mark {
@@ -708,14 +731,21 @@ a:focus-visible {
     width: 100%;
     max-width: 64rem;
     margin-inline: auto;
-    flex: 1;
-    padding: 16px 16px calc(var(--nav-height) + env(safe-area-inset-bottom) + 20px);
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 16px 16px var(--page-end);
     overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 16px;
   }
 
   @media (min-width: 768px) {
     .app-main {
-      padding: 32px 32px 48px;
+      min-height: auto;
+      padding: 32px 32px 64px;
+      overflow: visible;
     }
   }
 
@@ -797,7 +827,7 @@ a:focus-visible {
   .undo-bar {
     position: fixed;
     left: 50%;
-    bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 16px);
+    bottom: calc(var(--tabbar-height) + 16px);
     z-index: 50;
     display: flex;
     align-items: center;
@@ -979,17 +1009,16 @@ a:focus-visible {
   }
 
   .ios-tabbar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    position: relative;
     z-index: 30;
     display: grid;
+    flex: none;
     grid-template-columns: repeat(5, 1fr);
+    align-content: start;
     width: 100%;
-    min-height: calc(var(--nav-height) + env(safe-area-inset-bottom));
+    height: var(--tabbar-height);
     margin: 0;
-    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    padding: 8px 4px env(safe-area-inset-bottom, 0px);
     border: 0;
     border-top: 1px solid var(--line);
     border-radius: 0;
@@ -1214,10 +1243,7 @@ main h1 {
 }
 
 .page-sub {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow: visible;
 }
 
 main h1 + p,
@@ -1233,6 +1259,10 @@ main h1 + p,
 @media (min-width: 768px) {
   .ios-tabbar {
     display: none;
+  }
+
+  .undo-bar {
+    bottom: 24px;
   }
 
   .ios-sheet-backdrop {

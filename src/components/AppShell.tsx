@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
@@ -63,6 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [pageTitle, setPageTitle] = useState("");
   const [titleOn, setTitleOn] = useState(false);
   const [arrive, setArrive] = useState(false);
+  const scrollerRef = useRef<HTMLElement>(null);
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
@@ -121,20 +122,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("shelf-sync", onSync);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    const desktop = window.matchMedia("(min-width: 768px)").matches;
+    if (!desktop) scroller?.scrollTo(0, 0);
     setMoreOpen(false);
-    setTitleOn(window.scrollY > 48);
+    setTitleOn(false);
   }, [path]);
 
   useEffect(() => {
+    const scroller = scrollerRef.current;
     setPageTitle(readPageTitle());
     const onTitle = (event: Event) => setPageTitle((event as CustomEvent<string>).detail || "");
-    const onScroll = () => setTitleOn(window.scrollY > 48);
+    const onScroll = () => {
+      const desktop = window.matchMedia("(min-width: 768px)").matches;
+      const y = desktop ? window.scrollY : (scroller?.scrollTop ?? 0);
+      setTitleOn(y > 56);
+    };
     window.addEventListener("shelf-title", onTitle);
     window.addEventListener("scroll", onScroll, { passive: true });
+    scroller?.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("shelf-title", onTitle);
       window.removeEventListener("scroll", onScroll);
+      scroller?.removeEventListener("scroll", onScroll);
     };
   }, []);
 
@@ -148,7 +159,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh overflow-x-clip">
+    <div className="flex h-dvh overflow-hidden md:h-auto md:min-h-dvh md:overflow-x-clip md:overflow-y-visible">
       <aside className="sticky top-0 z-10 hidden h-dvh w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--paper)] px-3 py-5 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
           <Link href="/" prefetch>
@@ -185,8 +196,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 py-2.5 backdrop-blur md:hidden">
+      <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:h-auto md:min-h-dvh md:overflow-visible">
+        <div className="z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] backdrop-blur md:hidden">
           <span className="text-[12px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
           <span className={`nav-title ${titleOn && pageTitle ? "is-shown" : ""}`}>{pageTitle}</span>
           <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
@@ -194,7 +205,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>
         </div>
-        <main className={`app-main${arrive ? " app-arrive" : ""}`}>{children}</main>
+        <main ref={scrollerRef} className={`app-main${arrive ? " app-arrive" : ""}`}>
+          {children}
+        </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);

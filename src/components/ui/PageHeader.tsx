@@ -29,11 +29,11 @@ export function PageHeader({
 
   return (
     <header className="page-header">
-      <div className="min-w-0 flex-1">
+      <div className="page-header-row">
         <h1>{title}</h1>
-        {subtitle ? <p className="page-sub">{subtitle}</p> : null}
+        {children ? <div className="page-header-actions">{children}</div> : null}
       </div>
-      {children ? <div className="page-header-actions">{children}</div> : null}
+      {subtitle ? <p className="page-sub">{subtitle}</p> : null}
     </header>
   );
 }

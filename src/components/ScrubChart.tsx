@@ -16,12 +16,18 @@ export function ScrubChart({
   const values = points.map((point) => point.cents);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = max - min || 1;
+  const raw = max - min;
+  const pad = raw === 0 ? Math.max(Math.abs(max) * 0.08, 1) : raw * 0.24;
+  const lo = min - pad;
+  const hi = max + pad;
+  const span = hi - lo || 1;
   const width = 100;
   const height = 36;
+  const inset = 3;
+  const inner = height - inset * 2;
   const coords = points.map((point, i) => ({
     x: (i / (points.length - 1)) * width,
-    y: height - ((point.cents - min) / span) * (height - 4) - 2,
+    y: inset + ((hi - point.cents) / span) * inner,
   }));
   const line = coords.map((coord, i) => `${i === 0 ? "M" : "L"}${coord.x.toFixed(2)},${coord.y.toFixed(2)}`).join(" ");
   const area = `${line} L${width},${height} L0,${height} Z`;
