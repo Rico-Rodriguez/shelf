@@ -131,6 +131,7 @@ export default function GoalsPage() {
                 value: goal.progressCents,
                 max: goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1,
                 color: goal.kind === "save_up" ? "var(--positive)" : "var(--danger)",
+                overIsBad: goal.kind !== "save_up",
               }}
               footer={
                 goal.targetDate || goal.accounts.length || goal.monthlyCents ? (

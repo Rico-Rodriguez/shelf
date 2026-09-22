@@ -368,6 +368,83 @@ function Activity() {
 
   const filtered = Boolean(q || accountId || categoryId || tag || start || end || reviewed);
 
+  if (focus && inReviewMode) {
+    return (
+      <PageShell refreshing={refreshing}>
+        <div className="screen">
+          {flash}
+          <PageHeader title="Review">
+            <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+              Done
+            </button>
+          </PageHeader>
+          {unreviewedRows.length ? (
+            <ReviewDeck
+              rows={unreviewedRows}
+              remaining={unreviewed}
+              total={reviewBaseline ?? unreviewed}
+              groups={groups}
+              frequentCategoryIds={frequentCategoryIds}
+              faces={faces}
+              onSkip={(tx) => {
+                setRows((current) => {
+                  const index = current.findIndex((row) => row.id === tx.id);
+                  if (index < 0 || current.length < 2) return current;
+                  const next = current.slice();
+                  const [skipped] = next.splice(index, 1);
+                  next.push(skipped);
+                  return next;
+                });
+              }}
+              onConfirm={async (tx, nextCategoryId, makeRule) => {
+                if (nextCategoryId) rememberCategory(nextCategoryId);
+                const id = ++requestId.current;
+                dropFromQueue([tx.id]);
+                let applied: RuleApply | null = null;
+                try {
+                  await api(`/api/transactions/${tx.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
+                  });
+                  if (makeRule && nextCategoryId) {
+                    applied = await createMerchantRule(tx.merchantName || tx.name, nextCategoryId);
+                    dropFromQueue(applied.ids.filter((rowId) => rowId !== tx.id));
+                  }
+                  const extra = applied?.applied ?? 0;
+                  offerUndo(extra > 0 ? `Categorized ${extra + 1}` : "Reviewed", async () => {
+                    restoreCleared([tx.id, ...(applied?.ids ?? [])]);
+                    await api("/api/transactions/review-all", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        restore: [{ id: tx.id, categoryId: tx.categoryId }, ...(applied?.previous ?? [])],
+                      }),
+                    });
+                    if (applied?.id) await api(`/api/rules/${applied.id}`, { method: "DELETE" });
+                    load();
+                  });
+                } finally {
+                  if (id === requestId.current) load();
+                }
+              }}
+            />
+          ) : unreviewed > 0 ? (
+            <p className="text-[13px] text-[var(--muted)]">Loading the next purchases…</p>
+          ) : (
+            <div className="empty-state caught-up">
+              <ConfirmMark />
+              <p className="empty-title">You’re caught up</p>
+              <div className="empty-action">
+                <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+                  Show all activity
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell refreshing={refreshing}>
     <div className="screen">
@@ -378,16 +455,11 @@ function Activity() {
         </button>
       </PageHeader>
 
-      {unreviewed > 0 && !(focus && inReviewMode) ? (
+      {unreviewed > 0 ? (
         <button className="review-banner w-full text-left" type="button" onClick={() => replaceQuery({ reviewed: "false", focus: "1" })}>
           <span className="nav-count">{unreviewed > 99 ? "99+" : unreviewed}</span>
           <span className="min-w-0 flex-1">To review</span>
           <Icon name="chevron" size={18} />
-        </button>
-      ) : null}
-      {focus && inReviewMode ? (
-        <button className="text-btn self-start" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
-          Done
         </button>
       ) : null}
 
@@ -441,60 +513,6 @@ function Activity() {
         <button className="chip self-start" type="button" onClick={() => { setSelecting(false); setSelected([]); }}>
           Cancel select
         </button>
-      ) : null}
-
-      {focus && inReviewMode ? (
-        <ReviewDeck
-          rows={unreviewedRows}
-          remaining={unreviewed}
-          total={reviewBaseline ?? unreviewed}
-          groups={groups}
-          frequentCategoryIds={frequentCategoryIds}
-          faces={faces}
-          onSkip={(tx) => {
-            setRows((current) => {
-              const index = current.findIndex((row) => row.id === tx.id);
-              if (index < 0 || current.length < 2) return current;
-              const next = current.slice();
-              const [skipped] = next.splice(index, 1);
-              next.push(skipped);
-              return next;
-            });
-          }}
-          onConfirm={async (tx, nextCategoryId, makeRule) => {
-            if (nextCategoryId) rememberCategory(nextCategoryId);
-            const id = ++requestId.current;
-            dropFromQueue([tx.id]);
-            let applied: RuleApply | null = null;
-            try {
-              await api(`/api/transactions/${tx.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
-              });
-              if (makeRule && nextCategoryId) {
-                applied = await createMerchantRule(tx.merchantName || tx.name, nextCategoryId);
-                dropFromQueue(applied.ids.filter((rowId) => rowId !== tx.id));
-              }
-              const extra = applied?.applied ?? 0;
-              offerUndo(extra > 0 ? `Categorized ${extra + 1}` : "Reviewed", async () => {
-                restoreCleared([tx.id, ...(applied?.ids ?? [])]);
-                await api("/api/transactions/review-all", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    restore: [{ id: tx.id, categoryId: tx.categoryId }, ...(applied?.previous ?? [])],
-                  }),
-                });
-                if (applied?.id) await api(`/api/rules/${applied.id}`, { method: "DELETE" });
-                load();
-              });
-            } finally {
-              if (id === requestId.current) load();
-            }
-          }}
-        />
-      ) : null}
-      {focus && inReviewMode && !unreviewedRows.length && unreviewed > 0 ? (
-        <p className="text-[13px] text-[var(--muted)]">Loading the next purchases…</p>
       ) : null}
 
       {filtersOpen ? (
@@ -567,18 +585,7 @@ function Activity() {
         </Sheet>
       ) : null}
 
-      {grouped.length === 0 && inReviewMode && unreviewed === 0 ? (
-        <div className="empty-state caught-up">
-          <ConfirmMark />
-          <p className="empty-title">You’re caught up</p>
-          <div className="empty-action">
-            <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
-              Show all activity
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {grouped.length === 0 && !inReviewMode ? (
+      {grouped.length === 0 ? (
         <EmptyState title="No matches">Try another search or clear a filter.</EmptyState>
       ) : null}
 

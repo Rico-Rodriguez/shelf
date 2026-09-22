@@ -791,6 +791,10 @@ a:focus-visible {
     background: var(--paper);
   }
 
+  .swipe-row > .relative {
+    will-change: transform;
+  }
+
   .swipe-row + .swipe-row {
     border-top: 1px solid var(--line);
   }

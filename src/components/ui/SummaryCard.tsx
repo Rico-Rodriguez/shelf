@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
 import { ProgressBar } from "@/components/ProgressBar";
+import { haptic } from "@/lib/haptic";
 
 export type SummaryPoint = { date?: string; cents: number };
 export type SummaryTone = "good" | "warn" | "bad" | "neutral";
@@ -57,7 +58,7 @@ export function SummaryCard({
   chartLabel?: string;
   onScrub?: (point: SummaryPoint | null) => void;
   shares?: Share[];
-  meter?: { value: number; max: number; color?: string };
+  meter?: { value: number; max: number; color?: string; overIsBad?: boolean };
   footer?: React.ReactNode;
   footerIcon?: string;
   detail?: React.ReactNode;
@@ -165,7 +166,7 @@ export function SummaryCard({
         </div>
       ) : meter ? (
         <div className="summary-meter">
-          <ProgressBar value={meter.value} max={meter.max} color={meter.color} />
+          <ProgressBar value={meter.value} max={meter.max} color={meter.color} overIsBad={meter.overIsBad} />
         </div>
       ) : null}
       {note ? <div className="summary-note">{note}</div> : null}
@@ -266,7 +267,9 @@ function Chart({
     if (!node) return;
     const rect = node.getBoundingClientRect();
     const t = rect.width ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : 0;
-    onPick(Math.round(t * (points.length - 1)));
+    const next = Math.round(t * (points.length - 1));
+    if (next !== active) haptic("tick");
+    onPick(next);
   }
 
   return (

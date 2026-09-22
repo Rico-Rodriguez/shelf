@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SpendMix } from "@/components/SpendMix";
@@ -40,6 +41,7 @@ export default function HomePage() {
   const { data: dash, loading, refreshing, error, reload } = useQuery<Dash>("dashboard", "/api/dashboard");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const { flash, run } = useConfirmFlash();
 
   if (!dash && loading) return <PageSkeleton variant="home" />;
   if (!dash) return <PageError title="Home" message={error} onRetry={() => void reload()} />;
@@ -64,7 +66,9 @@ export default function HomePage() {
   async function loadSample() {
     setSeeding(true);
     try {
-      await api("/api/demo/seed", { method: "POST" });
+      await run(async () => {
+        await api("/api/demo/seed", { method: "POST" });
+      });
       invalidateQueries();
       reload();
     } finally {
@@ -75,6 +79,7 @@ export default function HomePage() {
   return (
     <PageShell refreshing={refreshing}>
       <div className="screen">
+        {flash}
         <SummaryCard
           className="is-hero"
           label={scrub ? dayLabel(scrub.date) : "Safe to spend"}
