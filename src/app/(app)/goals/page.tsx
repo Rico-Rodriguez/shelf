@@ -7,6 +7,7 @@ import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
+import { goalPace } from "@/lib/goal-pace";
 
 type Goal = {
   id: string;
@@ -92,16 +93,20 @@ export default function GoalsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Goals" subtitle="A target for something ahead, or a balance you want gone.">
-        <button className="pixel-btn" type="button" onClick={openNew}>
+        <button className="shelf-btn" type="button" onClick={openNew}>
           Add
         </button>
       </PageHeader>
 
-      {goals.length === 0 ? <EmptyState>No goals yet.</EmptyState> : null}
+      {goals.length === 0 ? (
+        <EmptyState title="One goal is enough" action={<button className="shelf-btn" type="button" onClick={openNew}>Add a goal</button>}>
+          Save toward something, or pay a balance down. Link the account that holds the money.
+        </EmptyState>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
         {goals.map((goal) => (
-          <button key={goal.id} type="button" className="pixel-panel p-4 text-left" onClick={() => openEdit(goal)}>
+          <button key={goal.id} type="button" className="shelf-panel p-4 text-left" onClick={() => openEdit(goal)}>
             <h2 className="text-[20px] font-bold tracking-tight">{goal.name}</h2>
             <p className="text-[13px] text-[var(--muted)]">
               {goal.kind === "save_up" ? "Save up" : "Pay down"}
@@ -116,7 +121,8 @@ export default function GoalsPage() {
               />
             </div>
             <p className="text-[15px]">
-              <MoneyText cents={goal.progressCents} /> of <MoneyText cents={goal.targetCents} />
+              <MoneyText cents={goal.remainingCents} /> left
+              <span className={`ml-2 pace-${goalPace(goal).tone === "muted" ? "on" : goalPace(goal).tone}`}>{goalPace(goal).label}</span>
             </p>
           </button>
         ))}
@@ -125,13 +131,13 @@ export default function GoalsPage() {
       {editing ? (
         <Sheet title={editing === "new" ? "New goal" : "Edit goal"} onClose={() => setEditing(null)}>
           <form className="space-y-3" onSubmit={save}>
-            <input className="pixel-input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <select className="pixel-input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as "save_up" | "pay_down" })} aria-label="Kind">
+            <input className="shelf-input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <select className="shelf-input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as "save_up" | "pay_down" })} aria-label="Kind">
               <option value="save_up">Save up</option>
               <option value="pay_down">Pay down</option>
             </select>
-            <input className="pixel-input" inputMode="decimal" placeholder="Target" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
-            <input className="pixel-input" type="date" aria-label="Target date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
+            <input className="shelf-input" inputMode="decimal" placeholder="Target" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+            <input className="shelf-input" type="date" aria-label="Target date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
             <div>
               <div className="mb-1 text-[13px] text-[var(--muted)]">Linked accounts</div>
               <div className="card">
@@ -147,10 +153,10 @@ export default function GoalsPage() {
                 {accounts.length === 0 ? <div className="data-row text-[var(--muted)]">Add an account first.</div> : null}
               </div>
             </div>
-            <button className="pixel-btn w-full">Save</button>
+            <button className="shelf-btn w-full">Save</button>
           </form>
           {editing !== "new" ? (
-            <button className="pixel-btn danger w-full" type="button" onClick={() => remove(editing)}>
+            <button className="shelf-btn danger w-full" type="button" onClick={() => remove(editing)}>
               Delete
             </button>
           ) : null}

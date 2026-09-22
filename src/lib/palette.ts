@@ -1,17 +1,23 @@
 const LEGACY: Record<string, string> = {
-  "#6b8f5e": "#30D158",
-  "#c4a484": "#A2845E",
-  "#e07a5f": "#FF453A",
-  "#4a6fa5": "#0A84FF",
-  "#d4847c": "#FF375F",
-  "#e0a84a": "#FF9F0A",
-  "#7ba3a0": "#64D2FF",
-  "#8b6b9a": "#BF5AF2",
-  "#8b7355": "#8E8E93",
-  "#9a8b7a": "#98989D",
+  "#6b8f5e": "#1B7A62",
+  "#c4a484": "#8A5A2B",
+  "#e07a5f": "#D94A2E",
+  "#4a6fa5": "#2F5D8C",
+  "#d4847c": "#B04A3A",
+  "#e0a84a": "#C47A1A",
+  "#7ba3a0": "#3D6B5A",
+  "#8b6b9a": "#6B4F9A",
+  "#8b7355": "#5C6570",
+  "#9a8b7a": "#8B939E",
+  "#00c805": "#1B7A62",
+  "#30d158": "#1B7A62",
 };
 
 export function shelfColor(hex: string | null | undefined) {
-  if (!hex) return "#8E8E93";
+  if (!hex) return "#5C6570";
   return LEGACY[hex.trim().toLowerCase()] ?? hex;
+}
+
+export function categoryDot(hex: string | null | undefined) {
+  return shelfColor(hex);
 }

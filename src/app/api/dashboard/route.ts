@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { budgetItems, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
+import { accounts, budgetItems, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
-import { openBudgetItem, openGoal, openHolding, openRecurrence, openSnapshot, openTx } from "@/lib/secrets";
+import { openAccount, openBudgetItem, openGoal, openHolding, openRecurrence, openSnapshot, openTx } from "@/lib/secrets";
+import { goalPace } from "@/lib/goal-pace";
+import { classifyAccount } from "@/lib/networth";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +74,9 @@ export async function GET() {
     const nw = await computeNetWorth(dek);
     const itemsPlaid = await db.select().from(plaidItems);
     const income = await incomeInMonth(now.year, now.month, dek);
-    const goalRows = (await db.select().from(goals)).map((row) => openGoal(row, dek)).slice(0, 4);
+    const goalRows = (await db.select().from(goals)).map((row) => openGoal(row, dek));
+    const links = await db.select().from(goalAccounts);
+    const openedAccounts = (await db.select().from(accounts)).map((row) => openAccount(row, dek));
     const snapshots = (await db.select().from(netWorthSnapshots)).map((row) => openSnapshot(row, dek)).sort((a, b) => a.date.localeCompare(b.date)).slice(-18);
     const layout = parseLayout(cfg?.dashboardLayout);
     await refreshNotifications(dek);
@@ -82,7 +86,34 @@ export async function GET() {
       netWorth: nw,
       snapshots: snapshots.map((row) => ({ date: row.date, netWorthCents: row.netWorthCents })),
       cashFlow: { incomeCents: income, spendingCents: spentTotal, savedCents: income - spentTotal },
-      goals: goalRows.map((goal) => ({ id: goal.id, name: goal.name, targetCents: goal.targetCents, kind: goal.kind })),
+      goals: goalRows.slice(0, 4).map((goal) => {
+        const linked = links
+          .filter((link) => link.goalId === goal.id)
+          .map((link) => openedAccounts.find((account) => account.id === link.accountId))
+          .filter((account): account is (typeof openedAccounts)[number] => Boolean(account));
+        const progressCents =
+          goal.kind === "save_up"
+            ? linked.reduce((sum, account) => sum + (classifyAccount(account.type) === "asset" ? account.currentBalanceCents : 0), 0)
+            : Math.max(
+                0,
+                goal.targetCents - linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0),
+              );
+        const remainingCents =
+          goal.kind === "pay_down"
+            ? linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0)
+            : Math.max(0, goal.targetCents - progressCents);
+        return {
+          id: goal.id,
+          name: goal.name,
+          targetCents: goal.targetCents,
+          targetDate: goal.targetDate,
+          kind: goal.kind,
+          progressCents,
+          remainingCents,
+          pace: goalPace({ targetCents: goal.targetCents, targetDate: goal.targetDate, progressCents, remainingCents }),
+        };
+      }),
+      accountCount: openedAccounts.filter((account) => !account.isHidden).length,
       budget: {
         plannedCents: planned,
         spentCents: spentTotal,

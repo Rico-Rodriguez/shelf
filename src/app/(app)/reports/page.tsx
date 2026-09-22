@@ -43,7 +43,7 @@ export default function ReportsPage() {
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
       </PageHeader>
 
-      <div className="pixel-panel grid grid-cols-3 divide-x divide-[var(--line)]">
+      <div className="shelf-panel grid grid-cols-3 divide-x divide-[var(--line)]">
         <Stat label="Income" cents={data.incomeCents} />
         <Stat label="Spending" cents={data.spendingCents} />
         <Stat label="Net worth" cents={data.netWorth.netWorthCents} />
@@ -54,7 +54,7 @@ export default function ReportsPage() {
 
       <section>
         <h2 className="ios-section">Flow</h2>
-        <div className="pixel-panel px-2 py-3">
+        <div className="shelf-panel px-2 py-3">
           <SankeyChart nodes={data.sankey.nodes.map((n) => ({ ...n, color: shelfColor(n.color) }))} links={data.sankey.links} />
         </div>
       </section>
@@ -82,7 +82,7 @@ export default function ReportsPage() {
 
       <section>
         <h2 className="ios-section">Net worth</h2>
-        <div className="pixel-panel h-64 px-1 py-3">
+        <div className="shelf-panel h-64 px-1 py-3">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.snapshots.map((s) => ({ date: s.date, Worth: s.netWorthCents / 100 }))} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.1)" />
@@ -98,7 +98,7 @@ export default function ReportsPage() {
                   fontSize: 13,
                 }}
               />
-              <Area type="monotone" dataKey="Worth" stroke="#0A84FF" fill="rgba(10,132,255,0.16)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Worth" stroke="#1b7a62" fill="rgba(27,122,98,0.16)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

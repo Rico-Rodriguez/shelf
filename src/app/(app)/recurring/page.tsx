@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
@@ -19,6 +20,8 @@ type Rec = {
   isActive: boolean;
   source: string;
   lastPaidDate: string | null;
+  categoryId: string | null;
+  accountId: string | null;
 };
 
 type Draft = {
@@ -40,7 +43,7 @@ const CADENCES = [
   ["yearly", "Yearly"],
 ] as const;
 
-const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false };
+const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false, categoryId: "", accountId: "" };
 
 export default function RecurringPage() {
   const now = yearMonth();
@@ -50,6 +53,8 @@ export default function RecurringPage() {
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Rec | "new" | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [groups, setGroups] = useState<CatGroup[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(() => {
     void api<{ recurrences: Rec[] }>("/api/recurring").then((r) => setRows(r.recurrences));
@@ -57,6 +62,8 @@ export default function RecurringPage() {
 
   useEffect(() => {
     load();
+    void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
+    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
   }, [load]);
 
   const active = rows.filter((row) => row.isActive);
@@ -99,6 +106,8 @@ export default function RecurringPage() {
       cadence: row.cadence,
       nextDate: row.nextDate,
       isIncome: row.isIncome,
+      categoryId: row.categoryId ?? "",
+      accountId: row.accountId ?? "",
     });
     setEditing(row);
   }
@@ -120,6 +129,8 @@ export default function RecurringPage() {
           cadence: form.cadence,
           nextDate: form.nextDate,
           isIncome: form.isIncome,
+          categoryId: form.categoryId || null,
+          accountId: form.accountId || null,
         }),
       });
     }
@@ -150,10 +161,10 @@ export default function RecurringPage() {
         }
       >
         <div className="flex flex-wrap gap-2">
-          <button className="pixel-btn secondary" type="button" onClick={detect}>
+          <button className="shelf-btn secondary" type="button" onClick={detect}>
             Detect
           </button>
-          <button className="pixel-btn" type="button" onClick={openNew}>
+          <button className="shelf-btn" type="button" onClick={openNew}>
             Add
           </button>
         </div>
@@ -173,7 +184,7 @@ export default function RecurringPage() {
       </div>
 
       {suggestions.length ? (
-        <section className="pixel-panel space-y-3 p-4">
+        <section className="shelf-panel space-y-3 p-4">
           <h2 className="text-[17px] font-semibold">Detected</h2>
           <p className="text-[15px] text-[var(--muted)]">These are not on the calendar until you keep them.</p>
           <ul className="card">
@@ -187,21 +198,21 @@ export default function RecurringPage() {
                 </div>
                 <span className="flex shrink-0 items-center gap-3">
                   <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} signed />
-                  <button className="text-[15px] font-semibold text-[var(--terracotta)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
+                  <button className="text-[15px] font-semibold text-[var(--ink)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
                     Skip
                   </button>
                 </span>
               </li>
             ))}
           </ul>
-          <button className="pixel-btn" type="button" onClick={() => confirm(suggestions)}>
+          <button className="shelf-btn" type="button" onClick={() => confirm(suggestions)}>
             Keep these
           </button>
         </section>
       ) : null}
 
       {view === "calendar" ? (
-        <div className="pixel-panel p-3">
+        <div className="shelf-panel p-3">
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
             {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
               <div key={index} className="text-[11px] font-medium text-[var(--muted)]">
@@ -251,28 +262,44 @@ export default function RecurringPage() {
       {editing ? (
         <Sheet title={editing === "new" ? "New bill" : form.merchantName || "Bill"} onClose={() => setEditing(null)}>
           <form className="space-y-3" onSubmit={save}>
-            <input className="pixel-input" placeholder="Name" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
-            <input className="pixel-input" inputMode="decimal" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-            <select className="pixel-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })} aria-label="Cadence">
+            <input className="shelf-input" placeholder="Name" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
+            <input className="shelf-input" inputMode="decimal" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+            <select className="shelf-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })} aria-label="Cadence">
               {CADENCES.map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
             </select>
-            <input className="pixel-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required aria-label="Next date" />
+            <input className="shelf-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required aria-label="Next date" />
+            <label className="field">
+              <span className="field-label">Category</span>
+              <CategorySelect groups={groups} value={form.categoryId} onChange={(id) => setForm({ ...form, categoryId: id })} emptyLabel="No category" />
+            </label>
+            <label className="field">
+              <span className="field-label">Account</span>
+              <select className="shelf-input" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+                <option value="">Any account</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name}</option>
+                ))}
+              </select>
+            </label>
             <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
               Income
               <span className={`switch ${form.isIncome ? "on" : ""}`} />
             </button>
-            <button className="pixel-btn w-full">Save</button>
+            <button className="shelf-btn w-full">Save</button>
           </form>
           {editing !== "new" ? (
             <div className="flex gap-2">
-              <button className="pixel-btn ghost flex-1" type="button" onClick={() => pause(editing)}>
+              <button className="shelf-btn ghost flex-1" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); load(); })}>
+                Skip cycle
+              </button>
+              <button className="shelf-btn ghost flex-1" type="button" onClick={() => pause(editing)}>
                 {editing.isActive ? "Pause" : "Resume"}
               </button>
-              <button className="pixel-btn danger flex-1" type="button" onClick={() => remove(editing)}>
+              <button className="shelf-btn danger flex-1" type="button" onClick={() => remove(editing)}>
                 Delete
               </button>
             </div>

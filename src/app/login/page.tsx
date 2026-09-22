@@ -83,30 +83,30 @@ export default function LoginPage() {
       ) : step === "google" ? (
         <div className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
+            <p className="brand-mark text-[28px]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Sign in</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">Use the Google account this Shelf belongs to.</p>
           </div>
           {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
-          <a className="pixel-btn flex w-full items-center justify-center" href="/api/auth/google">
+          <a className="shelf-btn flex w-full items-center justify-center" href="/api/auth/google">
             Continue with Google
           </a>
         </div>
       ) : step === "password" ? (
         <form onSubmit={onPassword} className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
+            <p className="brand-mark text-[28px]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Welcome back</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">
               {email
-                ? `Signed in as ${email}. This password opens your sealed books.`
-                : "Password first, then your authenticator."}
+                ? `Signed in as ${email}. Bank tokens and notes stay sealed on this Shelf.`
+                : "Your password unlocks a private vault. Bank tokens never sit in plain text."}
             </p>
           </div>
           <label className="field">
             <span className="field-label">Password</span>
             <input
-              className="pixel-input"
+              className="shelf-input"
               type="password"
               autoFocus
               autoComplete="current-password"
@@ -115,21 +115,21 @@ export default function LoginPage() {
             />
           </label>
           {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
-          <button className="pixel-btn w-full" disabled={busy}>
+          <button className="shelf-btn w-full" disabled={busy}>
             {busy ? "Checking…" : "Continue"}
           </button>
         </form>
       ) : (
         <form onSubmit={onCode} className="w-full max-w-sm space-y-5">
           <div>
-            <p className="text-[15px] font-semibold tracking-[-0.02em]">Shelf</p>
+            <p className="brand-mark text-[28px]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Authenticator</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">Enter the 6-digit code from your app.</p>
           </div>
           <label className="field">
             <span className="field-label">Code</span>
             <input
-              className="pixel-input"
+              className="shelf-input"
               inputMode="numeric"
               autoComplete="one-time-code"
               autoFocus
@@ -139,7 +139,7 @@ export default function LoginPage() {
             />
           </label>
           {error ? <p className="text-[15px] text-[var(--danger)]">{error}</p> : null}
-          <button className="pixel-btn w-full" disabled={busy}>
+          <button className="shelf-btn w-full" disabled={busy}>
             {busy ? "Checking…" : "Unlock"}
           </button>
         </form>

@@ -20,7 +20,7 @@ export function CategorySelect({
   emptyLabel?: string;
 }) {
   return (
-    <select className="pixel-input" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className="shelf-input" value={value} onChange={(e) => onChange(e.target.value)}>
       {emptyLabel != null ? <option value="">{emptyLabel}</option> : null}
       {groups.map((group) => (
         <optgroup key={group.id} label={group.name}>
@@ -49,11 +49,11 @@ export function CategoryPicker({
 
   return (
     <div>
-      <button type="button" className="pixel-input text-left font-medium" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="shelf-input text-left font-medium" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         {current?.name ?? "Uncategorized"}
       </button>
       {open ? (
-        <div className="mt-2 max-h-64 overflow-auto rounded-[12px] border border-[var(--line)] bg-[var(--linen)]">
+        <div className="mt-2 max-h-64 overflow-auto rounded-[12px] border border-[var(--line)] bg-[var(--paper)]">
           <button
             type="button"
             className={`block w-full px-3.5 py-2.5 text-left text-[15px] ${value ? "" : "font-semibold text-[var(--positive)]"}`}

@@ -125,27 +125,27 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
         </button>
       </div>
 
-      <div className="pixel-panel max-w-lg space-y-3 p-4">
+      <div className="shelf-panel max-w-lg space-y-3 p-4">
         <label className="block text-[15px]">
           Name
-          <input className="pixel-input mt-1" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="shelf-input mt-1" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block text-[15px]">
           Balance
-          <input className="pixel-input mt-1" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} />
+          <input className="shelf-input mt-1" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} />
         </label>
         <div className="flex gap-2">
-          <button className="pixel-btn" type="button" onClick={save}>
+          <button className="shelf-btn" type="button" onClick={save}>
             Save
           </button>
-          <button className="pixel-btn danger" type="button" onClick={remove}>
+          <button className="shelf-btn danger" type="button" onClick={remove}>
             Remove account
           </button>
         </div>
       </div>
 
       {snapshots.length > 1 ? (
-        <div className="pixel-panel h-28 p-3">
+        <div className="shelf-panel h-28 p-3">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={snapshots.map((row) => ({ ...row, value: row.balanceCents / 100 }))}>
               <YAxis hide domain={["dataMin", "dataMax"]} />
@@ -192,7 +192,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           ))}
           {txs.length === 0 ? <div className="data-row text-[var(--muted)]">No transactions yet.</div> : null}
         </div>
-        <Link href={activityHref({ accountId: id })} className="mt-2 inline-block text-[17px] text-[var(--terracotta)]">
+        <Link href={activityHref({ accountId: id })} className="mt-2 inline-block text-[17px] text-[var(--ink)]">
           All activity
         </Link>
       </section>

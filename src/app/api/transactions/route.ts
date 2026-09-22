@@ -82,10 +82,24 @@ export async function GET(request: Request) {
     const openedSplits = splitRows.map((row) => openSplit(row, dek));
 
     if (q) {
-      const needle = q.toLowerCase();
-      rows = rows.filter((tx) =>
-        `${tx.name} ${tx.merchantName ?? ""} ${tx.originalDescription ?? ""}`.toLowerCase().includes(needle),
-      );
+      const amount = /^(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)$/.exec(q.trim());
+      if (amount) {
+        const cents = Math.round(Number(amount[2]) * 100);
+        const abs = (value: number) => Math.abs(value);
+        rows = rows.filter((tx) => {
+          const value = abs(tx.amountCents);
+          if (amount[1] === ">") return value > cents;
+          if (amount[1] === ">=") return value >= cents;
+          if (amount[1] === "<") return value < cents;
+          if (amount[1] === "<=") return value <= cents;
+          return value === cents;
+        });
+      } else {
+        const needle = q.toLowerCase();
+        rows = rows.filter((tx) =>
+          `${tx.name} ${tx.merchantName ?? ""} ${tx.originalDescription ?? ""} ${tx.notes ?? ""}`.toLowerCase().includes(needle),
+        );
+      }
     }
     const tagged = rows.map((tx) => ({
       tx,

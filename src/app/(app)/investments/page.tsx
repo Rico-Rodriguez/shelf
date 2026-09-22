@@ -53,7 +53,7 @@ export default function InvestmentsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Investments" subtitle="Holdings from connected accounts, grouped by account." />
-      <div className="pixel-panel grid grid-cols-2 divide-x divide-[var(--line)] p-0">
+      <div className="shelf-panel grid grid-cols-2 divide-x divide-[var(--line)] p-0">
         <div className="px-4 py-3">
           <div className="text-[13px] text-[var(--muted)]">Total</div>
           <div className="text-[28px] font-bold tracking-tight">
@@ -72,7 +72,7 @@ export default function InvestmentsPage() {
 
       {pie.length ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="pixel-panel h-64 p-4">
+          <div className="shelf-panel h-64 p-4">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={pie} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={80}>

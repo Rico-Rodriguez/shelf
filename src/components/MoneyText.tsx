@@ -4,10 +4,12 @@ export function MoneyText({
   cents,
   signed = false,
   className = "",
+  hero = false,
 }: {
   cents: number;
   signed?: boolean;
   className?: string;
+  hero?: boolean;
 }) {
   const value = signed ? formatMoney(Math.abs(cents)) : formatMoney(cents);
   const prefix = signed ? (cents > 0 ? "+" : cents < 0 ? "-" : "") : "";
@@ -19,7 +21,7 @@ export function MoneyText({
         : ""
     : "";
   return (
-    <span className={`tabular-nums ${tone} ${className}`}>
+    <span className={`money ${hero ? "hero-number" : ""} ${tone} ${className}`}>
       {prefix}
       {value}
     </span>

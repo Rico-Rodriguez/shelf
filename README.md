@@ -1,8 +1,8 @@
 # Shelf
 
-A private, single-user money app with the shape of a modern personal-finance dashboard and the look of a tidy pixel home. Connect real banks with [Plaid’s Trial / Sandbox APIs](https://plaid.com/docs/account/billing/), or unpack the sample house first.
+A private money app with a quiet luxury finish: accounts, a monthly plan, and one Insights view. Connect real banks with [Plaid’s Trial / Sandbox APIs](https://plaid.com/docs/account/billing/), or load sample data from Settings.
 
-This is original software. It is not affiliated with Monarch or Unpacking.
+This is original software. It is not affiliated with Monarch.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ npm run icons
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Set a lock (password), then **Settings → Unpack sample house**.
+Open [http://localhost:3000](http://localhost:3000). Set a lock (password), then **Settings → Load sample data**.
 
 Optional real Postgres (same schema as Railway):
 
@@ -49,9 +49,9 @@ Never paste keys into chat. Access tokens are encrypted at rest.
 
 A `Dockerfile` is included if you prefer a container. Health check: `GET /api/health`.
 
-## What is in the house
+## What Shelf includes
 
-Home (rearrange widgets), accounts (Plaid + handmade jars), transactions (search, place/review, tags, hide, transfers), rules, category and flex budgets with rollovers, recurring calendar, cash flow, reports + Sankey + net worth, investments, goals, JSON/CSV export.
+Home answers whether this month is okay, then review, budget, bills, and goals. Insights combines cash flow, this month’s spending and net worth, and holdings. Rules can be edited, previewed, and ordered. JSON/CSV export stays in Settings.
 
 ## Scripts
 

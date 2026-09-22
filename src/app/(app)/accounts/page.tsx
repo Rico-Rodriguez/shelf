@@ -111,12 +111,12 @@ export default function AccountsPage() {
           {data.plaidConfigured ? (
             <>
               <ConnectBank onLinked={reload} />
-              <button className="pixel-btn secondary" type="button" onClick={sync}>
+              <button className="shelf-btn secondary" type="button" onClick={sync}>
                 Refresh
               </button>
             </>
           ) : null}
-          <button className="pixel-btn" type="button" onClick={() => setOpen(true)}>
+          <button className="shelf-btn" type="button" onClick={() => setOpen(true)}>
             Add
           </button>
         </div>
@@ -186,11 +186,11 @@ export default function AccountsPage() {
             <div className="field-stack">
               <label className="field">
                 <span className="field-label">Name</span>
-                <input className="pixel-input" placeholder="Checking, Home, Car…" value={name} onChange={(e) => setName(e.target.value)} required />
+                <input className="shelf-input" placeholder="Checking, Home, Car…" value={name} onChange={(e) => setName(e.target.value)} required />
               </label>
               <label className="field">
                 <span className="field-label">Kind</span>
-                <select className="pixel-input" value={kind} onChange={(e) => setKind(e.target.value)}>
+                <select className="shelf-input" value={kind} onChange={(e) => setKind(e.target.value)}>
                   <option value="cash">Cash / bank</option>
                   <option value="property">Home</option>
                   <option value="vehicle">Car</option>
@@ -199,7 +199,7 @@ export default function AccountsPage() {
               </label>
               <label className="field">
                 <span className="field-label">Type</span>
-                <select className="pixel-input" value={type} onChange={(e) => setType(e.target.value)}>
+                <select className="shelf-input" value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="depository">Deposit</option>
                   <option value="investment">Investment</option>
                   <option value="credit">Credit card</option>
@@ -209,9 +209,9 @@ export default function AccountsPage() {
               </label>
               <label className="field">
                 <span className="field-label">Balance</span>
-                <input className="pixel-input" inputMode="decimal" placeholder="0.00" value={balance} onChange={(e) => setBalance(e.target.value)} />
+                <input className="shelf-input" inputMode="decimal" placeholder="0.00" value={balance} onChange={(e) => setBalance(e.target.value)} />
               </label>
-              <button className="pixel-btn w-full">Add account</button>
+              <button className="shelf-btn w-full">Add account</button>
             </div>
           </form>
         </Sheet>
