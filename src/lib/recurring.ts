@@ -71,7 +71,7 @@ export type RecurrenceDraft = {
   kind?: "bill" | "subscription";
 };
 
-async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
+async function collectDrafts(dek: Buffer, includeBlocked = false): Promise<RecurrenceDraft[]> {
   const db = await getDb();
   const txs = (await db.select().from(transactions)).map((tx) => openTx(tx, dek));
   const groups = new Map<string, typeof txs>();
@@ -104,7 +104,8 @@ async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
     if (!cadence) continue;
     const last = dates.sort().at(-1)!;
     const already = existing.find((r) => merchantKey(r.merchantName) === merchant);
-    if (already || blocked.has(merchant)) continue;
+    if (already) continue;
+    if (!includeBlocked && blocked.has(merchant)) continue;
     const sample = similar[0];
     drafts.push({
       merchantName: sample.merchantName || sample.name,
@@ -120,8 +121,8 @@ async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
   return drafts;
 }
 
-export async function previewRecurring(dek: Buffer) {
-  return collectDrafts(dek);
+export async function previewRecurring(dek: Buffer, opts?: { includeBlocked?: boolean }) {
+  return collectDrafts(dek, Boolean(opts?.includeBlocked));
 }
 
 export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
@@ -133,7 +134,8 @@ export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
   let created = 0;
   for (const draft of drafts) {
     const merchant = merchantKey(draft.merchantName);
-    if (!merchant || existing.has(merchant) || blocked.has(merchant)) continue;
+    if (!merchant || existing.has(merchant)) continue;
+    if (blocked.has(merchant)) await unsuppressMerchant(draft.merchantName);
     await db.insert(recurrences).values({
       id: nid(),
       ...sealedRecurrenceWrite({ merchantName: draft.merchantName, amountCents: draft.amountCents }, dek),
