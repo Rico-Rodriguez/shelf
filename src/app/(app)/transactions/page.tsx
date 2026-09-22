@@ -17,6 +17,7 @@ import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
 import { rememberCategory } from "@/lib/category-memory";
 import { merchantMatchKey } from "@/lib/plan";
+import { publishReviewCount } from "@/lib/review-count";
 
 type RuleApply = {
   id: string;
@@ -129,7 +130,9 @@ function Activity() {
       }
       const ghosts = r.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
       setRows(r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
-      setUnreviewed(Math.max(0, r.unreviewed - ghosts));
+      const remaining = Math.max(0, r.unreviewed - ghosts);
+      setUnreviewed(remaining);
+      publishReviewCount(remaining);
       setFaces(r.faces ?? {});
       setFrequentCategoryIds(r.frequentCategoryIds ?? []);
     });
@@ -192,7 +195,11 @@ function Activity() {
       if (reviewed === "false") return current.filter((row) => !gone.has(row.id));
       return current.map((row) => (gone.has(row.id) ? { ...row, reviewed: true } : row));
     });
-    setUnreviewed((count) => Math.max(0, count - ids.length));
+    setUnreviewed((count) => {
+      const remaining = Math.max(0, count - ids.length);
+      publishReviewCount(remaining);
+      return remaining;
+    });
   }
 
   function restoreCleared(ids: string[]) {

@@ -79,11 +79,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     loadNotes();
   }, [loadNotes, path]);
 
-  useEffect(() => {
+  const refreshReviewCount = useCallback(() => {
     void api<{ unreviewed: number }>("/api/transactions?countOnly=1")
       .then((res) => setReviewCount(res.unreviewed))
       .catch(() => undefined);
-  }, [path]);
+  }, []);
+
+  useEffect(() => {
+    refreshReviewCount();
+  }, [path, refreshReviewCount]);
+
+  useEffect(() => {
+    const onReview = (event: Event) => {
+      const count = (event as CustomEvent<number>).detail;
+      if (typeof count === "number" && Number.isFinite(count)) setReviewCount(Math.max(0, count));
+    };
+    window.addEventListener("shelf-review", onReview);
+    return () => window.removeEventListener("shelf-review", onReview);
+  }, []);
 
   useEffect(() => {
     try {
@@ -117,10 +130,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const onSync = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
       if (detail === "syncing" || detail === "synced" || detail === "error") setSync(detail);
+      if (detail === "synced") refreshReviewCount();
     };
     window.addEventListener("shelf-sync", onSync);
     return () => window.removeEventListener("shelf-sync", onSync);
-  }, []);
+  }, [refreshReviewCount]);
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
@@ -182,7 +196,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
                       <Icon name={item.icon} size={16} />
                       <span className="flex-1">{item.label}</span>
-                      {item.href === "/transactions" && reviewCount > 0 ? <span className="nav-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
+                      {item.href === "/transactions" && reviewCount > 0 ? (
+                        <span className="nav-count" title={`${reviewCount} to review`}>
+                          {reviewCount > 99 ? "99+" : reviewCount} to review
+                        </span>
+                      ) : null}
                     </Link>
                   );
                 })}
@@ -222,9 +240,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <span className="ios-tab-glyph" aria-hidden>
                   <Icon name={item.icon} size={24} />
-                  {item.href === "/transactions" && reviewCount > 0 ? <span className="tab-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
                 </span>
-                {item.label}
+                <span className="ios-tab-label">
+                  {item.href === "/transactions" && reviewCount > 0 ? `${reviewCount > 99 ? "99+" : reviewCount} to review` : item.label}
+                </span>
               </Link>
             );
           })}
