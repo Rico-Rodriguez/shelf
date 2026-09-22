@@ -560,7 +560,6 @@ function CategoryRow({
   const paced = row.availableCents > 0;
   const over = paced && row.remainingCents < 0;
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
-  const paceNote = pace.tone === "over" ? "Over" : pace.tone === "hot" ? "Running hot" : "";
   return (
     <button type="button" className="budget-row" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
@@ -571,18 +570,26 @@ function CategoryRow({
           </span>
           {paced ? (
             <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">
-              <MoneyText cents={row.spentCents} /> of <MoneyText cents={row.availableCents} />
+              {over ? (
+                <>
+                  <MoneyText cents={Math.abs(row.remainingCents)} /> over a <MoneyText cents={row.availableCents} /> plan
+                </>
+              ) : (
+                <>
+                  <MoneyText cents={row.availableCents} /> plan
+                </>
+              )}
               {row.rolloverInCents > 0 ? (
                 <>
                   {" · "}
                   <MoneyText cents={row.rolloverInCents} /> carried in
                 </>
               ) : null}
-              {paceNote ? <span className="text-[var(--danger)]"> · {paceNote}</span> : null}
+              {pace.tone === "hot" ? <span className="text-[var(--danger)]"> · Running hot</span> : null}
             </span>
           ) : null}
         </span>
-        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={paced ? row.remainingCents : row.spentCents} />
+        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={row.spentCents} />
       </span>
       {paced ? (
         <span className="my-2.5 block">
@@ -672,7 +679,7 @@ function CategorySheet({
   return (
     <Sheet title={editor.name || "Category"} onClose={onClose}>
       <form className="space-y-4" onSubmit={save}>
-        <Field label="Plan">
+        <Field label="Plan" hint="What you set aside. This is not a charge.">
           <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => onChange({ ...editor, planned: event.target.value })} />
         </Field>
         <div>
@@ -680,7 +687,7 @@ function CategorySheet({
           {txs == null ? (
             <p className="mt-2 text-[15px] text-[var(--muted)]">Loading…</p>
           ) : txs.length === 0 ? (
-            <p className="mt-2 text-[15px] text-[var(--muted)]">Nothing in this category yet.</p>
+            <p className="mt-2 text-[15px] text-[var(--muted)]">No purchases in this category this month.</p>
           ) : (
             <div className="card mt-2">
               {txs.map((tx) => (

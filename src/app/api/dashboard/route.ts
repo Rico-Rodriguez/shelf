@@ -125,7 +125,8 @@ export async function GET() {
       .filter((row) => !row.isIncome && row.nextDate >= today && row.nextDate <= horizon)
       .reduce((sum, row) => sum + row.amountCents, 0);
     const incomeBase = monthRow.plannedIncomeCents > 0 ? monthRow.plannedIncomeCents : income;
-    const committed = fixedPlanned > 0 ? fixedPlanned : upcomingBills;
+    const committedFromPlan = fixedPlanned > 0;
+    const committed = committedFromPlan ? fixedPlanned : upcomingBills;
     const trail = await trailingCategoryAverage(now.year, now.month, dek);
     const pendingCents = await pendingOutflow(now.year, now.month, dek);
     const cash = openedAccounts
@@ -186,6 +187,7 @@ export async function GET() {
         cents: incomeBase - committed - goalsMonthly - variableSpent,
         incomeCents: incomeBase,
         committedCents: committed,
+        committedFrom: committedFromPlan ? "plan" : "bills",
         goalsCents: goalsMonthly,
         spentCents: variableSpent,
         cashCents: cash,

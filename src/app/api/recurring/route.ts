@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       suggestions?: RecurrenceDraft[];
     };
     if (body.action === "detect") {
-      return NextResponse.json({ suggestions: await previewRecurring(dek) });
+      return NextResponse.json({ suggestions: await previewRecurring(dek, { includeBlocked: true }) });
     }
     if (body.action === "confirm") {
       return NextResponse.json(await confirmRecurring(dek, body.suggestions ?? []));
