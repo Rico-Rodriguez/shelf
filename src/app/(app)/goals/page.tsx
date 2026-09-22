@@ -9,6 +9,7 @@ import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
+import { mediumDate } from "@/lib/dates";
 import { goalPace } from "@/lib/goal-pace";
 import { useQuery } from "@/lib/use-query";
 
@@ -113,14 +114,15 @@ export default function GoalsPage() {
         {goals.map((goal) => {
           const pace = goalPace(goal);
           const tone: SummaryTone = pace.tone === "behind" ? "bad" : pace.tone === "muted" ? "neutral" : "good";
+          const done = goal.remainingCents <= 0 && goal.targetCents > 0;
           return (
             <SummaryCard
               key={goal.id}
               compact
               label={goal.name}
               labelEmphasis
-              cents={goal.remainingCents}
-              suffix="left"
+              cents={done ? goal.targetCents : goal.remainingCents}
+              suffix={done ? (goal.kind === "pay_down" ? "paid" : "saved") : "left"}
               status={pace.label ? { label: pace.label, tone } : null}
               meter={{
                 value: goal.progressCents,
@@ -130,7 +132,7 @@ export default function GoalsPage() {
               footer={
                 <span className="flex w-full items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate">
-                    {goal.targetDate ? `By ${goal.targetDate}` : goal.kind === "save_up" ? "Save up" : "Pay down"}
+                    {goal.targetDate ? `By ${mediumDate(goal.targetDate)}` : goal.kind === "save_up" ? "Save up" : "Pay down"}
                     {goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
                   </span>
                   {goal.monthlyCents ? (

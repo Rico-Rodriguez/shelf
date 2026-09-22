@@ -165,9 +165,8 @@ export async function GET() {
         const group = groupRows.find((row) => row.id === category?.groupId);
         return { id, name: category?.name ?? "Other", cents, color: shelfColor(group?.color) };
       })
-      .filter((row) => row.cents > 0 && !fixedIds.has(row.id))
-      .sort((a, b) => b.cents - a.cents)
-      .slice(0, 5);
+      .filter((row) => row.cents > 0)
+      .sort((a, b) => b.cents - a.cents);
     const variableUsual =
       trail.total == null
         ? null

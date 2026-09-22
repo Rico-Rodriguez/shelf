@@ -298,7 +298,7 @@ function Chart({
             <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
           </linearGradient>
         </defs>
-        <path d={area} fill={`url(#${gradientId})`} />
+        <path className="summary-area" pathLength={1} d={area} fill={`url(#${gradientId})`} />
         {refY != null ? (
           <line
             x1="0"
@@ -311,7 +311,7 @@ function Chart({
             strokeDasharray="4 4"
           />
         ) : null}
-        <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path className="summary-line" pathLength={1} d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
       {active != null ? <span className="summary-scrub" style={{ left: `${(coords[active].x / width) * 100}%` }} /> : null}
       {dot ? <span className="summary-dot" style={{ left: `${(dot.x / width) * 100}%`, top: `${(dot.y / height) * 100}%` }} /> : null}
