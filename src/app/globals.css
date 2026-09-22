@@ -1039,7 +1039,66 @@ a:focus-visible {
   }
 
   .page-shell {
+    position: relative;
     animation: none;
+  }
+
+  .refresh-bar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 2;
+    height: 2px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .refresh-bar.is-on {
+    opacity: 1;
+  }
+
+  .refresh-bar.is-on::after {
+    content: "";
+    display: block;
+    width: 35%;
+    height: 100%;
+    background: var(--accent);
+    animation: refresh-slide 900ms ease-in-out infinite;
+  }
+
+  @keyframes refresh-slide {
+    from {
+      transform: translateX(-120%);
+    }
+    to {
+      transform: translateX(320%);
+    }
+  }
+
+  .route-fade {
+    animation: rise-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .safe-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 12px;
+  }
+
+  .safe-facts > span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .safe-kicker {
+    color: var(--tertiary);
+    font-size: 12px;
+    font-weight: 550;
+    line-height: 16px;
   }
 
   .chart-frame {
@@ -1141,8 +1200,8 @@ a:focus-visible {
     color: var(--accent-ink);
   }
 
-  .is-pending {
-    opacity: 0.55;
+  .is-pending .money {
+    color: var(--muted);
   }
 
   .undo-bar {
@@ -1615,6 +1674,8 @@ main h1 + p,
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter > *,
+  .route-fade,
+  .refresh-bar.is-on::after,
   .app-arrive,
   .hint,
   .empty-state,

@@ -10,20 +10,50 @@ export function Icon({
   name,
   size = 22,
   title,
+  filled = false,
 }: {
   name: string;
   size?: number;
   title?: string;
+  filled?: boolean;
 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden={title ? undefined : true} role={title ? "img" : undefined}>
       {title ? <title>{title}</title> : null}
-      {glyph(name)}
+      {glyph(name, filled)}
     </svg>
   );
 }
 
-function glyph(name: string) {
+function glyph(name: string, filled: boolean) {
+  if (filled) {
+    switch (name) {
+      case "home":
+        return <path fill="currentColor" d="M12 3.15 3 10.35V20.2c0 .72.58 1.3 1.3 1.3h5.15v-6.15h5.1V21.5H19.7c.72 0 1.3-.58 1.3-1.3V10.35L12 3.15Z" />;
+      case "list":
+        return (
+          <>
+            <path fill="currentColor" d="M8 6h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Zm0 5h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Zm0 5h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Z" />
+            <circle cx="4.4" cy="7" r="1.45" fill="currentColor" />
+            <circle cx="4.4" cy="12" r="1.45" fill="currentColor" />
+            <circle cx="4.4" cy="17" r="1.45" fill="currentColor" />
+          </>
+        );
+      case "chart":
+        return <path fill="currentColor" d="M3 20.2a1 1 0 0 1 1-1h16.2a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1ZM5.2 10.2a1.2 1.2 0 0 1 1.2-1.2h1.2A1.2 1.2 0 0 1 8.8 10.2V18H5.2v-7.8Zm5.2-5a1.2 1.2 0 0 1 1.2-1.2h1.2a1.2 1.2 0 0 1 1.2 1.2V18h-3.6V5.2Zm5.2 4.2a1.2 1.2 0 0 1 1.2-1.2h1.2a1.2 1.2 0 0 1 1.2 1.2V18h-3.6V9.4Z" />;
+      case "wallet":
+        return (
+          <>
+            <path fill="currentColor" d="M5.4 5.5h12.2A2.4 2.4 0 0 1 20 7.9v1.15H5.6A2.1 2.1 0 0 1 3.5 6.95 1.45 1.45 0 0 1 4.95 5.5h.45Zm-1.9 4.7h16.1c.72 0 1.3.58 1.3 1.3v7.2c0 .72-.58 1.3-1.3 1.3H5.4A2.4 2.4 0 0 1 3 17.6V10.2h.5Z" />
+            <circle cx="16.4" cy="14.6" r="1.15" fill="var(--paper)" />
+          </>
+        );
+      case "gear":
+        return <path fill="currentColor" d="M10.2 2.8h3.6l.45 2.05a6.2 6.2 0 0 1 1.55.9l1.95-.85 1.8 3.1-1.5 1.4a6.4 6.4 0 0 1 0 1.8l1.5 1.4-1.8 3.1-1.95-.85a6.2 6.2 0 0 1-1.55.9l-.45 2.05h-3.6l-.45-2.05a6.2 6.2 0 0 1-1.55-.9l-1.95.85-1.8-3.1 1.5-1.4a6.4 6.4 0 0 1 0-1.8l-1.5-1.4 1.8-3.1 1.95.85a6.2 6.2 0 0 1 1.55-.9l.45-2.05ZM12 9.1A2.9 2.9 0 1 0 12 14.9 2.9 2.9 0 0 0 12 9.1Z" />;
+      default:
+        break;
+    }
+  }
   switch (name) {
     case "home":
       return <path {...stroke} d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" />;

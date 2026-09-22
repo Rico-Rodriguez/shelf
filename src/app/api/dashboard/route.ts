@@ -209,7 +209,24 @@ export async function GET() {
         items: unreviewed.slice(0, 6),
       },
       recurring: upcoming,
-      transactions: recent,
+      transactions: recent
+        .filter((tx) => !tx.hidden)
+        .slice(0, 5)
+        .map((tx) => {
+          const category = cats.find((row) => row.id === tx.categoryId);
+          const group = category ? groupRows.find((row) => row.id === category.groupId) : null;
+          const account = openedAccounts.find((row) => row.id === tx.accountId);
+          return {
+            id: tx.id,
+            name: tx.name,
+            merchantName: tx.merchantName,
+            amountCents: tx.amountCents,
+            date: tx.date,
+            pending: tx.pending,
+            category: category ? { name: category.name, color: shelfColor(group?.color) } : null,
+            accountName: account?.name ?? null,
+          };
+        }),
       investments: { totalCents: investTotal, count: holds.length },
       plaidConfigured: plaidConfigured(),
       itemCount: itemsPlaid.length,

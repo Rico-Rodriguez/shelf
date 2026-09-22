@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
@@ -24,7 +24,7 @@ type Rule = { id: string; matchMerchant: string | null; actionCategoryId: string
 function Merchant() {
   const params = useSearchParams();
   const name = params.get("name") ?? "";
-  const { data, loading } = useQuery<{ transactions: Tx[] }>(
+  const { data, loading, error, reload } = useQuery<{ transactions: Tx[] }>(
     name ? `merchant:${name}` : null,
     name ? `/api/transactions?merchant=${encodeURIComponent(name)}` : null,
   );
@@ -74,7 +74,7 @@ function Merchant() {
     );
   }
   if (!rows && loading) return <PageSkeleton title={name} rows={4} />;
-  if (!rows) return <PageSkeleton title={name} rows={4} />;
+  if (!rows) return <PageError title={name} message={error} onRetry={() => void reload()} />;
 
   return (
     <div className="space-y-5">

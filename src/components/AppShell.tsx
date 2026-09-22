@@ -123,14 +123,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const active = isActive(path, item.href);
             return (
               <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
-                <Icon name={item.icon} size={16} />
+                <Icon name={item.icon} size={16} filled={active} />
                 <span className="flex-1">{item.label}</span>
                 {item.href === "/transactions" && reviewCount > 0 ? <span className="nav-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
               </Link>
             );
           })}
           <Link href="/settings" prefetch aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav mt-auto ${isActive(path, "/settings") ? "active" : ""}`}>
-            <Icon name="gear" size={16} />
+            <Icon name="gear" size={16} filled={isActive(path, "/settings")} />
             Settings
           </Link>
         </nav>
@@ -150,7 +150,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
         <main ref={scrollerRef} className="app-main">
-          {children}
+          <div key={path} className="route-fade">
+            {children}
+          </div>
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
@@ -165,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-label={item.href === "/transactions" && reviewCount > 0 ? `${item.label}, ${reviewCount} to review` : item.label}
               >
                 <span className="ios-tab-glyph" aria-hidden>
-                  <Icon name={item.icon} size={24} />
+                  <Icon name={item.icon} size={24} filled={active} />
                   {item.href === "/transactions" && reviewCount > 0 ? <span className="tab-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
                 </span>
                 {item.label}
