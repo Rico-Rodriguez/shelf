@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { ConfirmMark } from "@/components/ConfirmMark";
+import { DismissRow } from "@/components/DismissRow";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { Icon } from "@/components/Icon";
 import { ReviewDeck } from "@/components/ReviewDeck";
@@ -106,6 +107,7 @@ function Activity() {
   const requestId = useRef(0);
   const cleared = useRef(new Set<string>());
   const [doneId, setDoneId] = useState<string | null>(null);
+  const [leavingId, setLeavingId] = useState<string | null>(null);
   const { flash, run } = useConfirmFlash();
 
   useEffect(() => {
@@ -135,7 +137,6 @@ function Activity() {
     queryString ? `/api/transactions?${queryString}` : "/api/transactions",
     { keepPrevious: true },
   );
-  const { data: dash } = useQuery<{ cashFlow: { spendingCents: number } }>("dashboard", "/api/dashboard");
   const load = reload;
   const [payloadSeen, setPayloadSeen] = useState<TxPayload | null>(null);
   if (payload && payload !== payloadSeen) {
@@ -228,11 +229,15 @@ function Activity() {
   }
 
   async function hideTx(id: string) {
+    setLeavingId(id);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) await new Promise((resolve) => window.setTimeout(resolve, 280));
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
     offerUndo("Hidden", async () => {
       await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
       load();
     });
+    setLeavingId(null);
     setRows((current) => current.filter((row) => row.id !== id));
     load();
   }
@@ -365,46 +370,46 @@ function Activity() {
 
   return (
     <PageShell refreshing={refreshing}>
-    <div className="space-y-4">
+    <div className="screen">
       {flash}
       <PageHeader title="Activity">
-        <button className="text-btn" type="button" onClick={() => setShowAdd(true)}>
+        <button className="shelf-btn" type="button" onClick={() => setShowAdd(true)}>
           Add
         </button>
       </PageHeader>
 
-      {!filtered && dash ? (
-        <Link href="/insights" className="spent-strip">
-          <span>
-            <span className="safe-kicker">Spent this month</span>
-            <MoneyText className="spent-strip-amount" cents={dash.cashFlow.spendingCents} />
-          </span>
+      {unreviewed > 0 && !(focus && inReviewMode) ? (
+        <button className="review-banner w-full text-left" type="button" onClick={() => replaceQuery({ reviewed: "false", focus: "1" })}>
+          <span className="nav-count">{unreviewed > 99 ? "99+" : unreviewed}</span>
+          <span className="min-w-0 flex-1">To review</span>
           <Icon name="chevron" size={18} />
-        </Link>
+        </button>
+      ) : null}
+      {focus && inReviewMode ? (
+        <button className="text-btn self-start" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+          Done
+        </button>
       ) : null}
 
-      <div className="search-field">
-        <Icon name="search" size={16} />
-        <input
-          className="shelf-input ios-search"
-          placeholder="Search merchants or notes"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Search transactions"
-        />
+      <div className="search-row">
+        <div className="search-field">
+          <Icon name="search" size={16} />
+          <input
+            className="shelf-input ios-search"
+            placeholder="Search merchants or notes"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search transactions"
+          />
+        </div>
+        <button className="icon-btn" type="button" aria-label="Filter" onClick={() => setFiltersOpen(true)}>
+          <Icon name="filter" size={18} />
+          {filtered ? <span className="filter-dot" /> : null}
+        </button>
       </div>
 
-      <div className="activity-tools">
-        {unreviewed > 0 ? (
-          <button
-            className={focus && inReviewMode ? "shelf-btn secondary" : "shelf-btn"}
-            type="button"
-            onClick={() => replaceQuery(focus && inReviewMode ? { reviewed: null, focus: null } : { reviewed: "false", focus: "1" })}
-          >
-            {focus && inReviewMode ? "Close review" : `Review ${unreviewed}`}
-          </button>
-        ) : null}
-        <div className="activity-tools-side">
+      {filtered ? (
+        <div className="flex flex-wrap gap-2">
           {accountName ? (
             <button className="chip" type="button" onClick={() => replaceQuery({ accountId: null })}>
               {accountName}
@@ -425,19 +430,18 @@ function Activity() {
               Dates
             </button>
           ) : null}
-          <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
-            Filter
-          </button>
-          <button className="text-btn" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
-            {selecting ? "Cancel" : "Select"}
-          </button>
-          {canAcceptAll ? (
-            <button className="text-btn" type="button" onClick={markVisibleDone}>
-              Accept {unreviewedRows.length}
+          {reviewed ? (
+            <button className="chip" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+              {reviewed === "false" ? "Needs review" : "Reviewed"}
             </button>
           ) : null}
         </div>
-      </div>
+      ) : null}
+      {selecting ? (
+        <button className="chip self-start" type="button" onClick={() => { setSelecting(false); setSelected([]); }}>
+          Cancel select
+        </button>
+      ) : null}
 
       {focus && inReviewMode ? (
         <ReviewDeck
@@ -548,6 +552,18 @@ function Activity() {
           >
             Select transactions
           </button>
+          {canAcceptAll ? (
+            <button
+              className="shelf-btn w-full"
+              type="button"
+              onClick={() => {
+                setFiltersOpen(false);
+                void markVisibleDone();
+              }}
+            >
+              Accept {unreviewedRows.length}
+            </button>
+          ) : null}
         </Sheet>
       ) : null}
 
@@ -602,20 +618,27 @@ function Activity() {
                   </div>
                 </div>
               );
-              if (selecting) return <div key={tx.id} className="border-t border-[var(--line)] first:border-t-0">{row}</div>;
+              if (selecting) {
+                return (
+                  <DismissRow key={tx.id} leaving={leavingId === tx.id}>
+                    <div className="border-t border-[var(--line)] first:border-t-0">{row}</div>
+                  </DismissRow>
+                );
+              }
               return (
-                <SwipeRow
-                  key={tx.id}
-                  peek={!tx.reviewed}
-                  actions={[
-                    { label: "Hide", tone: "danger", onClick: () => void hideTx(tx.id) },
-                    tx.reviewed
-                      ? { label: "Edit", tone: "ink", onClick: () => openEdit(tx) }
-                      : { label: "Done", tone: "accent", onClick: () => void markDone(tx.id) },
-                  ]}
-                >
-                  {row}
-                </SwipeRow>
+                <DismissRow key={tx.id} leaving={leavingId === tx.id}>
+                  <SwipeRow
+                    peek={!tx.reviewed}
+                    actions={[
+                      { label: "Hide", tone: "danger", onClick: () => void hideTx(tx.id) },
+                      tx.reviewed
+                        ? { label: "Edit", tone: "ink", onClick: () => openEdit(tx) }
+                        : { label: "Done", tone: "accent", onClick: () => void markDone(tx.id) },
+                    ]}
+                  >
+                    {row}
+                  </SwipeRow>
+                </DismissRow>
               );
             })}
           </div>

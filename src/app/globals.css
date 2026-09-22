@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --surface: #f3f5f7;
   --paper: #ffffff;
   --fill: #e8ecf0;
@@ -17,6 +18,9 @@
   --danger: #d94a2e;
   --positive: #1b7a62;
   --warn: #c47a1a;
+  --control: #14181f;
+  --control-ink: #ffffff;
+  --focus: rgba(20, 24, 31, 0.14);
   --shadow-xs: 0 1px 2px rgba(20, 24, 31, 0.04);
   --shadow-sm: 0 12px 40px rgba(20, 24, 31, 0.08);
   --shadow-glass: 0 8px 28px rgba(20, 24, 31, 0.1);
@@ -70,6 +74,9 @@ html[data-theme="dark"] {
   --danger: #ff6b4a;
   --positive: #3dbe9a;
   --warn: #e0a15a;
+  --control: #f4f1ea;
+  --control-ink: #101216;
+  --focus: rgba(244, 241, 234, 0.22);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -91,6 +98,9 @@ html[data-theme="dark"] {
     --danger: #ff6b4a;
     --positive: #3dbe9a;
     --warn: #e0a15a;
+    --control: #f4f1ea;
+    --control-ink: #101216;
+    --focus: rgba(244, 241, 234, 0.22);
   }
 
   html:not([data-theme="light"]) body {
@@ -140,7 +150,6 @@ body {
   font-synthesis: none;
   touch-action: manipulation;
   overscroll-behavior-y: none;
-  color-scheme: light;
 }
 
 * {
@@ -163,7 +172,8 @@ button:disabled {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 22%, white);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 button,
@@ -178,6 +188,7 @@ input,
 select,
 textarea {
   font-size: 15px !important;
+  color-scheme: inherit;
 }
 
 button:focus-visible,
@@ -185,7 +196,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -801,7 +812,8 @@ a:focus-visible {
   }
 
   .swipe-actions .category {
-    background: var(--ink);
+    background: var(--control);
+    color: var(--control-ink);
   }
 
   .swipe-actions .hide {
@@ -1059,8 +1071,8 @@ a:focus-visible {
     padding: 0 18px;
     border: 0;
     border-radius: 999px;
-    background: var(--ink);
-    color: #fff;
+    background: var(--control);
+    color: var(--control-ink);
     font-size: 15px;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -1069,7 +1081,7 @@ a:focus-visible {
   }
 
   .shelf-btn:hover {
-    background: var(--ink-strong);
+    filter: brightness(1.12);
   }
 
   .shelf-btn:active {
@@ -1254,9 +1266,9 @@ a:focus-visible {
   }
 
   .shelf-input:focus {
-    border-color: var(--ink);
+    border-color: var(--muted);
     background: var(--paper);
-    box-shadow: 0 0 0 3px rgba(20, 24, 31, 0.08);
+    box-shadow: 0 0 0 3px var(--focus);
   }
 
   select.shelf-input {
@@ -1265,6 +1277,16 @@ a:focus-visible {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' stroke='%235c6570' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 14px center;
+  }
+
+  html[data-theme="dark"] select.shelf-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' stroke='%23b0b6c0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) select.shelf-input {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' stroke='%23b0b6c0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
   }
 
   textarea.shelf-input {
@@ -1317,6 +1339,51 @@ a:focus-visible {
 
   .search-field .ios-search {
     padding-left: 38px;
+  }
+
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .search-row .search-field {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .icon-btn {
+    position: relative;
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: var(--fill);
+    color: var(--ink);
+  }
+
+  .icon-btn:active {
+    transform: scale(0.96);
+  }
+
+  .icon-btn .filter-dot {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
   }
 
   .activity-tools {
@@ -1734,7 +1801,12 @@ a:focus-visible {
 
   .ios-sheet.is-shown {
     transform: translate3d(0, 0, 0);
-    transition: transform 340ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ios-sheet.is-shown {
+      transform: translate3d(0, 100%, 0);
+    }
   }
 
   .ios-sheet-chrome {
@@ -1765,34 +1837,13 @@ a:focus-visible {
     height: 5px;
     margin: 4px auto 12px;
     border-radius: 99px;
-    background: rgba(20, 24, 31, 0.18);
+    background: var(--fill-strong);
   }
 
   .ios-sheet-handle::before {
     content: "";
     position: absolute;
     inset: -12px -28px -8px;
-  }
-
-  .tab-indicator {
-    position: absolute;
-    z-index: 0;
-    top: 6px;
-    left: 4px;
-    width: calc((100% - 8px) / 5);
-    height: 32px;
-    pointer-events: none;
-    transform: translateX(calc(var(--tab-index, 0) * 100%));
-    transition: transform 340ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  .tab-indicator::before {
-    content: "";
-    display: block;
-    height: 28px;
-    margin: 0 8px;
-    border-radius: 10px;
-    background: var(--accent-soft);
   }
 
   .ios-tabbar {
@@ -2106,7 +2157,6 @@ a:focus-visible {
     height: 76px;
     color: var(--accent);
     filter: drop-shadow(0 10px 22px color-mix(in srgb, var(--accent) 32%, transparent));
-    animation: check-pop 420ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .confirm-mark svg {
@@ -2278,7 +2328,6 @@ main h1 + p,
   .confirm-tick,
   .confirm-burst.is-screen,
   .ios-seg-thumb,
-  .tab-indicator,
   .chip.is-on,
   .progress-fill,
   .ios-tab.active .ios-tab-glyph,

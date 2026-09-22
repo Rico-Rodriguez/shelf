@@ -2,15 +2,17 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { DismissRow } from "@/components/DismissRow";
+import { Icon } from "@/components/Icon";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
+import { offerUndo } from "@/components/UndoHost";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
-import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
 import { inDaysPhrase, monthName, monthRange, occurrencesInMonth, todayISO, yearMonth } from "@/lib/dates";
@@ -52,6 +54,8 @@ const CADENCES = [
   ["yearly", "Yearly"],
 ] as const;
 
+const CADENCE_LABEL: Record<string, string> = Object.fromEntries(CADENCES);
+
 const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: "", isIncome: false, categoryId: "", accountId: "", kind: "bill" as "bill" | "subscription" };
 
 export default function RecurringPage() {
@@ -60,7 +64,8 @@ export default function RecurringPage() {
   const { data, loading, error, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
   const rows = data?.recurrences ?? [];
   const [view, setView] = useState<"list" | "calendar">("list");
-  const [bucket, setBucket] = useState<"all" | "bill" | "subscription">("all");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [leavingId, setLeavingId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Rec | "new" | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -73,18 +78,24 @@ export default function RecurringPage() {
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
   }, []);
 
-  const active = rows.filter((row) => row.isActive && (bucket === "all" || (row.kind ?? "bill") === bucket));
-  const listed = rows.filter((row) => bucket === "all" || (row.kind ?? "bill") === bucket);
+  const bills = rows
+    .filter((row) => !row.isIncome)
+    .sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return a.nextDate.localeCompare(b.nextDate);
+    });
+  const focus = view === "calendar" ? cursor : now;
   const projected = useMemo(() => {
-    return active.flatMap((row) =>
-      occurrencesInMonth(row.nextDate, row.cadence, cursor.year, cursor.month).map((date) => ({ ...row, date })),
-    );
-  }, [active, cursor]);
+    return bills
+      .filter((row) => row.isActive)
+      .flatMap((row) => occurrencesInMonth(row.nextDate, row.cadence, focus.year, focus.month).map((date) => ({ ...row, date })));
+  }, [bills, focus]);
 
-  const monthlyBills = rows
-    .filter((row) => row.isActive && !row.isIncome)
+  const monthlyBills = bills
+    .filter((row) => row.isActive)
     .reduce((sum, row) => sum + Math.round(annualizedCents(row.amountCents, row.cadence) / 12), 0);
-  const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
+  const outflow = projected.reduce((sum, row) => sum + row.amountCents, 0);
+  const found = suggestions.filter((draft) => !draft.isIncome);
 
   if (!data && loading) return <PageSkeleton title="Bills" rows={5} />;
   if (!data) return <PageError title="Bills" message={error} onRetry={() => void reload()} />;
@@ -94,22 +105,31 @@ export default function RecurringPage() {
 
   async function detect() {
     const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
-    setSuggestions(res.suggestions);
+    setSuggestions(res.suggestions.filter((draft) => !draft.isIncome));
+    setMenuOpen(true);
   }
 
   async function confirm(drafts: Draft[]) {
-    if (!drafts.length) {
+    const outgoing = drafts.filter((draft) => !draft.isIncome);
+    if (!outgoing.length) {
       setSuggestions([]);
       return;
     }
-    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: drafts }) });
+    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: outgoing }) });
     setSuggestions([]);
+    setMenuOpen(false);
     reload();
+  }
+
+  async function skip(draft: Draft) {
+    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "dismiss", merchantName: draft.merchantName }) });
+    setSuggestions((current) => current.filter((row) => row.merchantName !== draft.merchantName));
   }
 
   function openNew() {
     setForm(emptyForm);
     setEditing("new");
+    setMenuOpen(false);
   }
 
   function openEdit(row: Rec) {
@@ -161,75 +181,55 @@ export default function RecurringPage() {
   }
 
   async function remove(row: Rec) {
+    setLeavingId(row.id);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) await new Promise((resolve) => window.setTimeout(resolve, 280));
     await api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: row.id }) });
     setEditing(null);
+    setLeavingId(null);
     reload();
+    offerUndo("Bill removed", async () => {
+      await api("/api/recurring", {
+        method: "POST",
+        body: JSON.stringify({
+          merchantName: row.merchantName,
+          amount: row.amountCents / 100,
+          cadence: row.cadence,
+          nextDate: row.nextDate,
+          categoryId: row.categoryId,
+          accountId: row.accountId,
+          isIncome: false,
+          kind: row.kind ?? "bill",
+        }),
+      });
+      reload();
+    });
+  }
+
+  function detail(row: Rec) {
+    const bits = [CADENCE_LABEL[row.cadence] ?? row.cadence];
+    if ((row.kind ?? "bill") === "subscription") bits.push("Subscription");
+    bits.push(row.isActive ? `Due ${inDaysPhrase(row.nextDate)}` : "Paused");
+    if (row.priceDeltaCents) bits.push(row.priceDeltaCents > 0 ? "Up" : "Down");
+    return bits.join(" · ");
   }
 
   return (
-    <div className="space-y-4">
+    <div className="screen">
       {flash}
       <PageHeader title="Bills">
-        <button className="text-btn" type="button" onClick={detect}>
-          Find bills
+        <button className="icon-btn" type="button" aria-label="Bill options" onClick={() => setMenuOpen(true)}>
+          <Icon name="more" size={18} />
         </button>
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add
         </button>
       </PageHeader>
-      <BillsSummary
-        year={cursor.year}
-        month={cursor.month}
-        monthlyBills={monthlyBills}
-        outflow={outflow}
-        projected={projected}
-      />
-
-      <div className="flex items-center gap-3">
-        <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
-        <button className="text-btn ml-auto shrink-0" type="button" onClick={() => setView(view === "list" ? "calendar" : "list")}>
-          {view === "list" ? "Calendar" : "List"}
-        </button>
-      </div>
-      <Segment
-        value={bucket}
-        onChange={(value) => setBucket(value as "all" | "bill" | "subscription")}
-        options={[
-          { value: "all", label: "All" },
-          { value: "bill", label: "Bills" },
-          { value: "subscription", label: "Subscriptions" },
-        ]}
-      />
-
-      {suggestions.length ? (
-        <section className="shelf-panel space-y-3 p-4">
-          <h2 className="text-[17px] font-semibold">Detected</h2>
-          <ul className="card">
-            {suggestions.map((draft) => (
-              <li key={draft.merchantName} className="data-row justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate">{draft.merchantName}</div>
-                  <div className="text-[13px] text-[var(--muted)]">
-                    {draft.cadence} · next {draft.nextDate}
-                  </div>
-                </div>
-                <span className="flex shrink-0 items-center gap-3">
-                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} flow />
-                  <button className="text-[15px] font-semibold text-[var(--ink)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
-                    Skip
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button className="shelf-btn" type="button" onClick={() => confirm(suggestions)}>
-            Keep these
-          </button>
-        </section>
-      ) : null}
+      <BillsSummary year={focus.year} month={focus.month} monthlyBills={monthlyBills} outflow={outflow} projected={projected} />
 
       {view === "calendar" ? (
-        <div className="shelf-panel p-3">
+        <div className="shelf-panel space-y-3 p-3">
+          <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
           <div className="grid grid-cols-7 gap-1 text-center text-xs">
             {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
               <div key={index} className="text-[11px] font-medium text-[var(--muted)]">
@@ -244,7 +244,7 @@ export default function RecurringPage() {
               const iso = `${cursor.year}-${String(cursor.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const hits = projected.filter((row) => row.date === iso);
               return (
-                <div key={iso} className="min-h-16 rounded-[16px] bg-[rgba(120,120,128,0.08)] p-1 text-left">
+                <div key={iso} className="min-h-16 rounded-[16px] bg-[var(--fill)] p-1 text-left">
                   <div className="text-[11px] text-[var(--muted)]">{day}</div>
                   {hits.map((hit) => (
                     <button key={hit.id + hit.date} type="button" className="block w-full truncate text-left text-[11px]" onClick={() => openEdit(hit)}>
@@ -259,26 +259,69 @@ export default function RecurringPage() {
       ) : (
         <section>
           <h2 className="ios-section">Coming up</h2>
-          <ul className="card">
-          {listed.map((row) => (
-            <li key={row.id}>
-              <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
-                <MerchantMark name={row.merchantName} />
-                <div className="min-w-0 flex-1">
-                  <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
-                  <div className="truncate text-[13px] text-[var(--muted)]">
-                    {row.isActive ? `${row.isIncome ? "Payday" : "Due"} ${inDaysPhrase(row.nextDate)}` : "Paused"}
-                    {row.priceDeltaCents ? ` · ${row.priceDeltaCents > 0 ? "Up" : "Down"}` : ""}
+          <div className="card">
+            {bills.map((row) => (
+              <DismissRow key={row.id} leaving={leavingId === row.id}>
+                <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
+                  <MerchantMark name={row.merchantName} />
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
+                    <div className="truncate text-[13px] text-[var(--muted)]">{detail(row)}</div>
                   </div>
-                </div>
-                <MoneyText className="shrink-0" cents={row.isIncome ? -row.amountCents : row.amountCents} flow />
-              </button>
-            </li>
-          ))}
-          {rows.length === 0 ? <li className="data-row text-[var(--muted)]">No bills yet.</li> : null}
-          </ul>
+                  <MoneyText className="shrink-0" cents={row.amountCents} />
+                </button>
+              </DismissRow>
+            ))}
+            {bills.length === 0 ? <div className="data-row text-[var(--muted)]">No bills yet.</div> : null}
+          </div>
         </section>
       )}
+
+      {menuOpen ? (
+        <Sheet title="Bills" onClose={() => setMenuOpen(false)}>
+          <div className="card">
+            <button className="data-row w-full text-left font-medium" type="button" onClick={() => void detect()}>
+              Find bills
+            </button>
+            <button
+              className="data-row w-full text-left font-medium"
+              type="button"
+              onClick={() => {
+                setView(view === "list" ? "calendar" : "list");
+                setMenuOpen(false);
+              }}
+            >
+              {view === "list" ? "Show calendar" : "Show list"}
+            </button>
+          </div>
+          {found.length ? (
+            <>
+              <h2 className="ios-section">Detected</h2>
+              <div className="card">
+                {found.map((draft) => (
+                  <div key={draft.merchantName} className="data-row justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate">{draft.merchantName}</div>
+                      <div className="text-[13px] text-[var(--muted)]">
+                        {CADENCE_LABEL[draft.cadence] ?? draft.cadence} · next {draft.nextDate}
+                      </div>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <MoneyText cents={draft.amountCents} />
+                      <button className="text-[15px] font-semibold text-[var(--ink)]" type="button" onClick={() => void skip(draft)}>
+                        Skip
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <button className="shelf-btn w-full" type="button" onClick={() => void confirm(found)}>
+                Keep these
+              </button>
+            </>
+          ) : null}
+        </Sheet>
+      ) : null}
 
       {editing ? (
         <Sheet title={editing === "new" ? "New bill" : form.merchantName || "Bill"} onClose={() => setEditing(null)}>
@@ -309,10 +352,6 @@ export default function RecurringPage() {
             <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.kind === "subscription"} onClick={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })}>
               Subscription
               <span className={`switch ${form.kind === "subscription" ? "on" : ""}`} />
-            </button>
-            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.isIncome} onClick={() => setForm({ ...form, isIncome: !form.isIncome })}>
-              Income
-              <span className={`switch ${form.isIncome ? "on" : ""}`} />
             </button>
             <button className="shelf-btn w-full">Save</button>
           </form>
@@ -353,7 +392,6 @@ function BillsSummary({
   const today = todayISO();
   const byDate = new Map<string, number>();
   for (const row of projected) {
-    if (row.isIncome) continue;
     byDate.set(row.date, (byDate.get(row.date) ?? 0) + row.amountCents);
   }
   let run = 0;
@@ -388,7 +426,7 @@ function BillsSummary({
       points={points}
       reference={monthlyBills > 0 ? { cents: monthlyBills, label: "Typical" } : undefined}
       chartLabel="Bills landing through the month"
-      footer={next ? `${next.isIncome ? "Payday" : next.merchantName} ${inDaysPhrase(next.date)}` : null}
+      footer={next ? `${next.merchantName} ${inDaysPhrase(next.date)}` : null}
       footerIcon={next ? "calendar" : undefined}
     />
   );

@@ -77,7 +77,7 @@ function Merchant() {
   if (!rows) return <PageError title={name} message={error} onRetry={() => void reload()} />;
 
   return (
-    <div className="space-y-5">
+    <div className="screen">
       <Link href="/insights" className="ios-back">
         Insights
       </Link>

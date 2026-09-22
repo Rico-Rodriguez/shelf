@@ -74,7 +74,7 @@ export default function HomePage() {
 
   return (
     <PageShell refreshing={refreshing}>
-      <div className="space-y-6">
+      <div className="screen">
         <SummaryCard
           className="is-hero"
           label={scrub ? dayLabel(scrub.date) : "Safe to spend"}

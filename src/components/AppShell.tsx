@@ -105,8 +105,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
   const moreOn = MORE.some((item) => isActive(path, item.href));
-  const primaryIndex = PRIMARY.findIndex((item) => isActive(path, item.href));
-  const tabIndex = moreOn ? PRIMARY.length : primaryIndex;
 
   async function readNote(note: Note) {
     await api("/api/notifications", { method: "POST", body: JSON.stringify({ id: note.id }) });
@@ -177,7 +175,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="route-fade">{children}</div>
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
-          {tabIndex >= 0 ? <span className="tab-indicator" style={{ ["--tab-index" as string]: tabIndex }} aria-hidden /> : null}
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);
             return (
@@ -199,13 +196,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
           <button
             type="button"
-            className={`ios-tab ${moreOpen || MORE.some((item) => isActive(path, item.href)) ? "active" : ""}`}
+            className={`ios-tab ${moreOpen || moreOn ? "active" : ""}`}
             aria-expanded={moreOpen}
             aria-label="More"
             onClick={() => setMoreOpen(true)}
           >
             <span className="ios-tab-glyph" aria-hidden>
-              <Icon name="more" size={22} filled={moreOpen || MORE.some((item) => isActive(path, item.href))} />
+              <Icon name="more" size={22} filled={moreOpen || moreOn} />
             </span>
             More
           </button>

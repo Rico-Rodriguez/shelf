@@ -101,7 +101,7 @@ export default function GoalsPage() {
   if (!data) return <PageError title="Goals" message={error} onRetry={() => void reload()} />;
 
   return (
-    <div className="space-y-4">
+    <div className="screen">
       {flash}
       <PageHeader title="Goals">
         <button className="shelf-btn" type="button" onClick={openNew}>

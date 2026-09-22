@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { recurrences, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
-import { confirmRecurring, markRecurrencePaid, previewRecurring, type RecurrenceDraft } from "@/lib/recurring";
+import { confirmRecurring, markRecurrencePaid, previewRecurring, suppressMerchant, unsuppressMerchant, type RecurrenceDraft } from "@/lib/recurring";
 import { dollarsToCents } from "@/lib/money";
 import { todayISO } from "@/lib/dates";
 import { inferRecurringKind, merchantKey, priceDrift } from "@/lib/plan";
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   try {
     const dek = await requireWriter();
     const body = (await request.json()) as {
-      action?: "detect" | "confirm" | "paid" | "create";
+      action?: "detect" | "confirm" | "paid" | "create" | "dismiss";
       id?: string;
       merchantName?: string;
       amount?: number;
@@ -61,7 +61,12 @@ export async function POST(request: Request) {
       await markRecurrencePaid(body.id);
       return NextResponse.json({ ok: true });
     }
+    if (body.action === "dismiss" && body.merchantName) {
+      await suppressMerchant(body.merchantName);
+      return NextResponse.json({ ok: true });
+    }
     const db = await getDb();
+    if (body.merchantName) await unsuppressMerchant(body.merchantName);
     const id = nid();
     await db.insert(recurrences).values({
       id,
@@ -134,9 +139,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireWriter();
+    const dek = await requireWriter();
     const body = (await request.json()) as { id: string };
     const db = await getDb();
+    const [existing] = await db.select().from(recurrences).where(eq(recurrences.id, body.id));
+    if (existing) await suppressMerchant(openRecurrence(existing, dek).merchantName);
     await db.delete(recurrences).where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });
   } catch (err) {
