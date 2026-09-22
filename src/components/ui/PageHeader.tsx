@@ -1,3 +1,18 @@
+"use client";
+
+import { useEffect } from "react";
+
+let currentTitle = "";
+
+export function readPageTitle() {
+  return currentTitle;
+}
+
+function publishTitle(title: string) {
+  currentTitle = title;
+  window.dispatchEvent(new CustomEvent("shelf-title", { detail: title }));
+}
+
 export function PageHeader({
   title,
   subtitle,
@@ -7,6 +22,11 @@ export function PageHeader({
   subtitle?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  useEffect(() => {
+    publishTitle(title);
+    return () => publishTitle("");
+  }, [title]);
+
   return (
     <header className="page-header">
       <div className="min-w-0 flex-1">

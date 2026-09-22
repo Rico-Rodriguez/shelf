@@ -321,6 +321,71 @@ a:focus-visible {
     letter-spacing: -0.02em;
   }
 
+  .money-figure {
+    font-family: var(--font-display);
+    font-weight: 560;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+  }
+
+  .insight-section {
+    scroll-margin-top: 72px;
+  }
+
+  .nav-title {
+    position: absolute;
+    left: 50%;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%);
+    transition: opacity 160ms ease;
+  }
+
+  .nav-title.is-shown {
+    opacity: 1;
+  }
+
+  .swipe-row {
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  .swipe-row + .swipe-row {
+    border-top: 1px solid var(--line);
+  }
+
+  .swipe-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+  }
+
+  .swipe-actions button {
+    width: 76px;
+    border: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .swipe-actions .category {
+    background: var(--ink);
+  }
+
+  .swipe-actions .hide {
+    background: var(--danger);
+  }
+
   .field-stack {
     display: flex;
     flex-direction: column;
@@ -834,37 +899,83 @@ a:focus-visible {
     box-shadow: var(--shadow-control);
   }
 
-  .ios-sheet-backdrop {
+  .ios-sheet-root {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(10, 12, 16, 0.4);
-    animation: fade-in 180ms ease both;
   }
 
+  .ios-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.4);
+    opacity: 0;
+  }
+
+  .ios-sheet-backdrop.is-shown {
+    opacity: 1;
+    transition: opacity 200ms ease;
+  }
+
+  /* Transform stays free for the drag gesture. A fill-mode animation on
+     transform overrides inline styles, so the sheet cannot follow a finger. */
   .ios-sheet {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
+    display: flex;
     max-height: min(92dvh, 92vh);
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
     background: var(--surface);
     box-shadow: var(--shadow-sm);
-    animation: rise-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform: translate3d(0, 100%, 0);
+    touch-action: manipulation;
+  }
+
+  .ios-sheet.is-shown {
+    transform: translate3d(0, 0, 0);
+    transition: transform 340ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .ios-sheet-chrome {
+    flex: none;
+    padding: 8px 16px 0;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .ios-sheet-chrome button {
+    cursor: pointer;
+  }
+
+  .ios-sheet-body {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 0 16px 12px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     touch-action: pan-y;
   }
 
   .ios-sheet-handle {
+    position: relative;
     width: 36px;
     height: 5px;
-    margin: 6px auto 14px;
+    margin: 4px auto 12px;
     border-radius: 99px;
     background: rgba(20, 24, 31, 0.18);
+  }
+
+  .ios-sheet-handle::before {
+    content: "";
+    position: absolute;
+    inset: -12px -28px -8px;
   }
 
   .ios-tabbar {
@@ -1092,10 +1203,6 @@ a:focus-visible {
   .drag-handle:active {
     cursor: grabbing;
   }
-
-  .insights-embed .page-header {
-    display: none;
-  }
 }
 
 main h1 {
@@ -1132,7 +1239,8 @@ main h1 + p,
     background: rgba(10, 12, 16, 0.36);
   }
 
-  .ios-sheet {
+  .ios-sheet,
+  .ios-sheet.is-shown {
     top: 0;
     right: 0;
     bottom: 0;
@@ -1142,6 +1250,13 @@ main h1 + p,
     border-radius: 0;
     background: var(--paper);
     box-shadow: -12px 0 40px rgba(20, 24, 31, 0.12);
+    transform: none;
+    transition: none;
+  }
+
+  .ios-sheet-chrome {
+    cursor: default;
+    touch-action: auto;
   }
 
   .ios-sheet-handle {
@@ -1155,9 +1270,22 @@ main h1 + p,
   .hint,
   .empty-state,
   .ios-sheet,
+  .ios-sheet.is-shown,
   .ios-sheet-backdrop,
+  .ios-sheet-backdrop.is-shown,
   .tx-row-exit {
     animation: none;
+    transition: none;
+  }
+
+  .ios-sheet,
+  .ios-sheet.is-shown {
+    transform: none;
+  }
+
+  .ios-sheet-backdrop,
+  .ios-sheet-backdrop.is-shown {
+    opacity: 1;
   }
 
   .shelf-btn:active {

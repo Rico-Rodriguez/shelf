@@ -130,6 +130,25 @@ export async function pendingOutflow(year: number, month: number, dek: Buffer) {
     .reduce((sum, tx) => sum + tx.amountCents, 0);
 }
 
+export async function pendingInMonth(year: number, month: number, dek: Buffer): Promise<number> {
+  return pendingOutflow(year, month, dek);
+}
+
+export async function readMonthLeft(year: number, month: number, dek: Buffer): Promise<number | null> {
+  const db = await getDb();
+  const existing = await db
+    .select()
+    .from(budgetMonths)
+    .where(and(eq(budgetMonths.year, year), eq(budgetMonths.month, month)));
+  if (!existing[0]) return null;
+  const monthRow = openBudgetMonth(existing[0], dek);
+  const items = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, existing[0].id))).map((row) =>
+    openBudgetItem(row, dek),
+  );
+  const planned = items.reduce((sum, item) => sum + item.plannedCents + item.rolloverInCents, 0);
+  return monthRow.plannedIncomeCents - planned;
+}
+
 export async function incomeInMonth(year: number, month: number, dek: Buffer): Promise<number> {
   const db = await getDb();
   const { start, end } = monthRange(year, month);
