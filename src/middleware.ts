@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { gateMatches, gateToken, publicOrigin } from "@/lib/gate";
 import { googleConfigured } from "@/lib/google-config";
 
-const INSIGHT_REDIRECTS: Record<string, string> = {
-  "/cash-flow": "flow",
-  "/reports": "month",
+const PAGE_REDIRECTS: Record<string, string> = {
+  "/cash-flow": "/",
+  "/reports": "/insights",
+  "/investments": "/accounts",
 };
 
 const PUBLIC = [
@@ -47,19 +48,12 @@ export function middleware(request: NextRequest) {
     const login = new URL("/login", publicOrigin(request));
     return NextResponse.redirect(login);
   }
-  if (cookie && pathname === "/investments") {
+  const redirectPath = PAGE_REDIRECTS[pathname];
+  if (cookie && redirectPath) {
     const dest = request.nextUrl.clone();
-    dest.pathname = "/accounts";
+    dest.pathname = redirectPath;
     dest.search = "";
     dest.hash = "";
-    return NextResponse.redirect(dest);
-  }
-  const insightHash = INSIGHT_REDIRECTS[pathname];
-  if (cookie && insightHash) {
-    const dest = request.nextUrl.clone();
-    dest.pathname = "/insights";
-    dest.search = "";
-    dest.hash = insightHash;
     return NextResponse.redirect(dest);
   }
   return NextResponse.next();

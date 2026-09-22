@@ -88,8 +88,8 @@ export default function AccountsPage() {
     reload();
   }
 
-  if (!data && loading) return <PageSkeleton title="Accounts" rows={4} />;
-  if (!data) return <PageSkeleton title="Accounts" rows={4} />;
+  if (!data && loading) return <PageSkeleton variant="accounts" />;
+  if (!data) return <PageSkeleton variant="accounts" />;
 
   return (
     <PageShell refreshing={refreshing}>
@@ -112,18 +112,13 @@ export default function AccountsPage() {
 
       {visible.length > 0 ? (
         <SummaryCard
-          label="Net"
+          label="Net worth"
           cents={assetTotal - debtTotal}
-          status={data.plaidConfigured ? { label: `${data.itemCount} of ${data.trialLimit} banks`, tone: "neutral" } : null}
           shares={[
             { label: "Assets", cents: assetTotal, color: "var(--accent)" },
             { label: "Debts", cents: debtTotal, color: "var(--danger)" },
           ]}
         />
-      ) : null}
-
-      {!data.plaidConfigured ? (
-        <p className="text-[15px] text-[var(--muted)]">Add Plaid keys to connect a bank, or add an account by hand.</p>
       ) : null}
 
       {data.items.some((item) => item.status !== "ok") ? (

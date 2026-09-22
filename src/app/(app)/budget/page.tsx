@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
@@ -8,10 +8,10 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
-import { seriesFromZero, SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
+import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { addMonths, monthName, monthRange, yearMonth } from "@/lib/dates";
+import { addMonths, inDaysPhrase, monthName, monthRange, todayISO } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
@@ -64,26 +64,15 @@ export default function BudgetPage() {
   const [planOpen, setPlanOpen] = useState(false);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
-  const askedClose = useRef(false);
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
+  const { data: bills } = useQuery<{ recurrences: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean; isActive: boolean }[] }>(
+    "bills",
+    "/api/recurring",
+  );
 
   useEffect(() => {
     if (data) setIncome((data.plannedIncomeCents / 100).toFixed(0));
-  }, [data]);
-
-  useEffect(() => {
-    if (!data || askedClose.current) return;
-    const now = yearMonth();
-    if (data.year !== now.year || data.month !== now.month) return;
-    const key = `shelf-month-close-${data.year}-${data.month}`;
-    if (window.localStorage.getItem(key)) return;
-    askedClose.current = true;
-    const prev = addMonths(data.year, data.month, -1);
-    void api<Budget>(`/api/budget?year=${prev.year}&month=${prev.month}`).then((previous) => {
-      if (previous.expensePlannedCents <= 0 && previous.expenseSpentCents <= 0) return;
-      setCloseMonth(previous);
-    });
   }, [data]);
 
   const flexRows = useMemo(() => data?.rows.filter((row) => row.category.flexBucket === "flex") ?? [], [data]);
@@ -109,8 +98,8 @@ export default function BudgetPage() {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [data]);
 
-  if (!data && loading) return <PageSkeleton title="Budget" rows={6} />;
-  if (!data) return <PageSkeleton title="Budget" rows={6} />;
+  if (!data && loading) return <PageSkeleton variant="plan" />;
+  if (!data) return <PageSkeleton variant="plan" />;
 
   const budget = data;
   const flexPlan = budget.flexPoolCents > 0 ? budget.flexPoolCents : flexRows.reduce((sum, row) => sum + row.availableCents, 0);
@@ -151,8 +140,15 @@ export default function BudgetPage() {
   }
 
   function dismissClose() {
-    window.localStorage.setItem(`shelf-month-close-${budget.year}-${budget.month}`, "1");
     setCloseMonth(null);
+  }
+
+  async function openLastMonth() {
+    setPlanOpen(false);
+    const prev = addMonths(budget.year, budget.month, -1);
+    const previous = await api<Budget>(`/api/budget?year=${prev.year}&month=${prev.month}`);
+    if (previous.expensePlannedCents <= 0 && previous.expenseSpentCents <= 0) return;
+    setCloseMonth(previous);
   }
 
   async function openAdd() {
@@ -166,7 +162,7 @@ export default function BudgetPage() {
   return (
     <PageShell>
       <div className="space-y-4">
-        <PageHeader title="Budget">
+        <PageHeader title="Plan">
           <MonthNav
             year={budget.year}
             month={budget.month}
@@ -179,7 +175,7 @@ export default function BudgetPage() {
           </button>
         </PageHeader>
 
-        <BudgetSummary budget={budget} income={income} setIncome={setIncome} saveIncome={saveIncome} />
+        <BudgetSummary budget={budget} />
 
         {groups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
@@ -225,10 +221,10 @@ export default function BudgetPage() {
 
         {flexRows.length > 0 ? (
           <section>
-            <h2 className="ios-section">Safe to spend</h2>
+            <h2 className="ios-section">Flex</h2>
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
-                <span className="font-medium">Left</span>
+                <span className="font-medium">Flex</span>
                 <MoneyText cents={flexPlan - flexSpent} signed />
               </span>
               <span className="my-2.5 block">
@@ -242,8 +238,45 @@ export default function BudgetPage() {
           </section>
         ) : null}
 
+        {(() => {
+          const today = todayISO();
+          const upcoming = (bills?.recurrences ?? []).filter((row) => row.isActive && !row.isIncome && row.nextDate >= today).slice(0, 5);
+          if (!upcoming.length) return null;
+          return (
+            <section>
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 className="ios-section mb-0">Bills</h2>
+                <Link href="/recurring" className="text-btn">
+                  All
+                </Link>
+              </div>
+              <div className="card">
+                {upcoming.map((bill) => (
+                  <Link key={bill.id} href="/recurring" className="data-row justify-between gap-3">
+                    <span className="truncate">{bill.merchantName}</span>
+                    <span className="shrink-0 text-[var(--muted)]">
+                      {inDaysPhrase(bill.nextDate)} · <MoneyText cents={bill.amountCents} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
         {planOpen ? (
           <Sheet title="Edit plan" onClose={() => setPlanOpen(false)}>
+            <label className="field">
+              <span className="field-label">Planned income</span>
+              <input
+                className="shelf-input"
+                inputMode="decimal"
+                aria-label="Planned income"
+                value={income}
+                onChange={(event) => setIncome(event.target.value)}
+                onBlur={() => void saveIncome()}
+              />
+            </label>
             <div className="card">
               <button
                 type="button"
@@ -278,6 +311,15 @@ export default function BudgetPage() {
               >
                 Add category
               </button>
+              <button type="button" className="data-row w-full text-left font-medium" onClick={() => void openLastMonth()}>
+                Last month
+              </button>
+              <Link href="/goals" className="data-row" onClick={() => setPlanOpen(false)}>
+                Goals
+              </Link>
+              <Link href="/recurring" className="data-row" onClick={() => setPlanOpen(false)}>
+                Bills
+              </Link>
             </div>
           </Sheet>
         ) : null}
@@ -515,27 +557,19 @@ export default function BudgetPage() {
   );
 }
 
-function BudgetSummary({
-  budget,
-  income,
-  setIncome,
-  saveIncome,
-}: {
-  budget: Budget;
-  income: string;
-  setIncome: (value: string) => void;
-  saveIncome: () => void;
-}) {
+function leftSeries(points: { date: string; cents: number }[], leftCents: number, origin: string) {
+  if (!points.length) return [];
+  const last = points[points.length - 1].cents;
+  const mapped = points.map((point) => ({ date: point.date, cents: leftCents + (last - point.cents) }));
+  if (mapped[0].date !== origin) return [{ date: origin, cents: leftCents + last }, ...mapped];
+  if (mapped.length === 1) return [{ date: origin, cents: leftCents + last }, mapped[0]];
+  return mapped;
+}
+
+function BudgetSummary({ budget }: { budget: Budget }) {
   const range = monthRange(budget.year, budget.month);
-  const series = budget.spendSeries ?? [];
-  const points = series.length
-    ? seriesFromZero(series, range.start)
-    : budget.expensePlannedCents > 0
-      ? [
-          { date: range.start, cents: 0 },
-          { date: range.end, cents: 0 },
-        ]
-      : [];
+  const left = budget.expensePlannedCents - budget.expenseSpentCents;
+  const points = budget.expensePlannedCents > 0 ? leftSeries(budget.spendSeries ?? [], left, range.start) : [];
   const pace = budget.expensePlannedCents > 0 ? budgetPace(budget.expenseSpentCents, budget.expensePlannedCents, budget.year, budget.month) : null;
   const paceTone: SummaryTone | null = !pace
     ? null
@@ -553,33 +587,13 @@ function BudgetSummary({
 
   return (
     <SummaryCard
-      label="Spent"
-      cents={budget.expenseSpentCents}
-      status={status}
+      label="Left"
+      cents={left}
+      signed={left < 0}
+      empty={budget.expensePlannedCents <= 0 ? "Set a plan" : undefined}
+      status={budget.expensePlannedCents > 0 ? status : null}
       points={points}
-      reference={budget.expensePlannedCents > 0 ? { cents: budget.expensePlannedCents, label: "Plan" } : undefined}
-      chartLabel="Spending through the month against the plan"
-      footer={
-        <span className="flex w-full items-center justify-between gap-4">
-          <label className="min-w-0">
-            <span className="summary-kicker">Planned income</span>
-            <input
-              className="shelf-input compact summary-income"
-              inputMode="decimal"
-              aria-label="Planned income"
-              value={income}
-              onChange={(event) => setIncome(event.target.value)}
-              onBlur={saveIncome}
-            />
-          </label>
-          <span className="text-right">
-            <span className="summary-kicker">Left to budget</span>
-            <span className="mt-1 block text-[17px] font-semibold tabular-nums">
-              <MoneyText cents={budget.leftoverCents} signed />
-            </span>
-          </span>
-        </span>
-      }
+      chartLabel="Left to spend through the month"
       detail={
         budget.pendingCents ? (
           <>

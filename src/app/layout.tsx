@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit } from "next/font/google";
-import { ZoomLock } from "@/components/ZoomLock";
+import { Fraunces, Outfit } from "next/font/google";
 import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
 const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-outfit",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
   display: "swap",
 });
 
@@ -30,21 +35,18 @@ export const viewport: Viewport = {
   themeColor: "#f3f5f7",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={outfit.variable}>
+    <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="antialiased">
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem("shelf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}`,
           }}
         />
-        <ZoomLock />
         <PwaRegister />
         {children}
       </body>

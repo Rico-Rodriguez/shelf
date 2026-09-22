@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
+import { invalidateQueries } from "@/lib/use-query";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 
@@ -150,7 +151,14 @@ export default function SettingsPage() {
       <HouseholdPanel onStatus={setStatus} />
       <section className="card space-y-2 p-4 text-[15px]">
         <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Session</h2>
-        <button className="text-btn" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            invalidateQueries();
+            void fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"));
+          }}
+        >
           Log out
         </button>
       </section>

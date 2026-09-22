@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageSkeleton } from "@/components/ui/PageShell";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
@@ -63,7 +64,7 @@ type TxPayload = {
 
 export default function TransactionsPage() {
   return (
-    <Suspense fallback={<p className="text-[var(--muted)]">Loading…</p>}>
+    <Suspense fallback={<PageSkeleton variant="activity" />}>
       <Activity />
     </Suspense>
   );
@@ -130,7 +131,26 @@ function Activity() {
     queryString ? `/api/transactions?${queryString}` : "/api/transactions",
     { keepPrevious: true },
   );
+  const { data: dash } = useQuery<{ cashFlow: { spendingCents: number } }>("dashboard", "/api/dashboard");
+  const [swipeHint, setSwipeHint] = useState(false);
   const load = reload;
+
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem("shelf-swipe-hint")) setSwipeHint(true);
+    } catch {
+      setSwipeHint(true);
+    }
+  }, []);
+
+  function dismissSwipeHint() {
+    setSwipeHint(false);
+    try {
+      sessionStorage.setItem("shelf-swipe-hint", "1");
+    } catch {
+      /* ignore */
+    }
+  }
   const [payloadSeen, setPayloadSeen] = useState<TxPayload | null>(null);
   if (payload && payload !== payloadSeen) {
     setPayloadSeen(payload);
@@ -344,7 +364,9 @@ function Activity() {
   const categoryName = groups.flatMap((group) => group.categories).find((category) => category.id === categoryId)?.name;
   const pendingCount = rows.filter((tx) => tx.pending).length;
 
-  if (!payload && loading) return <PageSkeleton title="Activity" rows={6} />;
+  if (!payload && loading) return <PageSkeleton variant="activity" />;
+
+  const filtered = Boolean(q || accountId || categoryId || tag || start || end || reviewed);
 
   return (
     <div className="space-y-4">
@@ -353,6 +375,8 @@ function Activity() {
           Add
         </button>
       </PageHeader>
+
+      {!filtered && dash ? <SummaryCard compact label="Spent this month" cents={dash.cashFlow.spendingCents} /> : null}
 
       <input
         className="shelf-input ios-search"
@@ -406,6 +430,12 @@ function Activity() {
           </button>
         ) : null}
       </div>
+
+      {swipeHint && !selecting && grouped.length > 0 ? (
+        <button type="button" className="text-left text-[13px] text-[var(--muted)]" onClick={dismissSwipeHint}>
+          Swipe a row right to review, or left to hide.
+        </button>
+      ) : null}
 
       {focus && inReviewMode ? (
         <ReviewDeck
@@ -554,7 +584,7 @@ function Activity() {
                     </span>
                   </button>
                   <div className="shrink-0 text-[16px] font-medium tabular-nums">
-                    <MoneyText cents={-tx.amountCents} signed />
+                    <MoneyText cents={tx.amountCents} flow />
                   </div>
                 </div>
               );
@@ -579,7 +609,7 @@ function Activity() {
       ))}
 
       {edit ? (
-        <Sheet title="Review purchase" onClose={() => setEdit(null)}>
+        <Sheet title={edit.merchantName || edit.name} onClose={() => setEdit(null)}>
           <div>
             <p className="text-[13px] text-[var(--muted)]">
               {dayLabel(edit.date)}
@@ -587,7 +617,7 @@ function Activity() {
               {edit.pending ? " · Pending" : ""}
             </p>
             <div className="mt-1 text-[32px] font-semibold tracking-[-0.03em]">
-              <MoneyText cents={-edit.amountCents} signed />
+              <MoneyText cents={edit.amountCents} flow />
             </div>
             {edit.originalDescription && edit.originalDescription !== edit.name ? (
               <p className="mt-1 text-[13px] text-[var(--muted)]">{edit.originalDescription}</p>
