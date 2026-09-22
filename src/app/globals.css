@@ -836,8 +836,7 @@ main h1 + p,
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass,
-  .ios-tabbar {
+  .glass {
     background: var(--linen);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
