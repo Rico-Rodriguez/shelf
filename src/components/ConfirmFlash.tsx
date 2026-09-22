@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmMark } from "@/components/ConfirmMark";
+import { haptic } from "@/lib/haptic";
 
 const HOLD_MS = 560;
 
@@ -32,6 +33,7 @@ export function useConfirmFlash() {
     await work();
     if (!mounted.current) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    haptic("ok");
     setOn(true);
     await new Promise((resolve) => window.setTimeout(resolve, HOLD_MS));
     if (mounted.current) setOn(false);

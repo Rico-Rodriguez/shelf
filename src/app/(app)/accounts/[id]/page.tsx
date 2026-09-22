@@ -1,16 +1,20 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ConnectBank } from "@/components/ConnectBank";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { shortDate } from "@/lib/dates";
 import { classifyAccount } from "@/lib/money";
+import { invalidateQueries, useQuery } from "@/lib/use-query";
 import { payoffMonths } from "@/lib/voice";
 
 type Account = {
@@ -31,56 +35,44 @@ type Item = { id: string; institutionName: string | null; status: string; errorC
 type Tx = { id: string; name: string; amountCents: number; date: string; categoryId: string | null };
 type Liability = { kind: string; apr: number | null; minimumCents: number | null; due: string | null };
 
+type ListPayload = { accounts: Account[]; items: Item[] };
+type DetailPayload = {
+  account: Account;
+  snapshots: { date: string; balanceCents: number }[];
+  liability: Liability | null;
+  transactions: Tx[];
+};
+type Holding = { id: string; institutionValueCents: number; account: { id: string } | null; security: { name: string; ticker: string | null; type: string | null } | null };
+
 export default function AccountDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [acct, setAcct] = useState<Account | null>(null);
-  const [item, setItem] = useState<Item | null>(null);
-  const [txs, setTxs] = useState<Tx[]>([]);
-  const [snapshots, setSnapshots] = useState<{ date: string; balanceCents: number }[]>([]);
-  const [liability, setLiability] = useState<Liability | null>(null);
+  const router = useRouter();
+  const { flash, run } = useConfirmFlash();
+  const { data: list } = useQuery<ListPayload>("accounts", "/api/accounts");
+  const { data: detail, loading, error, reload } = useQuery<DetailPayload>(`account:${id}`, `/api/accounts/${id}`);
+  const acct = detail?.account ?? list?.accounts.find((account) => account.id === id) ?? null;
+  const { data: investments } = useQuery<{ holdings: Holding[] }>(acct?.type === "investment" ? "investments" : null, "/api/investments");
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
-  const [missing, setMissing] = useState(false);
-  const [holds, setHolds] = useState<{ id: string; institutionValueCents: number; security: { name: string; ticker: string | null; type: string | null } | null }[]>([]);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
-  const load = useCallback(() => {
-    void api<{ accounts: Account[]; items: Item[] }>("/api/accounts").then((res) => {
-      const found = res.accounts.find((account) => account.id === id);
-      if (!found) {
-        setMissing(true);
-        return;
-      }
-      setAcct(found);
-      setName(found.name);
-      setBalance((found.currentBalanceCents / 100).toFixed(2));
-      setItem(found.plaidItemId ? res.items.find((row) => row.id === found.plaidItemId) ?? null : null);
-    });
-    void api<{ account: Account; snapshots: { date: string; balanceCents: number }[]; liability: Liability | null; transactions: Tx[] }>(
-      `/api/accounts/${id}`,
-    )
-      .then((res) => {
-        setSnapshots(res.snapshots);
-        setLiability(res.liability);
-        setTxs(res.transactions);
-      })
-      .catch(() => undefined);
-  }, [id]);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!acct) return;
+    setName(acct.name);
+    setBalance((acct.currentBalanceCents / 100).toFixed(2));
+  }, [acct]);
 
-  useEffect(() => {
-    if (!acct || acct.type !== "investment") return;
-    void api<{ holdings: { id: string; institutionValueCents: number; account: { id: string } | null; security: { name: string; ticker: string | null; type: string | null } | null }[] }>(
-      "/api/investments",
-    ).then((res) => setHolds(res.holdings.filter((holding) => holding.account?.id === id)));
-  }, [acct, id]);
+  if (!acct && loading) return <PageSkeleton variant="accounts" />;
+  if (!acct) {
+    if (error) return <PageError title="Account" message={error} onRetry={() => void reload()} />;
+    return <p className="text-[var(--muted)]">That account is gone.</p>;
+  }
 
-  if (missing) return <p className="text-[var(--muted)]">That account is gone.</p>;
-  if (!acct) return <p className="text-[var(--muted)]">Loading…</p>;
-
+  const item = acct.plaidItemId ? list?.items.find((row) => row.id === acct.plaidItemId) ?? null : null;
+  const txs = detail?.transactions ?? [];
+  const snapshots = detail?.snapshots ?? [];
+  const liability = detail?.liability ?? null;
+  const holds = (investments?.holdings ?? []).filter((holding) => holding.account?.id === id);
   const isDebt = classifyAccount(acct.type) === "liability";
   const signed = isDebt ? -Math.abs(acct.currentBalanceCents) : acct.currentBalanceCents;
   const limit =
@@ -91,32 +83,48 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
     cents: isDebt ? -Math.abs(row.balanceCents) : row.balanceCents,
   }));
 
+  function refresh() {
+    invalidateQueries("accounts");
+    invalidateQueries(`account:${id}`);
+    invalidateQueries("dashboard");
+    reload();
+  }
+
   async function save() {
-    await api(`/api/accounts/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name, currentBalance: Number(balance) }),
+    await run(async () => {
+      await api(`/api/accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name, currentBalance: Number(balance) }),
+      });
     });
-    load();
+    refresh();
   }
 
   async function patchFlags(next: { includeInNetWorth?: boolean; isHidden?: boolean }) {
-    setAcct((current) => (current ? { ...current, ...next } : current));
     await api(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify(next) });
+    refresh();
   }
 
   async function remove() {
     await api(`/api/accounts/${id}`, { method: "DELETE" });
-    window.location.href = "/accounts";
+    invalidateQueries("accounts");
+    invalidateQueries(`account:${id}`);
+    invalidateQueries("dashboard");
+    router.push("/accounts");
   }
 
   async function disconnectBank() {
-    if (!acct?.plaidItemId) return;
-    await api(`/api/plaid/items/${acct.plaidItemId}`, { method: "DELETE" });
-    window.location.href = "/accounts";
+    const itemId = acct?.plaidItemId;
+    if (!itemId) return;
+    await api(`/api/plaid/items/${itemId}`, { method: "DELETE" });
+    invalidateQueries("accounts");
+    invalidateQueries(`account:${id}`);
+    router.push("/accounts");
   }
 
   return (
     <div className="screen">
+      {flash}
       <Link href="/accounts" className="ios-back">
         <span className="inline-flex rotate-180" aria-hidden>
           <Icon name="chevron" size={18} />
@@ -151,7 +159,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           ) : null
         }
       />
-      {item && item.status !== "ok" ? <ConnectBank itemId={item.id} label="Reconnect" onLinked={load} /> : null}
+      {item && item.status !== "ok" ? <ConnectBank itemId={item.id} label="Reconnect" onLinked={refresh} /> : null}
 
       <div className="card">
         <button
@@ -184,10 +192,10 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           <input className="shelf-input mt-1" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} />
         </label>
         <div className="flex gap-2">
-          <button className="shelf-btn" type="button" onClick={save}>
+          <button className="shelf-btn" type="button" onClick={() => void save()}>
             Save
           </button>
-          <button className="shelf-btn danger" type="button" onClick={remove}>
+          <button className="shelf-btn danger" type="button" onClick={() => void remove()}>
             Remove account
           </button>
         </div>
