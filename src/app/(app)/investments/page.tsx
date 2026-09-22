@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 
 const COLORS = ["#1f4d45", "#1f7a45", "#6f6a62", "#b23b32", "#3d6b62", "#8a9a84"];
@@ -42,7 +43,7 @@ export default function InvestmentsPage() {
     return [...map.values()];
   }, [data]);
 
-  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
+  if (!data) return <PageSkeleton title="Investments" rows={4} />;
 
   const pie = Object.entries(data.byType).map(([name, cents]) => ({ name: labelType(name), value: cents / 100, cents }));
   const total = pie.reduce((sum, slice) => sum + slice.cents, 0) || 1;

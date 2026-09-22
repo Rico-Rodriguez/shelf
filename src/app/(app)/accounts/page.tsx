@@ -1,13 +1,15 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConnectBank } from "@/components/ConnectBank";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
+import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Account = {
   id: string;
@@ -33,20 +35,12 @@ type Payload = {
 };
 
 export default function AccountsPage() {
-  const [data, setData] = useState<Payload | null>(null);
+  const { data, loading, refreshing, reload } = useQuery<Payload>("accounts", "/api/accounts");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState("depository");
   const [balance, setBalance] = useState("");
   const [kind, setKind] = useState("cash");
-
-  const load = useCallback(() => {
-    void api<Payload>("/api/accounts").then(setData);
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const visible = useMemo(() => data?.accounts.filter((account) => !account.isHidden) ?? [], [data]);
   const assets = visible.filter((account) => classifyAccount(account.type) === "asset");
@@ -81,36 +75,42 @@ export default function AccountsPage() {
     setName("");
     setBalance("");
     setOpen(false);
-    load();
+    invalidateQueries("accounts");
+    reload();
   }
 
   async function disconnect(itemId: string) {
     await api(`/api/plaid/items/${itemId}`, { method: "DELETE" });
-    load();
+    invalidateQueries("accounts");
+    reload();
   }
 
   async function sync() {
     await api("/api/plaid/sync", { method: "POST", body: "{}" });
-    load();
+    invalidateQueries("accounts");
+    invalidateQueries("dashboard");
+    reload();
   }
 
-  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
+  if (!data && loading) return <PageSkeleton title="Accounts" rows={4} />;
+  if (!data) return <PageSkeleton title="Accounts" rows={4} />;
 
   return (
-    <div className="space-y-6">
+    <PageShell refreshing={refreshing}>
+    <div className="space-y-5">
       <PageHeader
         title="Accounts"
         subtitle={
           <>
-            Everything you own and owe, in one list. Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
-            {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} bank logins` : ""}
+            Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
+            {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} banks` : ""}
           </>
         }
       >
         <div className="flex flex-wrap gap-2">
           {data.plaidConfigured ? (
             <>
-              <ConnectBank onLinked={load} />
+              <ConnectBank onLinked={reload} />
               <button className="pixel-btn secondary" type="button" onClick={sync}>
                 Refresh
               </button>
@@ -217,5 +217,6 @@ export default function AccountsPage() {
         </Sheet>
       ) : null}
     </div>
+    </PageShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
@@ -10,9 +10,11 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { formatMoney } from "@/lib/money";
+import { invalidateQueries, useQuery, writeQuery } from "@/lib/use-query";
 
 type Widget = { id: string; hidden: boolean };
 
@@ -48,23 +50,20 @@ const WIDGETS = [
 const LABELS = Object.fromEntries(WIDGETS.map((widget) => [widget.id, widget.label]));
 
 export default function HomePage() {
-  const [dash, setDash] = useState<Dash | null>(null);
+  const { data: dash, loading, refreshing, reload, setData } = useQuery<Dash>("dashboard", "/api/dashboard");
   const [error, setError] = useState<string | null>(null);
   const [customizing, setCustomizing] = useState(false);
 
-  const load = useCallback(() => {
-    api<Dash>("/api/dashboard")
-      .then(setDash)
-      .catch((e) => setError(e.message));
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    // surface fetch errors without blanking cached data
+    if (!dash && !loading) setError(null);
+  }, [dash, loading]);
 
   async function saveLayout(layout: Widget[]) {
     if (!dash) return;
-    setDash({ ...dash, layout });
+    const next = { ...dash, layout };
+    setData(next);
+    writeQuery("dashboard", next);
     await api("/api/dashboard", { method: "PUT", body: JSON.stringify({ layout }) });
   }
 
@@ -85,18 +84,22 @@ export default function HomePage() {
 
   async function markDone(id: string) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
-    load();
+    invalidateQueries("dashboard");
+    invalidateQueries("tx:");
+    reload();
   }
 
   if (error) return <p className="text-[var(--danger)]">{error}</p>;
-  if (!dash) return <p className="text-[var(--muted)]">Loading…</p>;
+  if (!dash && loading) return <PageSkeleton title="Shelf" rows={5} />;
+  if (!dash) return <PageSkeleton title="Shelf" rows={5} />;
 
   const visible = dash.layout.filter((item) => !item.hidden);
   const netWorthWidget = visible.find((item) => item.id === "netWorth");
   const rest = visible.filter((item) => item.id !== "netWorth");
 
   return (
-    <div className="page-enter space-y-5">
+    <PageShell refreshing={refreshing}>
+    <div className="space-y-5">
       <PageHeader title="Shelf" subtitle="One glance at your money — then clear what's new.">
         <button className="pixel-btn ghost" type="button" onClick={() => setCustomizing(true)}>
           Customize
@@ -320,5 +323,6 @@ export default function HomePage() {
         </Sheet>
       ) : null}
     </div>
+    </PageShell>
   );
 }

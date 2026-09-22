@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { writeQuery } from "@/lib/use-query";
 import { AppShell } from "./AppShell";
 import { SyncPoller } from "./SyncPoller";
 
@@ -25,10 +26,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       }
       try {
         const dash = await fetch("/api/dashboard").then((r) => r.json());
+        writeQuery("dashboard", dash);
         setPlaid(Boolean(dash.plaidConfigured && dash.itemCount > 0));
       } catch {
         setPlaid(false);
       }
+      void Promise.allSettled([
+        fetch("/api/accounts").then(async (r) => (r.ok ? writeQuery("accounts", await r.json()) : null)),
+        fetch("/api/budget").then(async (r) => (r.ok ? writeQuery("budget:current", await r.json()) : null)),
+        fetch("/api/cash-flow?grain=month&months=12").then(async (r) =>
+          r.ok ? writeQuery("cash-flow:grain=month&months=12", await r.json()) : null,
+        ),
+      ]);
       setReady(true);
     })();
   }, []);

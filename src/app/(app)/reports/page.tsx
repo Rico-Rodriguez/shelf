@@ -8,6 +8,7 @@ import { MonthNav } from "@/components/MonthNav";
 import { SankeyChart } from "@/components/SankeyChart";
 import { Stat } from "@/components/Stat";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { monthRange, yearMonth } from "@/lib/dates";
@@ -33,7 +34,7 @@ export default function ReportsPage() {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`).then(setData);
   }, [cursor]);
 
-  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
+  if (!data) return <PageSkeleton title="Reports" rows={5} />;
   const range = monthRange(cursor.year, cursor.month);
 
   return (
