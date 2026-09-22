@@ -28,7 +28,7 @@
   --tabbar-height: calc(62px + env(safe-area-inset-bottom, 0px));
   --page-end: 36px;
   --font-ui: var(--font-outfit), "Segoe UI", sans-serif;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-display: var(--font-ui);
   --space-field: 16px;
 
   /* Compat aliases during migration */
@@ -128,10 +128,7 @@ body {
   min-height: 100%;
   max-width: 100%;
   overflow-x: clip;
-  background:
-    radial-gradient(1100px 480px at 8% -8%, rgba(27, 122, 98, 0.07), transparent 55%),
-    radial-gradient(900px 420px at 100% 0%, rgba(20, 24, 31, 0.035), transparent 52%),
-    linear-gradient(180deg, #f6f8fa 0%, var(--surface) 40%, #eef1f4 100%);
+  background: var(--surface);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 15px;
@@ -641,17 +638,15 @@ a:focus-visible {
   }
 
   .brand-mark {
-    font-family: var(--font-display);
-    font-weight: 560;
-    letter-spacing: -0.03em;
+    font-weight: 650;
+    letter-spacing: -0.04em;
     line-height: 1;
   }
 
   .hero-number {
-    font-family: var(--font-display);
     font-size: clamp(40px, 8vw, 56px);
-    font-weight: 560;
-    letter-spacing: -0.035em;
+    font-weight: 640;
+    letter-spacing: -0.045em;
     line-height: 1.02;
     font-variant-numeric: tabular-nums;
   }
@@ -662,9 +657,8 @@ a:focus-visible {
   }
 
   .money-figure {
-    font-family: var(--font-display);
-    font-weight: 560;
-    letter-spacing: -0.03em;
+    font-weight: 640;
+    letter-spacing: -0.04em;
     line-height: 1.15;
   }
 
@@ -724,6 +718,23 @@ a:focus-visible {
 
   .swipe-actions .hide {
     background: var(--danger);
+  }
+
+  .swipe-actions .accent {
+    background: var(--accent);
+  }
+
+  .swipe-row.has-peek::after {
+    content: "";
+    position: absolute;
+    top: 10px;
+    right: 0;
+    bottom: 10px;
+    z-index: 1;
+    width: 3px;
+    border-radius: 99px;
+    background: var(--accent);
+    pointer-events: none;
   }
 
   .field-stack {
@@ -1030,12 +1041,7 @@ a:focus-visible {
   }
 
   .page-shell {
-    animation: rise-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-
-  .page-shell.is-refreshing {
-    opacity: 0.72;
-    transition: opacity 160ms ease;
+    animation: none;
   }
 
   .chart-frame {
@@ -1437,13 +1443,12 @@ a:focus-visible {
   }
 
   .ios-section {
-    margin: 0 4px 8px;
+    margin: 0 0 8px;
     color: var(--muted);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-size: 13px;
+    font-weight: 550;
+    letter-spacing: -0.01em;
     line-height: 18px;
-    text-transform: uppercase;
   }
 
   .ios-back {
@@ -1552,10 +1557,9 @@ a:focus-visible {
 }
 
 main h1 {
-  font-family: var(--font-display);
   font-size: clamp(30px, 7vw, 36px);
-  font-weight: 560;
-  letter-spacing: -0.03em;
+  font-weight: 640;
+  letter-spacing: -0.04em;
   line-height: 1.1;
 }
 

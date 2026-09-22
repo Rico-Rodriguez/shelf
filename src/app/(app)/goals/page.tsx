@@ -1,14 +1,16 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
 import { goalPace } from "@/lib/goal-pace";
+import { useQuery } from "@/lib/use-query";
 
 type Goal = {
   id: string;
@@ -30,23 +32,16 @@ type GoalForm = { name: string; kind: "save_up" | "pay_down"; target: string; ta
 const empty: GoalForm = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [], categoryId: "" };
 
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { data, loading, reload } = useQuery<{ goals: Goal[]; accounts: Account[] }>("goals", "/api/goals");
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
-
-  const load = useCallback(() => {
-    void api<{ goals: Goal[]; accounts: Account[] }>("/api/goals").then((r) => {
-      setGoals(r.goals);
-      setAccounts(r.accounts);
-    });
-    void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups)).catch(() => undefined);
-  }, []);
+  const goals = data?.goals ?? [];
+  const accounts = data?.accounts ?? [];
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups)).catch(() => undefined);
+  }, []);
 
   function openNew() {
     setForm(empty);
@@ -88,14 +83,16 @@ export default function GoalsPage() {
       await api("/api/goals", { method: "PATCH", body: JSON.stringify({ id: editing.id, ...body }) });
     }
     setEditing(null);
-    load();
+    reload();
   }
 
   async function remove(goal: Goal) {
     await api("/api/goals", { method: "DELETE", body: JSON.stringify({ id: goal.id }) });
     setEditing(null);
-    load();
+    reload();
   }
+
+  if (!data && loading) return <PageSkeleton title="Goals" rows={3} />;
 
   return (
     <div className="space-y-4">

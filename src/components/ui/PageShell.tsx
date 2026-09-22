@@ -19,10 +19,9 @@ export function PageSkeleton({ title, rows = 4 }: { title?: string; rows?: numbe
 
 export function PageShell({
   children,
-  refreshing = false,
 }: {
   children: React.ReactNode;
   refreshing?: boolean;
 }) {
-  return <div className={`page-shell ${refreshing ? "is-refreshing" : ""}`.trim()}>{children}</div>;
+  return <div className="page-shell">{children}</div>;
 }

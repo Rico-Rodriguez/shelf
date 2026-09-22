@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
@@ -10,10 +10,13 @@ import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
+import { SwipeRow } from "@/components/SwipeRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
+import { useQuery } from "@/lib/use-query";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
 import { rememberCategory } from "@/lib/category-memory";
 import { merchantMatchKey } from "@/lib/plan";
@@ -50,6 +53,13 @@ type Tx = {
 type SplitDraft = { categoryId: string; amount: string };
 
 type EditState = Tx & { tagText: string; splitDrafts: SplitDraft[] };
+
+type TxPayload = {
+  transactions: Tx[];
+  unreviewed: number;
+  faces?: Record<string, { monthCents: number; count: number }>;
+  frequentCategoryIds?: string[];
+};
 
 export default function TransactionsPage() {
   return (
@@ -103,8 +113,7 @@ function Activity() {
     return () => window.clearTimeout(timer);
   }, [q]);
 
-  const load = useCallback(() => {
-    const id = ++requestId.current;
+  const queryString = useMemo(() => {
     const qs = new URLSearchParams();
     if (search) qs.set("q", search);
     if (accountId) qs.set("accountId", accountId);
@@ -113,31 +122,31 @@ function Activity() {
     if (start) qs.set("start", start);
     if (end) qs.set("end", end);
     if (tag) qs.set("tag", tag);
-    void api<{
-      transactions: Tx[];
-      unreviewed: number;
-      faces?: Record<string, { monthCents: number; count: number }>;
-      frequentCategoryIds?: string[];
-    }>(`/api/transactions?${qs}`).then((r) => {
-      if (id !== requestId.current) return;
-      const returned = new Set(r.transactions.map((tx) => tx.id));
-      for (const tx of r.transactions) {
-        if (tx.reviewed) cleared.current.delete(tx.id);
-      }
-      for (const clearedId of [...cleared.current]) {
-        if (!returned.has(clearedId)) cleared.current.delete(clearedId);
-      }
-      const ghosts = r.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
-      setRows(r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
-      setUnreviewed(Math.max(0, r.unreviewed - ghosts));
-      setFaces(r.faces ?? {});
-      setFrequentCategoryIds(r.frequentCategoryIds ?? []);
-    });
+    return qs.toString();
   }, [search, accountId, categoryId, reviewed, start, end, tag]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data: payload, loading, reload } = useQuery<TxPayload>(
+    `activity:${queryString}`,
+    queryString ? `/api/transactions?${queryString}` : "/api/transactions",
+    { keepPrevious: true },
+  );
+  const load = reload;
+  const [payloadSeen, setPayloadSeen] = useState<TxPayload | null>(null);
+  if (payload && payload !== payloadSeen) {
+    setPayloadSeen(payload);
+    const returned = new Set(payload.transactions.map((tx) => tx.id));
+    for (const tx of payload.transactions) {
+      if (tx.reviewed) cleared.current.delete(tx.id);
+    }
+    for (const clearedId of [...cleared.current]) {
+      if (!returned.has(clearedId)) cleared.current.delete(clearedId);
+    }
+    const ghosts = payload.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
+    setRows(payload.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
+    setUnreviewed(Math.max(0, payload.unreviewed - ghosts));
+    setFaces(payload.faces ?? {});
+    setFrequentCategoryIds(payload.frequentCategoryIds ?? []);
+  }
 
   useEffect(() => {
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
@@ -212,11 +221,23 @@ function Activity() {
     });
   }
 
+  async function hideTx(id: string) {
+    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
+    offerUndo("Hidden", async () => {
+      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
+      load();
+    });
+    setRows((current) => current.filter((row) => row.id !== id));
+    load();
+  }
+
   async function markDone(id: string) {
     const previous = rows.find((tx) => tx.id === id);
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
     if (previous) {
+      dropFromQueue([id]);
       offerUndo("Marked reviewed", async () => {
+        restoreCleared([id]);
         await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: false, categoryId: previous.categoryId, hidden: previous.hidden }) });
         load();
       });
@@ -323,9 +344,11 @@ function Activity() {
   const categoryName = groups.flatMap((group) => group.categories).find((category) => category.id === categoryId)?.name;
   const pendingCount = rows.filter((tx) => tx.pending).length;
 
+  if (!payload && loading) return <PageSkeleton title="Activity" rows={6} />;
+
   return (
     <div className="space-y-4">
-      <PageHeader title="Activity" subtitle={unreviewed ? `${unreviewed} to review` : undefined}>
+      <PageHeader title="Activity">
         <button className="text-btn" type="button" onClick={() => setShowAdd(true)}>
           Add
         </button>
@@ -333,28 +356,27 @@ function Activity() {
 
       <input
         className="shelf-input ios-search"
-        placeholder="Search, or >50 for amounts"
+        placeholder="Search"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         aria-label="Search transactions"
       />
 
-      {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending stays out of spending.</p> : null}
+      {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending purchases are not counted yet.</p> : null}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {unreviewed > 0 ? (
+          <button
+            className={`chip ${focus && inReviewMode ? "accent" : ""}`}
+            type="button"
+            onClick={() => replaceQuery(focus && inReviewMode ? { reviewed: null, focus: null } : { reviewed: "false", focus: "1" })}
+          >
+            {unreviewed} to review
+          </button>
+        ) : null}
         <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
           Filter
         </button>
-        {unreviewed > 0 && reviewed !== "false" ? (
-          <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: "false", focus: "1" })}>
-            Needs review
-          </button>
-        ) : null}
-        {reviewed === "false" ? (
-          <button className="chip accent" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
-            Needs review
-          </button>
-        ) : null}
         {accountName ? (
           <button className="chip" type="button" onClick={() => replaceQuery({ accountId: null })}>
             {accountName}
@@ -501,61 +523,57 @@ function Activity() {
         </EmptyState>
       ) : null}
 
-      {focus && unreviewedRows.length ? null : grouped.map(([date, items]) => (
+      {grouped.map(([date, items]) => (
         <section key={date}>
           <h2 className="ios-section">{dayLabel(date)}</h2>
           <div className="card">
-            {items.map((tx) => (
-              <div
-                key={tx.id}
-                className={`data-row ${tx.reviewed ? "placed" : "is-open"} ${tx.pending ? "is-pending" : ""}`}
-                onTouchStart={(event) => {
-                  const startX = event.changedTouches[0]?.clientX ?? 0;
-                  (event.currentTarget as HTMLElement).dataset.x = String(startX);
-                }}
-                onTouchEnd={(event) => {
-                  const startX = Number((event.currentTarget as HTMLElement).dataset.x || 0);
-                  const dx = (event.changedTouches[0]?.clientX ?? 0) - startX;
-                  if (dx > 80 && !tx.reviewed) void markDone(tx.id);
-                  if (dx < -80) {
-                    void api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) }).then(() => {
-                      offerUndo("Hidden", async () => {
-                        await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
-                        load();
-                      });
-                      load();
-                    });
-                  }
-                }}
-              >
-                {selecting ? (
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${tx.name}`}
-                    checked={selected.includes(tx.id)}
-                    onChange={(event) =>
-                      setSelected((current) => (event.target.checked ? [...current, tx.id] : current.filter((id) => id !== tx.id)))
-                    }
-                  />
-                ) : null}
-                <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openEdit(tx)}>
-                  <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
-                  <span className="min-w-0">
-                  <div className="tx-name flex items-center gap-2 truncate font-medium">
-                    <span className="truncate">{tx.name}</span>
-                    {!tx.reviewed && !tx.categoryId ? <span className="chip warn">Needs a category</span> : null}
+            {items.map((tx) => {
+              const row = (
+                <div className={`data-row ${tx.reviewed ? "placed" : "is-open"} ${tx.pending ? "is-pending" : ""}`}>
+                  {selecting ? (
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${tx.name}`}
+                      checked={selected.includes(tx.id)}
+                      onChange={(event) =>
+                        setSelected((current) => (event.target.checked ? [...current, tx.id] : current.filter((id) => id !== tx.id)))
+                      }
+                    />
+                  ) : null}
+                  <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openEdit(tx)}>
+                    <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
+                    <span className="min-w-0">
+                      <div className="tx-name flex items-center gap-2 truncate font-medium">
+                        <span className="truncate">{tx.name}</span>
+                        {!tx.reviewed && !tx.categoryId ? <span className="chip warn">Needs a category</span> : null}
+                      </div>
+                      <div className="truncate text-[13px] text-[var(--muted)]">
+                        {tx.category?.name ?? "Uncategorized"}
+                        {tx.account?.name ? ` · ${tx.account.name}` : ""}
+                      </div>
+                    </span>
+                  </button>
+                  <div className="shrink-0 text-[16px] font-medium tabular-nums">
+                    <MoneyText cents={-tx.amountCents} signed />
                   </div>
-                  <div className="truncate text-[13px] text-[var(--muted)]">
-                    {tx.category?.name ?? "Uncategorized"}
-                    {tx.account?.name ? ` · ${tx.account.name}` : ""}
-                  </div>
-                  </span>
-                </button>
-                <div className="shrink-0 text-[16px] font-medium tabular-nums">
-                  <MoneyText cents={-tx.amountCents} signed />
                 </div>
-              </div>
-            ))}
+              );
+              if (selecting) return <div key={tx.id} className="border-t border-[var(--line)] first:border-t-0">{row}</div>;
+              return (
+                <SwipeRow
+                  key={tx.id}
+                  peek={!tx.reviewed}
+                  actions={[
+                    { label: "Hide", tone: "danger", onClick: () => void hideTx(tx.id) },
+                    tx.reviewed
+                      ? { label: "Edit", tone: "ink", onClick: () => openEdit(tx) }
+                      : { label: "Done", tone: "accent", onClick: () => void markDone(tx.id) },
+                  ]}
+                >
+                  {row}
+                </SwipeRow>
+              );
+            })}
           </div>
         </section>
       ))}

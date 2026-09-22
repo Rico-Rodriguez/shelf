@@ -98,7 +98,12 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
 }
 
 /** Cumulative categorized spending through the month, one point per day that had spend. */
-export async function spendByDay(year: number, month: number, dek: Buffer) {
+export async function spendByDay(
+  year: number,
+  month: number,
+  dek: Buffer,
+  includeCategory?: (categoryId: string) => boolean,
+) {
   const db = await getDb();
   const { start, end } = monthRange(year, month);
   const txs = (
@@ -117,9 +122,10 @@ export async function spendByDay(year: number, month: number, dek: Buffer) {
     if (txSplits.length) {
       for (const split of txSplits) {
         if (!split.categoryId) continue;
+        if (includeCategory && !includeCategory(split.categoryId)) continue;
         cents += split.amountCents;
       }
-    } else if (tx.categoryId) {
+    } else if (tx.categoryId && (!includeCategory || includeCategory(tx.categoryId))) {
       cents = tx.amountCents;
     }
     if (cents <= 0) continue;

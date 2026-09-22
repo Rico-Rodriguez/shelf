@@ -2,17 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const WIDTH = 152;
+const BUTTON = 76;
+
+export type SwipeAction = {
+  label: string;
+  tone: "ink" | "danger" | "accent";
+  onClick: () => void;
+};
 
 export function SwipeRow({
   children,
-  onCategory,
-  onHide,
+  actions,
+  peek = false,
 }: {
   children: React.ReactNode;
-  onCategory: () => void;
-  onHide: () => void;
+  actions: SwipeAction[];
+  peek?: boolean;
 }) {
+  const width = Math.max(BUTTON, actions.length * BUTTON);
   const rowRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState(0);
   const offsetRef = useRef(0);
@@ -49,14 +56,14 @@ export function SwipeRow({
       }
       if (axis !== "x") return;
       if (event.cancelable) event.preventDefault();
-      const next = Math.min(0, Math.max(-WIDTH, startOffset + dx));
+      const next = Math.min(0, Math.max(-width, startOffset + dx));
       offsetRef.current = next;
       setOffset(next);
     }
 
     function onEnd() {
       if (axis !== "x") return;
-      const next = offsetRef.current < -WIDTH / 2 ? -WIDTH : 0;
+      const next = offsetRef.current < -width / 2 ? -width : 0;
       offsetRef.current = next;
       setOffset(next);
     }
@@ -71,22 +78,26 @@ export function SwipeRow({
       row.removeEventListener("touchend", onEnd);
       row.removeEventListener("touchcancel", onEnd);
     };
-  }, []);
+  }, [width]);
 
   return (
-    <div className="swipe-row">
+    <div className={`swipe-row${peek ? " has-peek" : ""}`}>
       <div className="swipe-actions">
-        <button type="button" className="category" onClick={onCategory}>
-          Category
-        </button>
-        <button type="button" className="hide" onClick={onHide}>
-          Hide
-        </button>
+        {actions.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            className={action.tone === "danger" ? "hide" : action.tone === "accent" ? "accent" : "category"}
+            onClick={action.onClick}
+          >
+            {action.label}
+          </button>
+        ))}
       </div>
       <div
         ref={rowRef}
         className="relative bg-[var(--paper)]"
-        style={{ transform: `translate3d(${offset}px, 0, 0)`, transition: offset === 0 || offset === -WIDTH ? "transform 180ms ease" : "none" }}
+        style={{ transform: `translate3d(${offset}px, 0, 0)`, transition: offset === 0 || offset === -width ? "transform 180ms ease" : "none" }}
         onClickCapture={(event) => {
           if (offset === 0) return;
           event.preventDefault();

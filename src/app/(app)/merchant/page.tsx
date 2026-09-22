@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
+import { useQuery } from "@/lib/use-query";
 
 type Tx = {
   id: string;
@@ -23,16 +24,16 @@ type Rule = { id: string; matchMerchant: string | null; actionCategoryId: string
 function Merchant() {
   const params = useSearchParams();
   const name = params.get("name") ?? "";
-  const [rows, setRows] = useState<Tx[] | null>(null);
+  const { data, loading } = useQuery<{ transactions: Tx[] }>(
+    name ? `merchant:${name}` : null,
+    name ? `/api/transactions?merchant=${encodeURIComponent(name)}` : null,
+  );
+  const rows = data?.transactions ?? null;
   const [rule, setRule] = useState<Rule | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!name) {
-      setRows([]);
-      return;
-    }
-    void api<{ transactions: Tx[] }>(`/api/transactions?merchant=${encodeURIComponent(name)}`).then((res) => setRows(res.transactions));
+    if (!name) return;
     void api<{ rules: Rule[] }>("/api/rules")
       .then(async (res) => {
         const match = res.rules.find((item) => item.matchMerchant && name.toLowerCase().includes(item.matchMerchant.toLowerCase()));
@@ -72,6 +73,7 @@ function Merchant() {
       </div>
     );
   }
+  if (!rows && loading) return <PageSkeleton title={name} rows={4} />;
   if (!rows) return <PageSkeleton title={name} rows={4} />;
 
   return (

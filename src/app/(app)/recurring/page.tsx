@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
@@ -10,6 +10,7 @@ import { PageSkeleton } from "@/components/ui/PageShell";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
+import { useQuery } from "@/lib/use-query";
 import { inDaysPhrase, monthName, monthRange, occurrencesInMonth, todayISO, yearMonth } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { annualizedCents } from "@/lib/plan";
@@ -54,7 +55,8 @@ const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: 
 export default function RecurringPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
-  const [rows, setRows] = useState<Rec[]>([]);
+  const { data, loading, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
+  const rows = data?.recurrences ?? [];
   const [view, setView] = useState<"list" | "calendar">("list");
   const [bucket, setBucket] = useState<"all" | "bill" | "subscription">("all");
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
@@ -62,20 +64,11 @@ export default function RecurringPage() {
   const [form, setForm] = useState(emptyForm);
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [ready, setReady] = useState(false);
-
-  const load = useCallback(() => {
-    void api<{ recurrences: Rec[] }>("/api/recurring").then((r) => {
-      setRows(r.recurrences);
-      setReady(true);
-    });
-  }, []);
 
   useEffect(() => {
-    load();
     void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
-  }, [load]);
+  }, []);
 
   const active = rows.filter((row) => row.isActive && (bucket === "all" || (row.kind ?? "bill") === bucket));
   const listed = rows.filter((row) => bucket === "all" || (row.kind ?? "bill") === bucket);
@@ -91,7 +84,7 @@ export default function RecurringPage() {
   const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
   const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
 
-  if (!ready) return <PageSkeleton title="Bills" rows={5} />;
+  if (!data && loading) return <PageSkeleton title="Bills" rows={5} />;
 
   const days = new Date(cursor.year, cursor.month, 0).getDate();
   const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
@@ -108,7 +101,7 @@ export default function RecurringPage() {
     }
     await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: drafts }) });
     setSuggestions([]);
-    load();
+    reload();
   }
 
   function openNew() {
@@ -154,25 +147,25 @@ export default function RecurringPage() {
       });
     }
     setEditing(null);
-    load();
+    reload();
   }
 
   async function pause(row: Rec) {
     await api("/api/recurring", { method: "PATCH", body: JSON.stringify({ id: row.id, isActive: !row.isActive }) });
-    load();
+    reload();
   }
 
   async function remove(row: Rec) {
     await api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: row.id }) });
     setEditing(null);
-    load();
+    reload();
   }
 
   return (
     <div className="space-y-4">
       <PageHeader title="Bills">
         <button className="text-btn" type="button" onClick={detect}>
-          Detect
+          Find bills
         </button>
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add
@@ -324,7 +317,7 @@ export default function RecurringPage() {
           </form>
           {editing !== "new" ? (
             <div className="flex gap-2">
-              <button className="shelf-btn ghost flex-1" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); load(); })}>
+              <button className="shelf-btn ghost flex-1" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); reload(); })}>
                 Skip cycle
               </button>
               <button className="shelf-btn ghost flex-1" type="button" onClick={() => pause(editing)}>
