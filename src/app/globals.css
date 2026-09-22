@@ -242,6 +242,71 @@ a:focus-visible {
     letter-spacing: -0.02em;
   }
 
+  .money-figure {
+    font-family: var(--font-display);
+    font-weight: 560;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+  }
+
+  .insight-section {
+    scroll-margin-top: 72px;
+  }
+
+  .nav-title {
+    position: absolute;
+    left: 50%;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%);
+    transition: opacity 160ms ease;
+  }
+
+  .nav-title.is-shown {
+    opacity: 1;
+  }
+
+  .swipe-row {
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  .swipe-row + .swipe-row {
+    border-top: 1px solid var(--line);
+  }
+
+  .swipe-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+  }
+
+  .swipe-actions button {
+    width: 76px;
+    border: 0;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .swipe-actions .category {
+    background: var(--ink);
+  }
+
+  .swipe-actions .hide {
+    background: var(--danger);
+  }
+
   .field-stack {
     display: flex;
     flex-direction: column;
@@ -901,10 +966,6 @@ a:focus-visible {
 
   .drag-handle:active {
     cursor: grabbing;
-  }
-
-  .insights-embed .page-header {
-    display: none;
   }
 }
 

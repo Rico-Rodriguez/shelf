@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, budgetMonths, categories, categoryGroups, settings } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, spentByCategory, suggestBudget } from "@/lib/budget";
-import { yearMonth } from "@/lib/dates";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingInMonth, readMonthLeft, spentByCategory, suggestBudget } from "@/lib/budget";
+import { addMonths, yearMonth } from "@/lib/dates";
 import { nid } from "@/lib/ids";
 import { openBudgetItem, openSettings, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "@/lib/secrets";
 
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     const [cfgRow] = await db.select().from(settings);
     const cfg = cfgRow ? openSettings(cfgRow, dek) : null;
 
+    const usual = await suggestBudget(year, month, dek);
     const rows = cats
       .filter((c) => c.kind === "expense")
       .map((c) => {
@@ -45,8 +46,12 @@ export async function GET(request: Request) {
           availableCents: planned + rolloverIn,
           spentCents: used,
           remainingCents: planned + rolloverIn - used,
+          usualCents: usual.suggested[c.id] ?? 0,
         };
       });
+    const prev = addMonths(year, month, -1);
+    const previousLeftCents = await readMonthLeft(prev.year, prev.month, dek);
+    const pendingCents = await pendingInMonth(year, month, dek);
 
     const flex = {
       fixed: rows.filter((r) => r.category.flexBucket === "fixed"),
@@ -56,11 +61,7 @@ export async function GET(request: Request) {
     const mode = cfg?.budgetMode ?? "category";
     const flexPoolCents = monthRow.flexPoolCents ?? 0;
     const flexSpent = flex.flex.reduce((s, r) => s + r.spentCents, 0);
-    const bucketPlanned = (list: typeof rows) => list.reduce((s, r) => s + r.availableCents, 0);
-    const expensePlanned =
-      mode === "flex"
-        ? bucketPlanned(flex.fixed) + bucketPlanned(flex.non_monthly) + flexPoolCents
-        : rows.reduce((s, r) => s + r.availableCents, 0);
+    const expensePlanned = rows.reduce((s, r) => s + r.availableCents, 0);
     const expenseSpent = rows.reduce((s, r) => s + r.spentCents, 0);
 
     return NextResponse.json({
@@ -75,6 +76,16 @@ export async function GET(request: Request) {
       leftoverCents: monthRow.plannedIncomeCents - expensePlanned,
       expensePlannedCents: expensePlanned,
       expenseSpentCents: expenseSpent,
+      pendingCents,
+      handoff:
+        previousLeftCents == null
+          ? null
+          : {
+              previousYear: prev.year,
+              previousMonth: prev.month,
+              previousLeftCents,
+              rolledCents: rows.reduce((sum, row) => sum + row.rolloverInCents, 0),
+            },
       rows,
       flex,
     });

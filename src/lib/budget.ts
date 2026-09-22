@@ -97,6 +97,38 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
   return out;
 }
 
+export async function pendingInMonth(year: number, month: number, dek: Buffer): Promise<number> {
+  const db = await getDb();
+  const { start, end } = monthRange(year, month);
+  const txs = (
+    await db
+      .select()
+      .from(transactions)
+      .where(and(gte(transactions.date, start), lte(transactions.date, end)))
+  ).map((tx) => openTx(tx, dek));
+  let total = 0;
+  for (const tx of txs) {
+    if (tx.hidden || tx.isTransfer || !tx.pending || tx.amountCents <= 0) continue;
+    total += tx.amountCents;
+  }
+  return total;
+}
+
+export async function readMonthLeft(year: number, month: number, dek: Buffer): Promise<number | null> {
+  const db = await getDb();
+  const existing = await db
+    .select()
+    .from(budgetMonths)
+    .where(and(eq(budgetMonths.year, year), eq(budgetMonths.month, month)));
+  if (!existing[0]) return null;
+  const monthRow = openBudgetMonth(existing[0], dek);
+  const items = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, existing[0].id))).map((row) =>
+    openBudgetItem(row, dek),
+  );
+  const planned = items.reduce((sum, item) => sum + item.plannedCents + item.rolloverInCents, 0);
+  return monthRow.plannedIncomeCents - planned;
+}
+
 export async function incomeInMonth(year: number, month: number, dek: Buffer): Promise<number> {
   const db = await getDb();
   const { start, end } = monthRange(year, month);

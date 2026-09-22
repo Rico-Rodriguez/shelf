@@ -7,14 +7,17 @@ import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
+import { SwipeRow } from "@/components/SwipeRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
-import { FilterBar } from "@/components/ui/FilterBar";
-import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
+
+function filterCount(filters: { q: string; reviewed: string; accountId: string; categoryId: string; tag: string; start: string }) {
+  return [filters.q, filters.reviewed, filters.accountId, filters.categoryId, filters.tag, filters.start].filter(Boolean).length;
+}
 
 type Tx = {
   id: string;
@@ -72,6 +75,7 @@ function Activity() {
   const [pairs, setPairs] = useState<{ id: string; name: string; date: string; amountCents: number; account: string | null }[]>([]);
   const [edit, setEdit] = useState<EditState | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
 
   useEffect(() => {
@@ -139,9 +143,15 @@ function Activity() {
 
   const visibleUnreviewed = rows.filter((tx) => !tx.reviewed).map((tx) => tx.id);
   const inReviewMode = reviewed === "false";
+  const activeFilters = filterCount({ q: search, reviewed, accountId, categoryId, tag, start });
 
   async function markDone(id: string) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
+    load();
+  }
+
+  async function hideTx(tx: Tx) {
+    await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
     load();
   }
 
@@ -232,96 +242,18 @@ function Activity() {
               : "Every purchase in one list"
         }
       >
-        <button className="shelf-btn" type="button" onClick={() => setShowAdd(true)}>
-          Add
-        </button>
-      </PageHeader>
-
-      <input
-        className="shelf-input ios-search"
-        placeholder="Search, or >50 for amounts"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search transactions"
-      />
-
-      <Segment
-        className="w-full max-w-md"
-        value={reviewed}
-        onChange={(value) => replaceQuery({ reviewed: value || null })}
-        options={[
-          { value: "", label: "All" },
-          { value: "false", label: "Needs review" },
-          { value: "true", label: "Reviewed" },
-        ]}
-      />
-
-      {inReviewMode ? (
-        <Hint tone="action" title="What “review” means">
-          Tap a purchase to rename it or fix the category. When it looks right, tap <strong>Done</strong> — or save from the detail sheet. Reviewed items stop counting against your inbox so the budget stays trustworthy.
-        </Hint>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Account">
-          <select className="shelf-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })} aria-label="Account">
-            <option value="">All accounts</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Category">
-          <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
-        </Field>
-        <Field label="Tag">
-          <select className="shelf-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })} aria-label="Tag">
-            <option value="">All tags</option>
-            {tagNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <FilterBar className="justify-between">
-        {month ? (
-          <MonthNav
-            year={month.year}
-            month={month.month}
-            onChange={(year, mon) => {
-              const range = monthRange(year, mon);
-              replaceQuery({ start: range.start, end: range.end });
-            }}
-          />
-        ) : (
-          <button
-            className="shelf-btn ghost"
-            type="button"
-            onClick={() => {
-              const now = yearMonth();
-              const range = monthRange(now.year, now.month);
-              replaceQuery({ start: range.start, end: range.end });
-            }}
-          >
-            This month
-          </button>
-        )}
-        {month ? (
-          <button className="shelf-btn ghost" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
-            All months
-          </button>
-        ) : null}
         {visibleUnreviewed.length ? (
           <button className="shelf-btn soft" type="button" onClick={markVisibleDone}>
             Mark {visibleUnreviewed.length} done
           </button>
         ) : null}
-      </FilterBar>
+        <button className="shelf-btn ghost" type="button" onClick={() => setFiltersOpen(true)}>
+          Filter{activeFilters ? ` · ${activeFilters}` : ""}
+        </button>
+        <button className="shelf-btn" type="button" onClick={() => setShowAdd(true)}>
+          Add
+        </button>
+      </PageHeader>
 
       {grouped.length === 0 ? (
         <EmptyState
@@ -343,7 +275,8 @@ function Activity() {
           <h2 className="ios-section">{dayLabel(date)}</h2>
           <div className="card">
             {items.map((tx) => (
-              <div key={tx.id} className={`data-row ${tx.reviewed ? "placed" : ""}`}>
+              <SwipeRow key={tx.id} onCategory={() => openEdit(tx)} onHide={() => void hideTx(tx)}>
+              <div className={`data-row ${tx.reviewed ? "placed" : ""}`}>
                 <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openEdit(tx)}>
                   <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
                   <span className="min-w-0">
@@ -377,10 +310,103 @@ function Activity() {
                   )}
                 </div>
               </div>
+              </SwipeRow>
             ))}
           </div>
         </section>
       ))}
+
+      {filtersOpen ? (
+        <Sheet title="Filter" onClose={() => setFiltersOpen(false)}>
+          <Field label="Search">
+            <input
+              className="shelf-input"
+              placeholder="Merchant or note"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              aria-label="Search activity"
+            />
+          </Field>
+          <div className="space-y-2">
+            <div className="field-label">Status</div>
+            <Segment
+              value={reviewed || "all"}
+              onChange={(value) => replaceQuery({ reviewed: value === "all" ? null : value })}
+              options={[
+                { value: "all", label: "All" },
+                { value: "false", label: "To review" },
+                { value: "true", label: "Reviewed" },
+              ]}
+            />
+          </div>
+          <Field label="Account">
+            <select className="shelf-input" value={accountId} onChange={(e) => replaceQuery({ accountId: e.target.value || null })}>
+              <option value="">All accounts</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Category">
+            <CategorySelect groups={groups} value={categoryId} onChange={(id) => replaceQuery({ categoryId: id || null })} emptyLabel="All categories" />
+          </Field>
+          <Field label="Tag">
+            <select className="shelf-input" value={tag} onChange={(e) => replaceQuery({ tag: e.target.value || null })}>
+              <option value="">All tags</option>
+              {tagNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="space-y-2">
+            <div className="field-label">Month</div>
+            {month ? (
+              <MonthNav
+                year={month.year}
+                month={month.month}
+                onChange={(year, nextMonth) => {
+                  const range = monthRange(year, nextMonth);
+                  replaceQuery({ start: range.start, end: range.end });
+                }}
+              />
+            ) : (
+              <p className="text-[14px] text-[var(--muted)]">All months</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                className="shelf-btn ghost"
+                type="button"
+                onClick={() => {
+                  const now = yearMonth();
+                  const range = monthRange(now.year, now.month);
+                  replaceQuery({ start: range.start, end: range.end });
+                }}
+              >
+                This month
+              </button>
+              <button className="shelf-btn ghost" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
+                All months
+              </button>
+            </div>
+          </div>
+          <button
+            className="shelf-btn w-full"
+            type="button"
+            onClick={() => {
+              setQ("");
+              setSearch("");
+              replaceQuery({ q: null, reviewed: null, accountId: null, categoryId: null, tag: null, start: null, end: null });
+              setFiltersOpen(false);
+            }}
+          >
+            Clear filters
+          </button>
+        </Sheet>
+      ) : null}
 
       {edit ? (
         <Sheet title="Review purchase" onClose={() => setEdit(null)}>

@@ -9,7 +9,6 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
@@ -78,24 +77,6 @@ export default function HomePage() {
     await api("/api/dashboard", { method: "PUT", body: JSON.stringify({ layout }) });
   }
 
-  function reorder(from: number, to: number) {
-    if (!dash || from === to || from < 0 || to < 0 || to >= dash.layout.length) return;
-    const layout = dash.layout.map((item) => ({ ...item }));
-    const [item] = layout.splice(from, 1);
-    layout.splice(to, 0, item);
-    void saveLayout(layout);
-  }
-
-  function move(id: string, dir: -1 | 1) {
-    if (!dash) return;
-    const layout = dash.layout.map((item) => ({ ...item }));
-    const i = layout.findIndex((item) => item.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= layout.length) return;
-    [layout[i], layout[j]] = [layout[j], layout[i]];
-    void saveLayout(layout);
-  }
-
   function toggle(id: string) {
     if (!dash) return;
     void saveLayout(dash.layout.map((item) => (item.id === id ? { ...item, hidden: !item.hidden } : item)));
@@ -124,9 +105,9 @@ export default function HomePage() {
         subtitle={
           dash.budget.plannedCents > 0
             ? dash.budget.remainingCents >= 0
-              ? "You are inside the plan. Review anything new, then leave it."
-              : "Spending is past the plan. Adjust a category or pause a bill."
-            : "Set a budget so this page can answer whether the month is okay."
+              ? "You are inside the plan."
+              : "Spending is past the plan."
+            : "Set a plan for this month."
         }
       >
         <button className="shelf-btn ghost" type="button" onClick={() => setCustomizing(true)}>
@@ -139,7 +120,7 @@ export default function HomePage() {
           <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">
             {dash.budget.plannedCents > 0 ? "Left in the plan" : "Net worth"}
           </p>
-          <Link href={dash.budget.plannedCents > 0 ? "/budget" : "/insights?tab=worth"} className="block">
+          <Link href={dash.budget.plannedCents > 0 ? "/budget" : "/insights#worth"} className="block">
             <MoneyText hero cents={dash.budget.plannedCents > 0 ? dash.budget.remainingCents : dash.netWorth.netWorthCents} signed={dash.budget.plannedCents > 0} />
           </Link>
           <p className="mt-2 text-[14px] text-[var(--muted)]">
@@ -172,26 +153,6 @@ export default function HomePage() {
         </EmptyState>
       ) : null}
 
-      {dash.unreviewed.count > 0 ? (
-        <Hint tone="action" title={`${dash.unreviewed.count} purchase${dash.unreviewed.count === 1 ? "" : "s"} need a quick look`}>
-          <p>
-            Review means: open each one, fix the category if it&apos;s wrong, then tap <strong>Done</strong>. That keeps your budget honest.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={activityHref({ reviewed: "false" })} className="shelf-btn soft">
-              Start reviewing
-            </Link>
-            <span className="self-center text-[13px] text-[var(--muted)]">
-              <MoneyText cents={dash.unreviewed.amountCents} /> total
-            </span>
-          </div>
-        </Hint>
-      ) : (
-        <Hint tone="success" title="Inbox clear">
-          Nothing waiting to review. New purchases will show up here after sync.
-        </Hint>
-      )}
-
       {visible.length === 0 ? (
         <EmptyState title="Home is empty" action={<button className="shelf-btn" type="button" onClick={() => setCustomizing(true)}>Show cards</button>}>
           Every card is hidden. Customize to bring one back.
@@ -204,14 +165,14 @@ export default function HomePage() {
             <h2 className="mb-3 text-[13px] font-medium text-[var(--muted)]">{LABELS[item.id] ?? item.id}</h2>
             {item.id === "cashFlow" && (
               <div className="space-y-2">
-                <div className="text-[28px] font-semibold tracking-[-0.03em]">
-                  <MoneyText cents={dash.cashFlow.savedCents} signed />
+                <div className="text-[28px]">
+                  <MoneyText figure cents={dash.cashFlow.savedCents} signed />
                 </div>
                 <p className="text-[14px] text-[var(--muted)]">Saved this month</p>
                 <p className="text-[14px]">
                   Income <MoneyText cents={dash.cashFlow.incomeCents} /> · Spending <MoneyText cents={dash.cashFlow.spendingCents} />
                 </p>
-                <Link href="/insights?tab=flow" className="text-link text-[14px]">
+                <Link href="/insights#flow" className="text-link text-[14px]">
                   Open insights
                 </Link>
               </div>
@@ -230,8 +191,8 @@ export default function HomePage() {
                   </>
                 ) : (
                   <>
-                    <div className="text-[28px] font-semibold tracking-[-0.03em]">
-                      <MoneyText cents={dash.budget.remainingCents} signed />
+                    <div className="text-[28px]">
+                      <MoneyText figure cents={dash.budget.remainingCents} signed />
                     </div>
                     <p className="text-[14px] text-[var(--muted)]">Left this month</p>
                     <ProgressBar value={dash.budget.spentCents} max={dash.budget.plannedCents || 1} />
@@ -247,9 +208,6 @@ export default function HomePage() {
             )}
             {item.id === "unreviewed" && (
               <div className="space-y-3">
-                <p className="text-[14px] text-[var(--muted)]">
-                  Tap a name to edit. Tap Done when the category looks right.
-                </p>
                 <div className="divide-y divide-[var(--line)] rounded-[12px] border border-[var(--line)]">
                   {dash.unreviewed.items.map((tx) => (
                     <div key={tx.id} className="flex items-center justify-between gap-3 px-3 py-3">
@@ -335,8 +293,8 @@ export default function HomePage() {
             )}
             {item.id === "investments" && (
               <div>
-                <Link href="/insights?tab=holdings" className="text-[28px] font-semibold tracking-[-0.03em]">
-                  <MoneyText cents={dash.investments.totalCents} />
+                <Link href="/insights#holdings" className="text-[28px]">
+                  <MoneyText figure cents={dash.investments.totalCents} />
                 </Link>
                 <p className="text-[14px] text-[var(--muted)]">{dash.investments.count} holdings</p>
               </div>
@@ -347,41 +305,12 @@ export default function HomePage() {
 
       {customizing ? (
         <Sheet title="Home cards" onClose={() => setCustomizing(false)}>
-          <p className="text-[14px] text-[var(--muted)]">Show, hide, or reorder what appears on Home.</p>
+          <p className="text-[14px] text-[var(--muted)]">Choose what appears on Home.</p>
           <div className="card">
-            {dash.layout.map((widget, index) => (
-              <div
-                key={widget.id}
-                className="data-row justify-between gap-3"
-                draggable
-                onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  reorder(Number(event.dataTransfer.getData("text/plain")), index);
-                }}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="drag-handle" aria-hidden>
-                    ⋮⋮
-                  </span>
-                  {LABELS[widget.id] ?? widget.id}
-                </span>
-                <span className="flex items-center gap-1">
-                  <button className="ios-icon-btn" type="button" aria-label={`Move ${widget.id} up`} onClick={() => move(widget.id, -1)} disabled={index === 0}>
-                    ↑
-                  </button>
-                  <button
-                    className="ios-icon-btn"
-                    type="button"
-                    aria-label={`Move ${widget.id} down`}
-                    onClick={() => move(widget.id, 1)}
-                    disabled={index === dash.layout.length - 1}
-                  >
-                    ↓
-                  </button>
-                  <button type="button" className={`switch ${widget.hidden ? "" : "on"}`} aria-label={`Show ${widget.id}`} onClick={() => toggle(widget.id)} />
-                </span>
+            {dash.layout.map((widget) => (
+              <div key={widget.id} className="data-row justify-between gap-3">
+                <span>{LABELS[widget.id] ?? widget.id}</span>
+                <button type="button" className={`switch ${widget.hidden ? "" : "on"}`} aria-label={`Show ${widget.id}`} onClick={() => toggle(widget.id)} />
               </div>
             ))}
           </div>

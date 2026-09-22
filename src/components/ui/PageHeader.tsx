@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect } from "react";
+
 export function PageHeader({
   title,
   subtitle,
@@ -7,6 +11,13 @@ export function PageHeader({
   subtitle?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("shelf-title", { detail: title }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("shelf-title", { detail: "" }));
+    };
+  }, [title]);
+
   return (
     <header className="page-header">
       <div className="min-w-0 flex-1">

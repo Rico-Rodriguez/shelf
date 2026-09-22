@@ -56,6 +56,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [pageTitle, setPageTitle] = useState("");
+  const [titleOn, setTitleOn] = useState(false);
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
@@ -86,7 +88,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMoreOpen(false);
+    setTitleOn(window.scrollY > 48);
   }, [path]);
+
+  useEffect(() => {
+    const onTitle = (event: Event) => setPageTitle((event as CustomEvent<string>).detail || "");
+    const onScroll = () => setTitleOn(window.scrollY > 48);
+    window.addEventListener("shelf-title", onTitle);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("shelf-title", onTitle);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
 
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
 
@@ -137,6 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 py-2.5 backdrop-blur md:hidden">
           <span className="text-[12px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
+          <span className={`nav-title ${titleOn && pageTitle ? "is-shown" : ""}`}>{pageTitle}</span>
           <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={20} />
             {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
