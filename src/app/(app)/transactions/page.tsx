@@ -4,6 +4,8 @@ import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { ConfirmMark } from "@/components/ConfirmMark";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { Icon } from "@/components/Icon";
 import { ReviewDeck } from "@/components/ReviewDeck";
 import { offerUndo } from "@/components/UndoHost";
@@ -16,7 +18,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
-import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
@@ -104,6 +105,8 @@ function Activity() {
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const requestId = useRef(0);
   const cleared = useRef(new Set<string>());
+  const [doneId, setDoneId] = useState<string | null>(null);
+  const { flash, run } = useConfirmFlash();
 
   useEffect(() => {
     setQ(urlQ);
@@ -236,16 +239,24 @@ function Activity() {
 
   async function markDone(id: string) {
     const previous = rows.find((tx) => tx.id === id);
-    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
-    if (previous) {
+    if (!previous || doneId) return;
+    setDoneId(id);
+    const started = Date.now();
+    try {
+      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const wait = reduce ? 0 : Math.max(0, 420 - (Date.now() - started));
+      if (wait) await new Promise((resolve) => window.setTimeout(resolve, wait));
       dropFromQueue([id]);
       offerUndo("Marked reviewed", async () => {
         restoreCleared([id]);
         await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: false, categoryId: previous.categoryId, hidden: previous.hidden }) });
         load();
       });
+    } finally {
+      setDoneId((current) => (current === id ? null : current));
+      load();
     }
-    load();
   }
 
   async function markVisibleDone() {
@@ -286,6 +297,7 @@ function Activity() {
     }
     const saved = edit;
     const others = applied?.applied ?? 0;
+    await run(async () => undefined);
     offerUndo(others > 0 ? `Categorized ${others + (saved.reviewed ? 0 : 1)}` : "Saved", async () => {
       restoreCleared([saved.id, ...(applied?.ids ?? [])]);
       await api(`/api/transactions/${saved.id}`, {
@@ -354,13 +366,22 @@ function Activity() {
   return (
     <PageShell refreshing={refreshing}>
     <div className="space-y-4">
+      {flash}
       <PageHeader title="Activity">
         <button className="text-btn" type="button" onClick={() => setShowAdd(true)}>
           Add
         </button>
       </PageHeader>
 
-      {!filtered && dash ? <SummaryCard compact label="Spent this month" cents={dash.cashFlow.spendingCents} /> : null}
+      {!filtered && dash ? (
+        <Link href="/insights" className="spent-strip">
+          <span>
+            <span className="safe-kicker">Spent this month</span>
+            <MoneyText className="spent-strip-amount" cents={dash.cashFlow.spendingCents} />
+          </span>
+          <Icon name="chevron" size={18} />
+        </Link>
+      ) : null}
 
       <div className="search-field">
         <Icon name="search" size={16} />
@@ -530,19 +551,19 @@ function Activity() {
         </Sheet>
       ) : null}
 
-      {grouped.length === 0 && !(inReviewMode && unreviewed > 0) ? (
-        <EmptyState
-          title={inReviewMode ? "You’re caught up" : "No matches"}
-          action={
-            inReviewMode ? (
-              <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null })}>
-                Show all activity
-              </button>
-            ) : undefined
-          }
-        >
-          {inReviewMode ? undefined : "Try another search or clear a filter."}
-        </EmptyState>
+      {grouped.length === 0 && inReviewMode && unreviewed === 0 ? (
+        <div className="empty-state caught-up">
+          <ConfirmMark />
+          <p className="empty-title">You’re caught up</p>
+          <div className="empty-action">
+            <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null, focus: null })}>
+              Show all activity
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {grouped.length === 0 && !inReviewMode ? (
+        <EmptyState title="No matches">Try another search or clear a filter.</EmptyState>
       ) : null}
 
       {grouped.map(([date, items]) => (
@@ -552,6 +573,11 @@ function Activity() {
             {items.map((tx) => {
               const row = (
                 <div className={`data-row ${tx.reviewed ? "placed" : "is-open"} ${tx.pending ? "is-pending" : ""}`}>
+                  {doneId === tx.id ? (
+                    <span className="row-confirm" role="status" aria-label="Reviewed">
+                      <ConfirmMark />
+                    </span>
+                  ) : null}
                   {selecting ? (
                     <input
                       type="checkbox"

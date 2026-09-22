@@ -56,7 +56,8 @@ export function SwipeRow({
       }
       if (axis !== "x") return;
       if (event.cancelable) event.preventDefault();
-      const next = Math.min(0, Math.max(-width, startOffset + dx));
+      const raw = startOffset + dx;
+      const next = raw > 0 ? raw * 0.22 : raw < -width ? -width + (raw + width) * 0.22 : raw;
       offsetRef.current = next;
       setOffset(next);
     }
@@ -97,7 +98,10 @@ export function SwipeRow({
       <div
         ref={rowRef}
         className="relative bg-[var(--paper)]"
-        style={{ transform: `translate3d(${offset}px, 0, 0)`, transition: offset === 0 || offset === -width ? "transform 180ms ease" : "none" }}
+        style={{
+          transform: `translate3d(${offset}px, 0, 0)`,
+          transition: offset === 0 || offset === -width ? "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+        }}
         onClickCapture={(event) => {
           if (offset === 0) return;
           event.preventDefault();

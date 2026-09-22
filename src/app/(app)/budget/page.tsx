@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -65,6 +66,7 @@ export default function BudgetPage() {
   const [showUnused, setShowUnused] = useState(false);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
+  const { flash, run } = useConfirmFlash();
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, refreshing, error, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
   const { data: bills } = useQuery<{ recurrences: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean; isActive: boolean }[] }>(
@@ -140,6 +142,11 @@ export default function BudgetPage() {
       method: "PUT",
       body: JSON.stringify({ year: budget.year, month: budget.month, flexPoolCents: cents }),
     });
+  }
+
+  async function commit(work: (() => Promise<void>) | null, close: () => void) {
+    if (work) await run(work);
+    close();
     invalidateQueries("budget:");
     reload();
   }
@@ -167,6 +174,7 @@ export default function BudgetPage() {
   return (
     <PageShell refreshing={refreshing}>
       <div className="space-y-4">
+        {flash}
         <PageHeader title="Budget">
           <MonthNav
             year={budget.year}
@@ -350,18 +358,18 @@ export default function BudgetPage() {
                 event.preventDefault();
                 const cents = dollarsToCents(moveForm.amount || 0);
                 if (!moveForm.from || !moveForm.to || cents <= 0) return;
-                void api("/api/budget", {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    year: budget.year,
-                    month: budget.month,
-                    move: { fromCategoryId: moveForm.from, toCategoryId: moveForm.to, cents },
-                  }),
-                }).then(() => {
-                  setMoving(false);
-                  invalidateQueries("budget:");
-                  reload();
-                });
+                void commit(
+                  () =>
+                    api("/api/budget", {
+                      method: "PUT",
+                      body: JSON.stringify({
+                        year: budget.year,
+                        month: budget.month,
+                        move: { fromCategoryId: moveForm.from, toCategoryId: moveForm.to, cents },
+                      }),
+                    }).then(() => undefined),
+                  () => setMoving(false),
+                );
               }}
             >
               <label className="field">
@@ -418,11 +426,7 @@ export default function BudgetPage() {
                 if (editor.rollover !== row.category.rollover) {
                   jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
                 }
-                void Promise.all(jobs).then(() => {
-                  setEditor(null);
-                  invalidateQueries("budget:");
-                  reload();
-                });
+                void commit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, () => setEditor(null));
               }}
             >
               <label className="field">
@@ -479,7 +483,7 @@ export default function BudgetPage() {
               className="space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                void saveFlexTotal(dollarsToCents(editor.amount || 0)).then(() => setEditor(null));
+                void commit(() => saveFlexTotal(dollarsToCents(editor.amount || 0)), () => setEditor(null));
               }}
             >
               <label className="field">
@@ -516,14 +520,14 @@ export default function BudgetPage() {
               className="space-y-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                void api("/api/categories", {
-                  method: "POST",
-                  body: JSON.stringify({ groupId: editor.groupId, name: editor.name, flexBucket: "fixed" }),
-                }).then(() => {
-                  setEditor(null);
-                  invalidateQueries("budget:");
-                  reload();
-                });
+                void commit(
+                  () =>
+                    api("/api/categories", {
+                      method: "POST",
+                      body: JSON.stringify({ groupId: editor.groupId, name: editor.name, flexBucket: "fixed" }),
+                    }).then(() => undefined),
+                  () => setEditor(null),
+                );
               }}
             >
               <label className="field">
@@ -633,9 +637,12 @@ function CategoryRow({
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
   const paceNote = pace.tone === "over" ? "Over" : pace.tone === "hot" ? "Running hot" : "";
   return (
-    <button type="button" className="block w-full border-b border-[var(--line)] px-4 py-3.5 text-left last:border-0" onClick={onOpen}>
+    <button type="button" className="budget-row" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
-        <span className="min-w-0 font-medium">{row.category.name}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="spend-dot" style={{ background: color }} />
+          <span className="min-w-0 truncate font-medium">{row.category.name}</span>
+        </span>
         {paced ? (
           <MoneyText className="shrink-0" cents={row.remainingCents} signed />
         ) : (

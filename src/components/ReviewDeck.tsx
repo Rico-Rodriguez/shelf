@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { ConfirmMark } from "@/components/ConfirmMark";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
@@ -181,12 +182,7 @@ export function ReviewDeck({
     <section className={`review-card shelf-panel space-y-4 p-5 ${leaving ? "is-leaving" : ""} ${burst ? "is-confirmed" : ""}`}>
       {burst ? (
         <div className="confirm-burst" role="status" aria-label="Saved">
-          <span className="confirm-mark">
-            <svg viewBox="0 0 52 52" aria-hidden>
-              <circle className="confirm-ring" cx="26" cy="26" r="23" />
-              <path className="confirm-tick" d="M15 27.5 22.5 35 37.5 18" />
-            </svg>
-          </span>
+          <ConfirmMark />
         </div>
       ) : null}
       <div className="review-meter" aria-hidden>

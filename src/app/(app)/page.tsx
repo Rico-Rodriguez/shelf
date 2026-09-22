@@ -7,6 +7,7 @@ import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { SpendMix } from "@/components/SpendMix";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
@@ -171,6 +172,13 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="card">
+                      <SpendMix
+                        rows={spendRows.map((category) => ({
+                          key: category.id || category.name,
+                          cents: category.cents,
+                          color: shelfColor(category.color),
+                        }))}
+                      />
                       {spendRows.map((category) => {
                         const pct = (category.cents / spendTotal) * 100;
                         return (

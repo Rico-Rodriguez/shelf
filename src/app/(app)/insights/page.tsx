@@ -6,6 +6,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { SpendMix } from "@/components/SpendMix";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { monthRange, shortDate, yearMonth } from "@/lib/dates";
@@ -89,6 +90,13 @@ export default function InsightsPage() {
           </span>
         </div>
         <div className="card">
+          <SpendMix
+            rows={data.byCategory.map((category) => ({
+              key: category.id || category.name,
+              cents: category.cents,
+              color: shelfColor(category.color),
+            }))}
+          />
           {data.byCategory.map((category) => {
             const pct = (category.cents / max) * 100;
             return (
