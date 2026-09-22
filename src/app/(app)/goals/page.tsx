@@ -98,16 +98,14 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Goals" subtitle="Save toward something, or pay a balance down.">
+      <PageHeader title="Goals">
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add
         </button>
       </PageHeader>
 
       {goals.length === 0 ? (
-        <EmptyState title="One goal is enough" action={<button className="shelf-btn" type="button" onClick={openNew}>Add a goal</button>}>
-          Save toward something, or pay a balance down. Link the account that holds the money.
-        </EmptyState>
+        <EmptyState title="No goals yet" action={<button className="shelf-btn" type="button" onClick={openNew}>Add a goal</button>} />
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -130,18 +128,20 @@ export default function GoalsPage() {
                 color: goal.kind === "save_up" ? "var(--positive)" : "var(--danger)",
               }}
               footer={
-                <span className="flex w-full items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate">
-                    {goal.targetDate ? `By ${mediumDate(goal.targetDate)}` : goal.kind === "save_up" ? "Save up" : "Pay down"}
-                    {goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
-                  </span>
-                  {goal.monthlyCents ? (
-                    <span className="shrink-0">
-                      <MoneyText cents={goal.monthlyCents} />
-                      /mo
+                goal.targetDate || goal.accounts.length || goal.monthlyCents ? (
+                  <span className="flex w-full items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate">
+                      {goal.targetDate ? `By ${mediumDate(goal.targetDate)}` : goal.accounts.map((account) => account.name).join(", ")}
+                      {goal.targetDate && goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
                     </span>
-                  ) : null}
-                </span>
+                    {goal.monthlyCents ? (
+                      <span className="shrink-0">
+                        <MoneyText cents={goal.monthlyCents} />
+                        /mo
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null
               }
               onClick={() => openEdit(goal)}
             />

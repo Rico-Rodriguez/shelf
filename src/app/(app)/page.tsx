@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,7 +12,6 @@ import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
 import { dayLabel, inDaysPhrase, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
-import { versusPhrase } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Dash = {
@@ -47,18 +47,9 @@ export default function HomePage() {
   const range = monthRange(now.year, now.month);
   const hero = dash.safeToSpend?.cents ?? dash.budget.remainingCents;
   const shown = scrub?.cents ?? hero;
-  const pending = dash.safeToSpend?.pendingCents ?? 0;
   const today = todayISO();
-  const next = dash.recurring.find((row) => row.nextDate >= today);
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
   const series = dash.safeSeries ?? [];
-  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null, "Day to day");
-  const status = next
-    ? {
-        label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `Next · ${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
-        tone: "neutral" as const,
-      }
-    : null;
   const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const spendTotal = categories.reduce((sum, row) => sum + row.cents, 0) || 1;
@@ -88,7 +79,6 @@ export default function HomePage() {
           label={scrub ? dayLabel(scrub.date) : "Safe to spend"}
           cents={shown}
           signed={shown < 0}
-          status={scrub ? null : status}
           points={series}
           chartLabel="Safe to spend through the month"
           onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
@@ -109,17 +99,6 @@ export default function HomePage() {
                     <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
                   </span>
                 </span>
-                {usualLine || pending > 0 ? (
-                  <span className="safe-aside">
-                    {usualLine}
-                    {usualLine && pending > 0 ? " " : null}
-                    {pending > 0 ? (
-                      <>
-                        Pending <MoneyText cents={pending} /> isn’t counted yet.
-                      </>
-                    ) : null}
-                  </span>
-                ) : null}
               </>
             )
           }
@@ -138,20 +117,14 @@ export default function HomePage() {
                 </button>
               </span>
             }
-          >
-            Connect a bank, add a balance, or load sample data to see this month.
-          </EmptyState>
+          />
         ) : (
           <>
             {dash.unreviewed.count > 0 ? (
               <Link href={activityHref({ reviewed: "false", focus: "1" })} className="review-banner">
-                <span>
-                  <strong>
-                    {dash.unreviewed.count} to review
-                  </strong>
-                  <span>New purchases are waiting for a category.</span>
-                </span>
-                <span className="text-btn shrink-0">Review</span>
+                <span className="nav-count">{dash.unreviewed.count > 99 ? "99+" : dash.unreviewed.count}</span>
+                <span className="min-w-0 flex-1">To review</span>
+                <Icon name="chevron" size={18} />
               </Link>
             ) : null}
 
@@ -200,7 +173,6 @@ export default function HomePage() {
                     <div className="card">
                       {spendRows.map((category) => {
                         const pct = (category.cents / spendTotal) * 100;
-                        const pctLabel = pct < 1 ? "<1%" : `${Math.round(pct)}%`;
                         return (
                           <Link
                             key={category.id || category.name}
@@ -211,7 +183,6 @@ export default function HomePage() {
                               <span className="flex min-w-0 items-center gap-2">
                                 <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
                                 <span className="truncate">{category.name}</span>
-                                <span className="shrink-0 text-[13px] text-[var(--tertiary)]">{pctLabel}</span>
                               </span>
                               <MoneyText className="shrink-0" cents={category.cents} />
                             </span>

@@ -47,7 +47,6 @@ export default function InsightsPage() {
   if (!data) return <PageError title="Insights" message={error} onRetry={() => void reload()} />;
 
   const range = monthRange(data.year, data.month);
-  const spendTotal = data.byCategory.reduce((sum, row) => sum + row.cents, 0) || 1;
   const max = Math.max(...data.byCategory.map((row) => row.cents), 1);
   const shown = scrub?.cents ?? latest?.cents ?? data.netWorth.netWorthCents;
   const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
@@ -84,20 +83,14 @@ export default function InsightsPage() {
       <section>
         <div className="mb-2 flex items-baseline justify-between gap-3">
           <h2 className="ios-section mb-0">Spending</h2>
-          <span className="text-[13px] text-[var(--muted)]">
+          <span className="text-[15px] font-semibold">
             <MoneyText cents={data.spendingCents} />
-            {spendingNote ? ` · ${spendingNote}` : ""}
+            {spendingNote ? <span className="font-medium text-[var(--muted)]"> · {spendingNote}</span> : null}
           </span>
         </div>
-        {data.pendingCents ? (
-          <p className="mb-2 text-[13px] text-[var(--muted)]">
-            Pending <MoneyText cents={data.pendingCents} /> is not included.
-          </p>
-        ) : null}
         <div className="card">
           {data.byCategory.map((category) => {
-            const pct = (category.cents / spendTotal) * 100;
-            const pctLabel = pct < 1 ? "<1%" : `${Math.round(pct)}%`;
+            const pct = (category.cents / max) * 100;
             return (
             <Link
               key={category.id || category.name}
@@ -107,20 +100,14 @@ export default function InsightsPage() {
               <span className="flex items-baseline justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
-                  <span className="min-w-0">
-                    <span className="block truncate">{category.name}</span>
-                    {versusShort(category.cents, category.avgCents || null) ? (
-                      <span className="mt-0.5 block text-[13px] text-[var(--muted)]">{versusShort(category.cents, category.avgCents || null)}</span>
-                    ) : null}
-                  </span>
-                  <span className="shrink-0 text-[13px] text-[var(--tertiary)]">{pctLabel}</span>
+                  <span className="truncate">{category.name}</span>
                 </span>
                 <MoneyText className="shrink-0" cents={category.cents} />
               </span>
               <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
                 <span
                   className="spend-bar"
-                  style={{ width: `${Math.min(100, (category.cents / max) * 100)}%`, background: shelfColor(category.color) }}
+                  style={{ width: `${Math.max(Math.min(100, pct), 2)}%`, background: shelfColor(category.color) }}
                 />
               </span>
             </Link>

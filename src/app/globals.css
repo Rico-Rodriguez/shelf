@@ -21,7 +21,7 @@
   --shadow-sm: 0 12px 40px rgba(20, 24, 31, 0.08);
   --shadow-glass: 0 8px 28px rgba(20, 24, 31, 0.1);
   --shadow-control: 0 1px 2px rgba(20, 24, 31, 0.06);
-  --radius: 16px;
+  --radius: 20px;
   --radius-sm: 10px;
   --radius-sheet: 22px;
   --nav-height: 52px;
@@ -370,12 +370,18 @@ a:focus-visible {
   }
 
   .summary-note {
-    margin: 14px 0 0;
+    margin: 12px 0 0;
     color: var(--muted);
     font-size: 13px;
     font-weight: 550;
     letter-spacing: -0.01em;
     line-height: 18px;
+  }
+
+  .summary-note:has(.safe-facts) {
+    margin: 2px -18px 0;
+    padding: 14px 18px 16px;
+    border-top: 1px solid var(--line);
   }
 
   .summary-note .safe-facts {
@@ -418,7 +424,7 @@ a:focus-visible {
   .summary-line {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: summary-draw 720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: summary-draw 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   .summary-area {
@@ -577,6 +583,10 @@ a:focus-visible {
   .summary-card > .summary-note:last-child,
   .summary-card > .summary-empty:last-child {
     margin-bottom: 16px;
+  }
+
+  .summary-card > .summary-note:has(.safe-facts):last-child {
+    margin-bottom: 0;
   }
 
   .summary-foot {
@@ -1161,7 +1171,7 @@ a:focus-visible {
   }
 
   .route-fade {
-    animation: fade-in 120ms ease;
+    animation: none;
   }
 
   .home-split {
@@ -1315,32 +1325,26 @@ a:focus-visible {
   .review-banner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: var(--accent-soft);
-    color: var(--accent-ink);
-  }
-
-  .review-banner strong {
-    display: block;
+    min-height: 56px;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--paper);
+    box-shadow: var(--shadow-xs);
+    color: var(--ink);
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.02em;
   }
 
-  .review-banner strong + span {
-    display: block;
-    margin-top: 2px;
-    color: var(--accent-ink);
-    font-size: 13px;
-    font-weight: 500;
-    opacity: 0.78;
+  .review-banner:active {
+    background: var(--fill);
   }
 
-  .review-banner:active {
-    opacity: 0.82;
+  .data-row .money,
+  .spend-row .money {
+    font-weight: 600;
   }
 
   .spend-row {

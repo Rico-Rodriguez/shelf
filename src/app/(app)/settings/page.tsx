@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
 import { invalidateQueries } from "@/lib/use-query";
+import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 
@@ -39,106 +40,113 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" subtitle="Household, appearance, and your password." />
-      {status ? <p className="card p-3 text-[15px]">{status}</p> : null}
+      <PageHeader title="Settings" />
+      {status ? <p className="card px-4 py-3 text-[15px]">{status}</p> : null}
 
       <HouseholdPanel onStatus={setStatus} />
 
-      <section className="card space-y-3 p-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Appearance</h2>
-        <Segment
-          value={theme}
-          onChange={(mode) => {
-            setTheme(mode);
-            if (mode === "system") {
-              window.localStorage.removeItem("shelf-theme");
-              delete document.documentElement.dataset.theme;
-            } else {
-              window.localStorage.setItem("shelf-theme", mode);
-              document.documentElement.dataset.theme = mode;
-            }
-          }}
-          options={[
-            { value: "system", label: "System" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-          ]}
-        />
-        <button
-          className="text-btn"
-          type="button"
-          onClick={() => {
-            if (typeof Notification === "undefined") return;
-            void Notification.requestPermission();
-          }}
-        >
-          Allow alerts
-        </button>
-        <p className="text-[13px] text-[var(--muted)]">Search with Ctrl or Cmd K.</p>
+      <section>
+        <h2 className="ios-section">Appearance</h2>
+        <div className="card">
+          <div className="p-3">
+            <Segment
+              value={theme}
+              onChange={(mode) => {
+                setTheme(mode);
+                if (mode === "system") {
+                  window.localStorage.removeItem("shelf-theme");
+                  delete document.documentElement.dataset.theme;
+                } else {
+                  window.localStorage.setItem("shelf-theme", mode);
+                  document.documentElement.dataset.theme = mode;
+                }
+              }}
+              options={[
+                { value: "system", label: "System" },
+                { value: "light", label: "Light" },
+                { value: "dark", label: "Dark" },
+              ]}
+            />
+          </div>
+          <button
+            className="data-row w-full text-left font-medium"
+            type="button"
+            onClick={() => {
+              if (typeof Notification === "undefined") return;
+              void Notification.requestPermission();
+            }}
+          >
+            Allow alerts
+          </button>
+        </div>
       </section>
 
       {demoLoaded ? null : (
-      <section className="card space-y-3 p-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Sample data</h2>
-        <p className="text-[15px] text-[var(--muted)]">Load sample accounts, bills, and holdings before a bank is connected.</p>
-        <button className="shelf-btn" type="button" onClick={seed}>
-          Load sample data
-        </button>
-      </section>
+        <section>
+          <h2 className="ios-section">Sample</h2>
+          <div className="card">
+            <button className="data-row w-full text-left font-medium" type="button" onClick={seed}>
+              Load sample data
+            </button>
+          </div>
+        </section>
       )}
 
-      <section className="card space-y-3 p-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Rules</h2>
-        <p className="text-[15px] text-[var(--muted)]">Rename, categorize, hide, or tag transactions that match a merchant.</p>
-        <Link href="/settings/rules" className="text-btn">
-          Manage rules
-        </Link>
+      <section>
+        <h2 className="ios-section">Rules</h2>
+        <div className="card">
+          <Link href="/settings/rules" className="data-row justify-between">
+            <span className="font-medium">Manage rules</span>
+            <Icon name="chevron" size={16} />
+          </Link>
+        </div>
       </section>
 
-      <section className="card space-y-3 p-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Import</h2>
-        <p className="text-[15px] text-[var(--muted)]">CSV with date, name, and amount. Positive amounts are money out.</p>
-        <select className="shelf-input" value={importAccount} onChange={(event) => setImportAccount(event.target.value)} aria-label="Import account">
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-        <input
-          className="text-[14px]"
-          type="file"
-          accept=".csv,text/csv"
-          aria-label="CSV file"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file || !importAccount) return;
-            void file.text().then((csv) =>
-              api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId: importAccount, csv }) }).then((res) => {
-                setStatus(`Imported ${res.created} transactions.`);
-              }),
-            );
-          }}
-        />
+      <section>
+        <h2 className="ios-section">Import</h2>
+        <div className="card space-y-3 p-4">
+          <select className="shelf-input" value={importAccount} onChange={(event) => setImportAccount(event.target.value)} aria-label="Import account">
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="text-[14px]"
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="CSV file. Positive amounts are money out."
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file || !importAccount) return;
+              void file.text().then((csv) =>
+                api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId: importAccount, csv }) }).then((res) => {
+                  setStatus(`Imported ${res.created} transactions.`);
+                }),
+              );
+            }}
+          />
+          <p className="field-hint">Positive amounts are money out.</p>
+        </div>
       </section>
 
-      <section className="card space-y-3 p-4">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Export</h2>
-        <div className="flex gap-4">
-          <a className="text-btn" href="/api/export?format=json">
-            JSON
+      <section>
+        <h2 className="ios-section">Export</h2>
+        <div className="card">
+          <a className="data-row justify-between" href="/api/export?format=json">
+            <span className="font-medium">JSON</span>
+            <Icon name="chevron" size={16} />
           </a>
-          <a className="text-btn" href="/api/export?format=csv">
-            CSV
+          <a className="data-row justify-between" href="/api/export?format=csv">
+            <span className="font-medium">CSV</span>
+            <Icon name="chevron" size={16} />
           </a>
         </div>
       </section>
 
-      <form onSubmit={changePw} className="card grid gap-4 p-5 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Password</h2>
-          <p className="mt-1 text-[14px] text-[var(--muted)]">This password opens the sealed balances and transactions.</p>
-        </div>
+      <form onSubmit={changePw} className="card grid gap-4 p-4 md:grid-cols-2">
+        <h2 className="ios-section mb-0 md:col-span-2">Password</h2>
         <label className="field">
           <span className="field-label">Current password</span>
           <input className="shelf-input" type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
@@ -150,18 +158,19 @@ export default function SettingsPage() {
         <button className="shelf-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
-      <section className="card space-y-2 p-4 text-[15px]">
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Session</h2>
-        <button
-          className="text-btn"
-          type="button"
-          onClick={() => {
-            invalidateQueries();
-            void fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"));
-          }}
-        >
-          Log out
-        </button>
+      <section>
+        <div className="card">
+          <button
+            className="data-row w-full text-left font-medium text-[var(--danger)]"
+            type="button"
+            onClick={() => {
+              invalidateQueries();
+              void fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"));
+            }}
+          >
+            Log out
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -186,40 +195,35 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
   async function invite(role: "member" | "advisor") {
     const res = await api<{ code: string }>("/api/household/invites", { method: "POST", body: JSON.stringify({ role }) });
     setCode(res.code);
-    onStatus("Share this code once. It is not shown again.");
+    onStatus("Share this code once.");
     load();
   }
 
   if (!data) return null;
   return (
-    <section className="card space-y-3 p-4">
-      <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Household</h2>
-      <p className="text-[15px] text-[var(--muted)]">People you invite share this vault. The code works once.</p>
-      <ul className="space-y-2 text-[15px]">
+    <section>
+      <h2 className="ios-section">Household</h2>
+      <div className="card">
         {data.members.map((member) => (
-          <li key={member.userId} className="flex items-center justify-between gap-3">
-            <span>
-              {member.name} <span className="text-[var(--muted)]">{member.role}</span>
+          <div key={member.userId} className="data-row justify-between gap-3">
+            <span className="min-w-0 truncate font-medium">
+              {member.name}
+              {data.members.length > 1 ? <span className="font-normal capitalize text-[var(--muted)]"> {member.role}</span> : null}
             </span>
-            {data.role === "owner" ? (
-              <button className="text-[13px] text-[var(--danger)]" type="button" onClick={() => api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(load)}>
+            {data.role === "owner" && member.role !== "owner" ? (
+              <button className="text-[15px] font-medium text-[var(--danger)]" type="button" onClick={() => api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(load)}>
                 Remove
               </button>
             ) : null}
-          </li>
+          </div>
         ))}
-      </ul>
-      {data.role === "owner" ? (
-        <div className="flex flex-wrap gap-2">
-          <button className="shelf-btn" type="button" onClick={() => invite("member")}>
+        {data.role === "owner" ? (
+          <button className="data-row w-full text-left font-medium text-[var(--accent-ink)]" type="button" onClick={() => invite("member")}>
             Invite someone
           </button>
-        </div>
-      ) : null}
-      {code ? <p className="rounded-[10px] bg-[var(--fill)] p-3 font-mono text-[14px]">{code}</p> : null}
-      <p className="text-[13px] text-[var(--muted)]">
-        They open Shelf, choose Join, and enter the code.
-      </p>
+        ) : null}
+      </div>
+      {code ? <p className="mt-3 rounded-[12px] bg-[var(--paper)] px-4 py-3 font-mono text-[15px]">{code}</p> : null}
     </section>
   );
 }

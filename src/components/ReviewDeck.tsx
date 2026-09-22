@@ -78,12 +78,6 @@ export function ReviewDeck({
 
   const merchant = visible ? visible.merchantName || visible.name : "";
   const face = visible ? faces[visible.merchantName || visible.name] : undefined;
-  const here =
-    face && face.monthCents > 0
-      ? face.count > 1
-        ? `${formatMoney(face.monthCents)} here this month · ${face.count} purchases`
-        : `${formatMoney(face.monthCents)} here this month`
-      : null;
   const done = total > 0 ? Math.max(0, total - remaining) : 0;
   const progress = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
 
@@ -185,8 +179,10 @@ export function ReviewDeck({
         <MerchantMark name={merchant} color={visible.category?.color} />
         <div className="min-w-0">
           <div className="truncate text-[20px] font-semibold tracking-[-0.03em]">{visible.name}</div>
-          <div className="text-[13px] text-[var(--muted)]">{visible.category?.name ?? "Uncategorized"}</div>
-          {here ? <div className="text-[13px] text-[var(--tertiary)]">{here}</div> : null}
+          <div className="truncate text-[13px] text-[var(--muted)]">
+            {visible.category?.name ?? "Uncategorized"}
+            {face && face.monthCents > 0 ? ` · ${formatMoney(face.monthCents)} this month` : ""}
+          </div>
         </div>
       </div>
       <MoneyText hero cents={visible.amountCents} flow />
@@ -204,22 +200,14 @@ export function ReviewDeck({
         ))}
       </div>
       <CategorySelect groups={groups} value={categoryId} onChange={setCategoryId} emptyLabel="Choose a category" />
-      <button type="button" className="data-row w-full items-start justify-between gap-3 rounded-[16px] text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
-        <span>
+      <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
+        <span className="min-w-0">
           <span className="block">Always categorize {merchant} this way</span>
-          {always ? (
-            <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">
-              {similar == null
-                ? "Checking other purchases…"
-                : similar === 0
-                  ? "Future purchases from this merchant."
-                  : `Also clears ${similar} other purchase${similar === 1 ? "" : "s"} waiting for review.`}
-            </span>
-          ) : (
-            <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">Applies to every matching purchase still waiting.</span>
-          )}
+          {always && similar != null && similar > 0 ? (
+            <span className="mt-0.5 block text-[13px] font-normal text-[var(--muted)]">Clears {similar} more</span>
+          ) : null}
         </span>
-        <span className={`switch mt-1 ${always ? "on" : ""}`} />
+        <span className={`switch ${always ? "on" : ""}`} />
       </button>
       <div className="flex gap-2">
         <button className="shelf-btn ghost flex-1" type="button" onClick={() => visible && onSkip(visible)} disabled={busy || leaving}>
