@@ -6,9 +6,12 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageSkeleton } from "@/components/ui/PageShell";
+import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
-import { monthName, occurrencesInMonth, yearMonth } from "@/lib/dates";
+import { inDaysPhrase, monthName, monthRange, occurrencesInMonth, todayISO, yearMonth } from "@/lib/dates";
+import { formatMoney } from "@/lib/money";
 import { annualizedCents } from "@/lib/plan";
 
 type Rec = {
@@ -59,9 +62,13 @@ export default function RecurringPage() {
   const [form, setForm] = useState(emptyForm);
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
-    void api<{ recurrences: Rec[] }>("/api/recurring").then((r) => setRows(r.recurrences));
+    void api<{ recurrences: Rec[] }>("/api/recurring").then((r) => {
+      setRows(r.recurrences);
+      setReady(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -83,6 +90,8 @@ export default function RecurringPage() {
     .reduce((sum, row) => sum + Math.round(annualizedCents(row.amountCents, row.cadence) / 12), 0);
   const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
   const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
+
+  if (!ready) return <PageSkeleton title="Bills" rows={5} />;
 
   const days = new Date(cursor.year, cursor.month, 0).getDate();
   const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
@@ -169,15 +178,14 @@ export default function RecurringPage() {
           Add
         </button>
       </PageHeader>
-      <section>
-        <p className="text-[13px] text-[var(--muted)]">A month of bills</p>
-        <div className="mt-1">
-          <MoneyText hero cents={monthlyBills} />
-        </div>
-        <p className="mt-2 text-[13px] text-[var(--muted)]">
-          {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In <MoneyText cents={income} />
-        </p>
-      </section>
+      <BillsSummary
+        year={cursor.year}
+        month={cursor.month}
+        monthlyBills={monthlyBills}
+        outflow={outflow}
+        income={income}
+        projected={projected}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
@@ -330,5 +338,85 @@ export default function RecurringPage() {
         </Sheet>
       ) : null}
     </div>
+  );
+}
+
+function BillsSummary({
+  year,
+  month,
+  monthlyBills,
+  outflow,
+  income,
+  projected,
+}: {
+  year: number;
+  month: number;
+  monthlyBills: number;
+  outflow: number;
+  income: number;
+  projected: { merchantName: string; amountCents: number; date: string; isIncome: boolean }[];
+}) {
+  const now = yearMonth();
+  const range = monthRange(year, month);
+  const today = todayISO();
+  const byDate = new Map<string, number>();
+  for (const row of projected) {
+    if (row.isIncome) continue;
+    byDate.set(row.date, (byDate.get(row.date) ?? 0) + row.amountCents);
+  }
+  let run = 0;
+  const curve = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, cents]) => {
+      run += cents;
+      return { date, cents: run };
+    });
+  const points = curve.length
+    ? seriesFromZero(curve, range.start)
+    : monthlyBills > 0
+      ? [
+          { date: range.start, cents: 0 },
+          { date: range.end, cents: 0 },
+        ]
+      : [];
+  const delta = outflow - monthlyBills;
+  const status =
+    monthlyBills <= 0
+      ? null
+      : Math.abs(delta) < 100
+        ? { label: "A typical month", tone: "neutral" as const }
+        : delta > 0
+          ? { label: `${formatMoney(delta)} above typical`, tone: "warn" as const }
+          : { label: `${formatMoney(-delta)} under typical`, tone: "good" as const };
+  const next = [...projected].filter((row) => row.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+
+  return (
+    <SummaryCard
+      label={year === now.year && month === now.month ? "Due this month" : monthName(year, month)}
+      cents={outflow}
+      status={status}
+      points={points}
+      reference={monthlyBills > 0 ? { cents: monthlyBills, label: "Typical" } : undefined}
+      chartLabel="Bills landing through the month"
+      footer={next ? `${next.isIncome ? "Payday" : next.merchantName} ${inDaysPhrase(next.date)}` : null}
+      footerIcon={next ? "calendar" : undefined}
+      detail={
+        monthlyBills > 0 || income > 0 ? (
+          <>
+            {monthlyBills > 0 ? (
+              <>
+                A typical month is <MoneyText cents={monthlyBills} />.
+              </>
+            ) : null}
+            {income > 0 ? (
+              <>
+                {" "}
+                Income <MoneyText cents={income} />.
+              </>
+            ) : null}
+          </>
+        ) : null
+      }
+    />
   );
 }

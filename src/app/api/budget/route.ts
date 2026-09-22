@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, budgetMonths, categories, categoryGroups, settings } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spentByCategory, suggestBudget, trailingCategoryAverage } from "@/lib/budget";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spendByDay, spentByCategory, suggestBudget, trailingCategoryAverage } from "@/lib/budget";
 import { yearMonth } from "@/lib/dates";
 import { nid } from "@/lib/ids";
 import { openBudgetItem, openSettings, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "@/lib/secrets";
@@ -80,6 +80,7 @@ export async function GET(request: Request) {
       expenseSpentCents: expenseSpent,
       pendingCents,
       usualSpentCents: trail.total,
+      spendSeries: await spendByDay(year, month, dek),
       rows,
       flex,
     });

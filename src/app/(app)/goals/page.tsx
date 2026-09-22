@@ -2,10 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
-import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
 import { goalPace } from "@/lib/goal-pace";
@@ -112,33 +112,41 @@ export default function GoalsPage() {
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
-        {goals.map((goal) => (
-          <button key={goal.id} type="button" className="shelf-panel p-4 text-left" onClick={() => openEdit(goal)}>
-            <h2 className="text-[20px] font-bold tracking-tight">{goal.name}</h2>
-            <p className="text-[13px] text-[var(--muted)]">
-              {goal.kind === "save_up" ? "Save up" : "Pay down"}
-              {goal.targetDate ? ` · by ${goal.targetDate}` : ""}
-              {goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
-            </p>
-            <div className="my-3">
-              <ProgressBar
-                value={goal.progressCents}
-                max={goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1}
-                color={goal.kind === "save_up" ? "#1f7a45" : "#b23b32"}
-              />
-            </div>
-            <p className="text-[15px]">
-              <MoneyText cents={goal.remainingCents} /> left
-              {goal.monthlyCents ? (
-                <>
-                  {" "}
-                  · <MoneyText cents={goal.monthlyCents} />/mo
-                </>
-              ) : null}
-              <span className={`ml-2 pace-${goalPace(goal).tone === "muted" ? "on" : goalPace(goal).tone}`}>{goalPace(goal).label}</span>
-            </p>
-          </button>
-        ))}
+        {goals.map((goal) => {
+          const pace = goalPace(goal);
+          const tone: SummaryTone = pace.tone === "behind" ? "bad" : pace.tone === "muted" ? "neutral" : "good";
+          return (
+            <SummaryCard
+              key={goal.id}
+              compact
+              label={goal.name}
+              labelEmphasis
+              cents={goal.remainingCents}
+              suffix="left"
+              status={pace.label ? { label: pace.label, tone } : null}
+              meter={{
+                value: goal.progressCents,
+                max: goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1,
+                color: goal.kind === "save_up" ? "var(--positive)" : "var(--danger)",
+              }}
+              footer={
+                <span className="flex w-full items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate">
+                    {goal.targetDate ? `By ${goal.targetDate}` : goal.kind === "save_up" ? "Save up" : "Pay down"}
+                    {goal.accounts.length ? ` · ${goal.accounts.map((account) => account.name).join(", ")}` : ""}
+                  </span>
+                  {goal.monthlyCents ? (
+                    <span className="shrink-0">
+                      <MoneyText cents={goal.monthlyCents} />
+                      /mo
+                    </span>
+                  ) : null}
+                </span>
+              }
+              onClick={() => openEdit(goal)}
+            />
+          );
+        })}
       </div>
 
       {editing ? (

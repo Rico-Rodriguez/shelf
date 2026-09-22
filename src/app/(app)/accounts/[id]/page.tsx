@@ -6,11 +6,12 @@ import { ConnectBank } from "@/components/ConnectBank";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
+import { shortDate } from "@/lib/dates";
 import { classifyAccount } from "@/lib/money";
 import { payoffMonths } from "@/lib/voice";
-import { ScrubChart } from "@/components/ScrubChart";
 
 type Account = {
   id: string;
@@ -41,6 +42,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
   const [balance, setBalance] = useState("");
   const [missing, setMissing] = useState(false);
   const [holds, setHolds] = useState<{ id: string; institutionValueCents: number; security: { name: string; ticker: string | null; type: string | null } | null }[]>([]);
+  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
     void api<{ accounts: Account[]; items: Item[] }>("/api/accounts").then((res) => {
@@ -79,7 +81,15 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
   if (missing) return <p className="text-[var(--muted)]">That account is gone.</p>;
   if (!acct) return <p className="text-[var(--muted)]">Loading…</p>;
 
-  const signed = classifyAccount(acct.type) === "liability" ? -Math.abs(acct.currentBalanceCents) : acct.currentBalanceCents;
+  const isDebt = classifyAccount(acct.type) === "liability";
+  const signed = isDebt ? -Math.abs(acct.currentBalanceCents) : acct.currentBalanceCents;
+  const limit =
+    acct.type === "credit" && acct.availableBalanceCents != null ? Math.abs(acct.currentBalanceCents) + acct.availableBalanceCents : null;
+  const usedPct = limit && limit > 0 ? Math.round((Math.abs(acct.currentBalanceCents) / limit) * 100) : null;
+  const balancePoints = snapshots.map((row) => ({
+    date: row.date,
+    cents: isDebt ? -Math.abs(row.balanceCents) : row.balanceCents,
+  }));
 
   async function save() {
     await api(`/api/accounts/${id}`, {
@@ -116,18 +126,29 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           </>
         }
       />
-      <div className="text-[34px] font-bold leading-[41px] tracking-[-0.4px]">
-        <MoneyText cents={signed} signed={classifyAccount(acct.type) === "liability"} />
-      </div>
-      {acct.type === "credit" && acct.availableBalanceCents != null ? (
-        <p className="text-[14px] text-[var(--muted)]">
-          <MoneyText cents={acct.availableBalanceCents} /> available
-          {Math.abs(acct.currentBalanceCents) + acct.availableBalanceCents > 0
-            ? ` · ${Math.round((Math.abs(acct.currentBalanceCents) / (Math.abs(acct.currentBalanceCents) + acct.availableBalanceCents)) * 100)}% of the limit used`
-            : ""}
-          . Card payments are transfers, so they stay out of spending.
-        </p>
-      ) : null}
+      <SummaryCard
+        label={scrub ? shortDate(scrub.date) : "Balance"}
+        cents={scrub?.cents ?? signed}
+        signed={isDebt}
+        status={
+          usedPct == null
+            ? null
+            : { label: `${usedPct}% of the limit`, tone: usedPct >= 90 ? "bad" : usedPct >= 70 ? "warn" : "neutral" }
+        }
+        points={balancePoints}
+        chartLabel="Balance over time"
+        onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
+        footer={
+          acct.availableBalanceCents != null ? (
+            <>
+              <MoneyText cents={acct.availableBalanceCents} /> available
+            </>
+          ) : acct.type === "credit" ? (
+            "Card payments stay out of spending"
+          ) : null
+        }
+        detail={acct.type === "credit" && acct.availableBalanceCents != null ? "Card payments are transfers, so they stay out of spending." : null}
+      />
       {item && item.status !== "ok" ? <ConnectBank itemId={item.id} label="Reconnect" onLinked={load} /> : null}
 
       <div className="card">
@@ -164,10 +185,6 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           </button>
         </div>
       </div>
-
-      {snapshots.length > 1 ? (
-        <ScrubChart points={snapshots.map((row) => ({ date: row.date, cents: row.balanceCents }))} />
-      ) : null}
 
       {liability ? (
         <section>

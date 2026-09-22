@@ -8,13 +8,14 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { seriesFromZero, SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { addMonths, monthName, monthRange, yearMonth } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
-import { versusPhrase, versusShort } from "@/lib/voice";
+import { versusShort, versusStatus } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Row = {
@@ -42,6 +43,7 @@ type Budget = {
   expenseSpentCents: number;
   pendingCents?: number;
   usualSpentCents?: number | null;
+  spendSeries?: { date: string; cents: number }[];
   rows: Row[];
   flex: { fixed: Row[]; non_monthly: Row[]; flex: Row[] };
 };
@@ -163,7 +165,7 @@ export default function BudgetPage() {
   return (
     <PageShell refreshing={refreshing}>
       <div className="space-y-4">
-        <PageHeader title="Budget" subtitle={versusPhrase(budget.usualSpentCents == null ? null : budget.expenseSpentCents - budget.usualSpentCents) ?? undefined}>
+        <PageHeader title="Budget">
           <MonthNav
             year={budget.year}
             month={budget.month}
@@ -185,44 +187,7 @@ export default function BudgetPage() {
           </button>
         </div>
 
-        <div className="shelf-panel overflow-hidden">
-          <div className="grid grid-cols-2">
-            <label className="field min-w-0 border-b border-r border-[var(--line)] px-3.5 py-3">
-              <span className="field-label">Planned income</span>
-              <input
-                className="shelf-input compact mt-1.5"
-                inputMode="decimal"
-                aria-label="Planned income"
-                value={income}
-                onChange={(e) => setIncome(e.target.value)}
-                onBlur={saveIncome}
-              />
-            </label>
-            <div className="min-w-0 border-b border-[var(--line)] px-3.5 py-3">
-              <div className="field-label">Left to budget</div>
-              <div className="mt-1 text-[15px] font-semibold tabular-nums">
-                <MoneyText cents={budget.leftoverCents} signed />
-              </div>
-            </div>
-            <div className="min-w-0 border-r border-[var(--line)] px-3.5 py-3">
-              <div className="field-label">Spent</div>
-              <div className="mt-1 text-[15px] font-semibold tabular-nums">
-                <MoneyText cents={budget.expenseSpentCents} />
-              </div>
-            </div>
-            <div className="min-w-0 px-3.5 py-3">
-              <div className="field-label">Planned</div>
-              <div className="mt-1 text-[15px] font-semibold tabular-nums">
-                <MoneyText cents={budget.expensePlannedCents} />
-              </div>
-            </div>
-          </div>
-        </div>
-        {budget.pendingCents ? (
-          <p className="text-[13px] text-[var(--tertiary)]">
-            Pending <MoneyText cents={budget.pendingCents} /> is not included.
-          </p>
-        ) : null}
+        <BudgetSummary budget={budget} income={income} setIncome={setIncome} saveIncome={saveIncome} />
 
         {groups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
@@ -515,6 +480,82 @@ export default function BudgetPage() {
         ) : null}
       </div>
     </PageShell>
+  );
+}
+
+function BudgetSummary({
+  budget,
+  income,
+  setIncome,
+  saveIncome,
+}: {
+  budget: Budget;
+  income: string;
+  setIncome: (value: string) => void;
+  saveIncome: () => void;
+}) {
+  const range = monthRange(budget.year, budget.month);
+  const series = budget.spendSeries ?? [];
+  const points = series.length
+    ? seriesFromZero(series, range.start)
+    : budget.expensePlannedCents > 0
+      ? [
+          { date: range.start, cents: 0 },
+          { date: range.end, cents: 0 },
+        ]
+      : [];
+  const pace = budget.expensePlannedCents > 0 ? budgetPace(budget.expenseSpentCents, budget.expensePlannedCents, budget.year, budget.month) : null;
+  const paceTone: SummaryTone | null = !pace
+    ? null
+    : pace.tone === "over"
+      ? "bad"
+      : pace.tone === "hot"
+        ? "warn"
+        : pace.tone === "muted"
+          ? "neutral"
+          : "good";
+  const status =
+    pace?.label && paceTone
+      ? { label: pace.label, tone: paceTone }
+      : versusStatus(budget.usualSpentCents == null ? null : budget.expenseSpentCents - budget.usualSpentCents);
+
+  return (
+    <SummaryCard
+      label="Spent"
+      cents={budget.expenseSpentCents}
+      status={status}
+      points={points}
+      reference={budget.expensePlannedCents > 0 ? { cents: budget.expensePlannedCents, label: "Plan" } : undefined}
+      chartLabel="Spending through the month against the plan"
+      footer={
+        <span className="flex w-full items-center justify-between gap-4">
+          <label className="min-w-0">
+            <span className="summary-kicker">Planned income</span>
+            <input
+              className="shelf-input compact summary-income"
+              inputMode="decimal"
+              aria-label="Planned income"
+              value={income}
+              onChange={(event) => setIncome(event.target.value)}
+              onBlur={saveIncome}
+            />
+          </label>
+          <span className="text-right">
+            <span className="summary-kicker">Left to budget</span>
+            <span className="mt-1 block text-[17px] font-semibold tabular-nums">
+              <MoneyText cents={budget.leftoverCents} signed />
+            </span>
+          </span>
+        </span>
+      }
+      detail={
+        budget.pendingCents ? (
+          <>
+            Pending <MoneyText cents={budget.pendingCents} /> is not included.
+          </>
+        ) : null
+      }
+    />
   );
 }
 

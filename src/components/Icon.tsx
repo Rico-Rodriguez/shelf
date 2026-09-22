@@ -80,6 +80,14 @@ function glyph(name: string) {
       return <path {...stroke} d="M5 12.5 9.5 17 19 7.5" />;
     case "chevron":
       return <path {...stroke} d="m9 6 6 6-6 6" />;
+    case "info":
+      return (
+        <>
+          <circle {...stroke} cx="12" cy="12" r="8" />
+          <path {...stroke} d="M12 11v5" />
+          <circle cx="12" cy="8" r="0.9" fill="currentColor" />
+        </>
+      );
     case "bell":
       return (
         <>
