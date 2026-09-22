@@ -50,6 +50,15 @@ function glyph(name: string, filled: boolean) {
         );
       case "gear":
         return <path fill="currentColor" d="M10.2 2.8h3.6l.45 2.05a6.2 6.2 0 0 1 1.55.9l1.95-.85 1.8 3.1-1.5 1.4a6.4 6.4 0 0 1 0 1.8l1.5 1.4-1.8 3.1-1.95-.85a6.2 6.2 0 0 1-1.55.9l-.45 2.05h-3.6l-.45-2.05a6.2 6.2 0 0 1-1.55-.9l-1.95.85-1.8-3.1 1.5-1.4a6.4 6.4 0 0 1 0-1.8l-1.5-1.4 1.8-3.1 1.95.85a6.2 6.2 0 0 1 1.55-.9l.45-2.05ZM12 9.1A2.9 2.9 0 1 0 12 14.9 2.9 2.9 0 0 0 12 9.1Z" />;
+      case "more":
+        return (
+          <>
+            <rect x="4" y="4" width="6.5" height="6.5" rx="1.6" fill="currentColor" />
+            <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" fill="currentColor" />
+            <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" fill="currentColor" />
+            <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" fill="currentColor" />
+          </>
+        );
       default:
         break;
     }

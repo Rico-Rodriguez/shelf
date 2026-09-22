@@ -2,8 +2,10 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { peekQuery, writeQuery } from "@/lib/use-query";
+import { Icon } from "./Icon";
 import { AppShell } from "./AppShell";
 import { SyncPoller } from "./SyncPoller";
+import { PageSkeleton } from "./ui/PageShell";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -48,9 +50,33 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-2">
-        <p className="text-[17px] font-semibold tracking-[-0.41px]">Shelf</p>
-        <p className="text-[15px] text-[var(--muted)]">Opening…</p>
+      <div className="boot-shell" aria-busy="true" aria-label="Opening Shelf">
+        <div className="mobile-bar md:hidden">
+          <span />
+          <span className="brand-mark mobile-brand">Shelf</span>
+          <span />
+        </div>
+        <div className="app-main">
+          <PageSkeleton variant="home" />
+        </div>
+        <nav className="ios-tabbar md:hidden" aria-hidden>
+          {(
+            [
+              ["home", "Home"],
+              ["list", "Activity"],
+              ["chart", "Budget"],
+              ["wallet", "Accounts"],
+              ["more", "More"],
+            ] as const
+          ).map(([icon, label], index) => (
+            <span key={label} className={`ios-tab ${index === 0 ? "active" : ""}`}>
+              <span className="ios-tab-glyph">
+                <Icon name={icon} size={index === 4 ? 22 : 24} filled={index === 0} />
+              </span>
+              {label}
+            </span>
+          ))}
+        </nav>
       </div>
     );
   }
