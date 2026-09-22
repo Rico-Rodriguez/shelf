@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { api } from "@/lib/client";
+import { rankCategories } from "@/lib/category-memory";
 import { dayLabel } from "@/lib/dates";
+import { formatMoney } from "@/lib/money";
 import { merchantMatchKey } from "@/lib/plan";
 
 type Tx = {
@@ -25,6 +27,8 @@ export function ReviewDeck({
   remaining,
   total,
   groups,
+  frequentCategoryIds,
+  faces,
   onConfirm,
   onSkip,
 }: {
@@ -32,24 +36,81 @@ export function ReviewDeck({
   remaining: number;
   total: number;
   groups: CatGroup[];
+  frequentCategoryIds: string[];
+  faces: Record<string, { monthCents: number; count: number }>;
   onConfirm: (tx: Tx, categoryId: string | null, always: boolean) => Promise<void>;
   onSkip: (tx: Tx) => void;
 }) {
   const current = rows[0];
+  const [visible, setVisible] = useState(current);
+  const [leaving, setLeaving] = useState(false);
   const [categoryId, setCategoryId] = useState(current?.categoryId ?? "");
   const [always, setAlways] = useState(false);
   const [busy, setBusy] = useState(false);
   const [similar, setSimilar] = useState<number | null>(null);
-  const quick = groups
-    .filter((group) => group.name !== "Income")
-    .flatMap((group) => group.categories)
-    .slice(0, 6);
-  const merchant = current ? current.merchantName || current.name : "";
+  const [memoryReady, setMemoryReady] = useState(false);
+  const visibleRef = useRef(current);
+  visibleRef.current = visible;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const currentId = current?.id ?? null;
+
+  const pool = useMemo(
+    () =>
+      groups
+        .filter((group) => group.name !== "Income")
+        .flatMap((group) => group.categories)
+        .map((category) => category.id),
+    [groups],
+  );
+  const byId = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const group of groups) {
+      for (const category of group.categories) map.set(category.id, category);
+    }
+    return map;
+  }, [groups]);
+  const quick = (memoryReady ? rankCategories(pool, frequentCategoryIds) : pool.slice(0, 6))
+    .map((id) => byId.get(id))
+    .filter((category): category is { id: string; name: string } => Boolean(category));
+  const quickRef = useRef(quick);
+  quickRef.current = quick;
+
+  const merchant = visible ? visible.merchantName || visible.name : "";
+  const face = visible ? faces[visible.merchantName || visible.name] : undefined;
+  const here =
+    face && face.monthCents > 0
+      ? face.count > 1
+        ? `${formatMoney(face.monthCents)} here this month · ${face.count} purchases`
+        : `${formatMoney(face.monthCents)} here this month`
+      : null;
   const done = total > 0 ? Math.max(0, total - remaining) : 0;
   const progress = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
 
   useEffect(() => {
-    if (!always || !current) {
+    setMemoryReady(true);
+  }, []);
+
+  useEffect(() => {
+    const next = currentRef.current;
+    const previous = visibleRef.current;
+    if (previous?.id === next?.id) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wait = !previous || reduce ? 0 : 170;
+    if (wait) setLeaving(true);
+    const timer = window.setTimeout(() => {
+      setVisible(next);
+      setLeaving(false);
+      setCategoryId(next?.categoryId ?? "");
+      setAlways(false);
+      setSimilar(null);
+      setBusy(false);
+    }, wait);
+    return () => window.clearTimeout(timer);
+  }, [currentId]);
+
+  useEffect(() => {
+    if (!always || !visible) {
       setSimilar(null);
       return;
     }
@@ -60,7 +121,7 @@ export function ReviewDeck({
       body: JSON.stringify({
         matchMerchant: merchantMatchKey(merchant),
         unreviewedOnly: true,
-        excludeId: current.id,
+        excludeId: visible.id,
       }),
     })
       .then((res) => {
@@ -72,40 +133,43 @@ export function ReviewDeck({
     return () => {
       active = false;
     };
-  }, [always, current, merchant]);
+  }, [always, merchant, visible]);
 
   const confirmRef = useRef<() => void>(() => undefined);
   confirmRef.current = () => {
-    if (!current || busy) return;
+    if (!visible || busy || leaving) return;
     setBusy(true);
-    void onConfirm(current, categoryId || null, always && Boolean(categoryId))
-      .then(() => {
-        setAlways(false);
-        setCategoryId("");
-      })
-      .finally(() => setBusy(false));
+    void onConfirm(visible, categoryId || null, always && Boolean(categoryId)).finally(() => setBusy(false));
   };
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      confirmRef.current();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        confirmRef.current();
+        return;
+      }
+      if (/^[1-6]$/.test(event.key)) {
+        const chip = quickRef.current[Number(event.key) - 1];
+        if (!chip) return;
+        event.preventDefault();
+        setCategoryId(chip.id);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (!current) return null;
+  if (!visible) return null;
 
   function confirm() {
     confirmRef.current();
   }
 
   return (
-    <section className="shelf-panel space-y-4 p-5">
+    <section className={`review-card shelf-panel space-y-4 p-5 ${leaving ? "is-leaving" : ""}`}>
       <div className="review-meter" aria-hidden>
         <span style={{ width: `${progress}%` }} />
       </div>
@@ -113,26 +177,28 @@ export function ReviewDeck({
         {remaining} left
         {total > remaining ? ` · ${done} done` : ""}
         {" · "}
-        {dayLabel(current.date)}
-        {current.account?.name ? ` · ${current.account.name}` : ""}
-        {current.pending ? " · Pending" : ""}
+        {dayLabel(visible.date)}
+        {visible.account?.name ? ` · ${visible.account.name}` : ""}
+        {visible.pending ? " · Pending" : ""}
       </p>
       <div className="flex items-center gap-3">
-        <MerchantMark name={merchant} color={current.category?.color} />
+        <MerchantMark name={merchant} color={visible.category?.color} />
         <div className="min-w-0">
-          <div className="truncate text-[20px] font-semibold tracking-[-0.03em]">{current.name}</div>
-          <div className="text-[13px] text-[var(--muted)]">{current.category?.name ?? "Uncategorized"}</div>
+          <div className="truncate text-[20px] font-semibold tracking-[-0.03em]">{visible.name}</div>
+          <div className="text-[13px] text-[var(--muted)]">{visible.category?.name ?? "Uncategorized"}</div>
+          {here ? <div className="text-[13px] text-[var(--tertiary)]">{here}</div> : null}
         </div>
       </div>
-      <MoneyText hero cents={-current.amountCents} signed />
+      <MoneyText hero cents={-visible.amountCents} signed />
       <div className="flex flex-wrap gap-2">
-        {quick.map((category) => (
+        {quick.map((category, index) => (
           <button
             key={category.id}
             type="button"
             className={`chip ${categoryId === category.id ? "is-on" : ""}`}
             onClick={() => setCategoryId(category.id)}
           >
+            <span className="text-[var(--tertiary)]">{index + 1}</span>
             {category.name}
           </button>
         ))}
@@ -156,10 +222,10 @@ export function ReviewDeck({
         <span className={`switch mt-1 ${always ? "on" : ""}`} />
       </button>
       <div className="flex gap-2">
-        <button className="shelf-btn ghost flex-1" type="button" onClick={() => onSkip(current)} disabled={busy}>
+        <button className="shelf-btn ghost flex-1" type="button" onClick={() => visible && onSkip(visible)} disabled={busy || leaving}>
           Skip
         </button>
-        <button className="shelf-btn flex-1" type="button" onClick={() => void confirm()} disabled={busy}>
+        <button className="shelf-btn flex-1" type="button" onClick={() => void confirm()} disabled={busy || leaving}>
           {busy ? "Saving…" : "Confirm"}
         </button>
       </div>

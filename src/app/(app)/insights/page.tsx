@@ -83,8 +83,13 @@ export default function InsightsPage() {
               className="block border-b border-[var(--line)] px-4 py-3 last:border-0"
             >
               <span className="flex items-baseline justify-between gap-3">
-                <span className="truncate">{category.name}</span>
-                <MoneyText cents={category.cents} />
+                <span className="min-w-0">
+                  <span className="block truncate">{category.name}</span>
+                  {versusShort(category.cents, category.avgCents || null) ? (
+                    <span className="mt-0.5 block text-[13px] text-[var(--muted)]">{versusShort(category.cents, category.avgCents || null)}</span>
+                  ) : null}
+                </span>
+                <MoneyText className="shrink-0" cents={category.cents} />
               </span>
               <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
                 <span
@@ -92,9 +97,6 @@ export default function InsightsPage() {
                   style={{ width: `${Math.min(100, (category.cents / max) * 100)}%`, background: shelfColor(category.color) }}
                 />
               </span>
-              {versusShort(category.cents, category.avgCents ?? null) ? (
-                <span className="mt-1 block text-[13px] text-[var(--muted)]">{versusShort(category.cents, category.avgCents ?? null)}</span>
-              ) : null}
             </Link>
           ))}
           {data.byCategory.length === 0 ? <p className="data-row text-[var(--muted)]">Nothing this month.</p> : null}

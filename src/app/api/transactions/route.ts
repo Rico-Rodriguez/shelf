@@ -6,7 +6,7 @@ import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { applyRulesToNewTx } from "@/lib/rules";
-import { todayISO } from "@/lib/dates";
+import { monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { openAccount, openSplit, openTx, sealedTxWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,13 @@ export async function GET(request: Request) {
     const offset = Number(url.searchParams.get("offset") ?? 0);
 
     const db = await getDb();
+    if (url.searchParams.get("countOnly") === "1") {
+      const [{ n }] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(transactions)
+        .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
+      return NextResponse.json({ unreviewed: Number(n) });
+    }
     if (pairFor) {
       const [raw] = await db.select().from(transactions).where(eq(transactions.id, pairFor));
       if (!raw) return NextResponse.json({ candidates: [] });
@@ -131,7 +138,34 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
 
-    return NextResponse.json({ transactions: data, unreviewed: Number(n) });
+    let faces: Record<string, { monthCents: number; count: number }> | undefined;
+    let frequentCategoryIds: string[] | undefined;
+    if (reviewed === "false") {
+      const now = yearMonth();
+      const range = monthRange(now.year, now.month);
+      const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
+      const names = new Set(data.map((tx) => tx.merchantName || tx.name));
+      const totals: Record<string, { monthCents: number; count: number }> = {};
+      const categoryCounts = new Map<string, number>();
+      for (const tx of history) {
+        if (tx.hidden || tx.isTransfer) continue;
+        if (tx.reviewed && tx.categoryId) categoryCounts.set(tx.categoryId, (categoryCounts.get(tx.categoryId) ?? 0) + 1);
+        if (tx.pending || tx.amountCents <= 0 || tx.date < range.start || tx.date > range.end) continue;
+        const name = tx.merchantName || tx.name;
+        if (!names.has(name)) continue;
+        const face = totals[name] ?? { monthCents: 0, count: 0 };
+        face.monthCents += tx.amountCents;
+        face.count += 1;
+        totals[name] = face;
+      }
+      faces = totals;
+      frequentCategoryIds = [...categoryCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([id]) => id);
+    }
+
+    return NextResponse.json({ transactions: data, unreviewed: Number(n), faces, frequentCategoryIds });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;

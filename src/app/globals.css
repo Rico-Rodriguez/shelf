@@ -459,6 +459,75 @@ a:focus-visible {
     transition: width 220ms ease;
   }
 
+  .review-card {
+    animation: review-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .review-card.is-leaving {
+    animation: review-out 160ms ease both;
+  }
+
+  @keyframes review-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes review-out {
+    to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .review-card,
+    .review-card.is-leaving {
+      animation: none;
+    }
+  }
+
+  .is-open {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .nav-count,
+  .tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0;
+    line-height: 18px;
+  }
+
+  .ios-tab-glyph {
+    position: relative;
+  }
+
+  .tab-count {
+    position: absolute;
+    top: -4px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
+  }
+
   .shelf-btn {
     display: inline-flex;
     align-items: center;
@@ -855,6 +924,7 @@ a:focus-visible {
 
   .ios-nav {
     display: flex;
+    width: 100%;
     min-height: 36px;
     align-items: center;
     gap: 10px;

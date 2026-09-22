@@ -58,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [reviewCount, setReviewCount] = useState(0);
   const [arrive, setArrive] = useState(false);
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
@@ -73,6 +74,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadNotes();
   }, [loadNotes, path]);
+
+  useEffect(() => {
+    void api<{ unreviewed: number }>("/api/transactions?countOnly=1")
+      .then((res) => setReviewCount(res.unreviewed))
+      .catch(() => undefined);
+  }, [path]);
 
   useEffect(() => {
     try {
@@ -147,7 +154,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   return (
                     <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
                       <Icon name={item.icon} size={16} />
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {item.href === "/transactions" && reviewCount > 0 ? <span className="nav-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
                     </Link>
                   );
                 })}
@@ -174,9 +182,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);
             return (
-              <Link key={item.href} href={item.href} prefetch className={`ios-tab ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+              <Link
+                key={item.href}
+                href={item.href}
+                prefetch
+                className={`ios-tab ${active ? "active" : ""}`}
+                aria-current={active ? "page" : undefined}
+                aria-label={item.href === "/transactions" && reviewCount > 0 ? `${item.label}, ${reviewCount} to review` : item.label}
+              >
                 <span className="ios-tab-glyph" aria-hidden>
                   <Icon name={item.icon} size={24} />
+                  {item.href === "/transactions" && reviewCount > 0 ? <span className="tab-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
                 </span>
                 {item.label}
               </Link>

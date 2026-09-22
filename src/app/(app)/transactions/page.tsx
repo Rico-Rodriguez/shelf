@@ -15,6 +15,7 @@ import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
+import { rememberCategory } from "@/lib/category-memory";
 import { merchantMatchKey } from "@/lib/plan";
 
 type RuleApply = {
@@ -85,7 +86,9 @@ function Activity() {
   const [always, setAlways] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
-  const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
+  const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "", income: false });
+  const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
+  const [frequentCategoryIds, setFrequentCategoryIds] = useState<string[]>([]);
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const requestId = useRef(0);
   const cleared = useRef(new Set<string>());
@@ -110,7 +113,12 @@ function Activity() {
     if (start) qs.set("start", start);
     if (end) qs.set("end", end);
     if (tag) qs.set("tag", tag);
-    void api<{ transactions: Tx[]; unreviewed: number }>(`/api/transactions?${qs}`).then((r) => {
+    void api<{
+      transactions: Tx[];
+      unreviewed: number;
+      faces?: Record<string, { monthCents: number; count: number }>;
+      frequentCategoryIds?: string[];
+    }>(`/api/transactions?${qs}`).then((r) => {
       if (id !== requestId.current) return;
       const returned = new Set(r.transactions.map((tx) => tx.id));
       for (const tx of r.transactions) {
@@ -122,6 +130,8 @@ function Activity() {
       const ghosts = r.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
       setRows(r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
       setUnreviewed(Math.max(0, r.unreviewed - ghosts));
+      setFaces(r.faces ?? {});
+      setFrequentCategoryIds(r.frequentCategoryIds ?? []);
     });
   }, [search, accountId, categoryId, reviewed, start, end, tag]);
 
@@ -242,6 +252,7 @@ function Activity() {
           .map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
       }),
     });
+    if (edit.categoryId) rememberCategory(edit.categoryId);
     if (!edit.reviewed) dropFromQueue([edit.id]);
     let applied: RuleApply | null = null;
     if (always && edit.categoryId) {
@@ -298,12 +309,12 @@ function Activity() {
       body: JSON.stringify({
         accountId: manual.accountId,
         name: manual.name,
-        amount: Number(manual.amount),
+        amount: manual.income ? -Math.abs(Number(manual.amount)) : Math.abs(Number(manual.amount)),
         date: manual.date || undefined,
         categoryId: manual.categoryId || undefined,
       }),
     });
-    setManual({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
+    setManual({ accountId: "", name: "", amount: "", date: "", categoryId: "", income: false });
     setShowAdd(false);
     load();
   }
@@ -374,13 +385,14 @@ function Activity() {
         ) : null}
       </div>
 
-      {focus && inReviewMode && unreviewedRows.length ? (
+      {focus && inReviewMode ? (
         <ReviewDeck
-          key={unreviewedRows[0]?.id ?? "clear"}
           rows={unreviewedRows}
           remaining={unreviewed}
           total={reviewBaseline ?? unreviewed}
           groups={groups}
+          frequentCategoryIds={frequentCategoryIds}
+          faces={faces}
           onSkip={(tx) => {
             setRows((current) => {
               const index = current.findIndex((row) => row.id === tx.id);
@@ -391,17 +403,18 @@ function Activity() {
               return next;
             });
           }}
-          onConfirm={async (tx, categoryId, makeRule) => {
+          onConfirm={async (tx, nextCategoryId, makeRule) => {
+            if (nextCategoryId) rememberCategory(nextCategoryId);
             const id = ++requestId.current;
             dropFromQueue([tx.id]);
             let applied: RuleApply | null = null;
             try {
               await api(`/api/transactions/${tx.id}`, {
                 method: "PATCH",
-                body: JSON.stringify({ categoryId, reviewed: true }),
+                body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
               });
-              if (makeRule && categoryId) {
-                applied = await createMerchantRule(tx.merchantName || tx.name, categoryId);
+              if (makeRule && nextCategoryId) {
+                applied = await createMerchantRule(tx.merchantName || tx.name, nextCategoryId);
                 dropFromQueue(applied.ids.filter((rowId) => rowId !== tx.id));
               }
               const extra = applied?.applied ?? 0;
@@ -475,16 +488,16 @@ function Activity() {
 
       {grouped.length === 0 && !(inReviewMode && unreviewed > 0) ? (
         <EmptyState
-          title={inReviewMode ? "Inbox clear" : "No matches"}
+          title={inReviewMode ? "You’re caught up" : "No matches"}
           action={
             inReviewMode ? (
-              <button className="shelf-btn ghost" type="button" onClick={() => replaceQuery({ reviewed: null })}>
+              <button className="text-btn" type="button" onClick={() => replaceQuery({ reviewed: null })}>
                 Show all activity
               </button>
             ) : undefined
           }
         >
-          {inReviewMode ? "You’re caught up. New purchases will land here after sync." : "Try another search or clear a filter."}
+          {inReviewMode ? "New purchases will land here after sync." : "Try another search or clear a filter."}
         </EmptyState>
       ) : null}
 
@@ -495,7 +508,7 @@ function Activity() {
             {items.map((tx) => (
               <div
                 key={tx.id}
-                className={`data-row ${tx.reviewed ? "placed" : ""} ${tx.pending ? "is-pending" : ""}`}
+                className={`data-row ${tx.reviewed ? "placed" : "is-open"} ${tx.pending ? "is-pending" : ""}`}
                 onTouchStart={(event) => {
                   const startX = event.changedTouches[0]?.clientX ?? 0;
                   (event.currentTarget as HTMLElement).dataset.x = String(startX);
@@ -538,20 +551,8 @@ function Activity() {
                   </div>
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center gap-2">
-                  <div className="text-[16px] font-medium tabular-nums">
-                    <MoneyText cents={-tx.amountCents} signed />
-                  </div>
-                  {tx.reviewed ? null : (
-                    <button
-                      className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[13px] font-semibold text-[var(--accent-ink)]"
-                      type="button"
-                      onClick={() => markDone(tx.id)}
-                      aria-label={`Mark ${tx.name} as reviewed`}
-                    >
-                      Done
-                    </button>
-                  )}
+                <div className="shrink-0 text-[16px] font-medium tabular-nums">
+                  <MoneyText cents={-tx.amountCents} signed />
                 </div>
               </div>
             ))}
@@ -757,7 +758,7 @@ function Activity() {
                   required
                 />
               </Field>
-              <Field label="Amount" hint="Positive is money out. Negative is money in.">
+              <Field label="Amount" hint={manual.income ? "Money that came in." : "A purchase."}>
                 <input
                   className="shelf-input"
                   inputMode="decimal"
@@ -767,6 +768,15 @@ function Activity() {
                   required
                 />
               </Field>
+              <button
+                type="button"
+                className="data-row w-full justify-between rounded-[16px]"
+                aria-pressed={manual.income}
+                onClick={() => setManual({ ...manual, income: !manual.income })}
+              >
+                Income
+                <span className={`switch ${manual.income ? "on" : ""}`} />
+              </button>
               <Field label="Date">
                 <input className="shelf-input" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
               </Field>
