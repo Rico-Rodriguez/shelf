@@ -19,9 +19,9 @@ const PRIMARY = [
 ];
 
 const MORE = [
-  { href: "/insights", label: "Insights", icon: "spark" },
-  { href: "/recurring", label: "Bills", icon: "calendar" },
-  { href: "/goals", label: "Goals", icon: "flag" },
+  { href: "/insights", label: "Insights", icon: "spark", hint: "This month against your usual" },
+  { href: "/recurring", label: "Bills", icon: "calendar", hint: "What’s due next" },
+  { href: "/goals", label: "Goals", icon: "flag", hint: "What you’re saving for" },
 ];
 
 const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
@@ -36,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [notesOpen, setNotesOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
@@ -171,9 +172,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
         <main ref={scrollerRef} className="app-main">
-          <div key={path} className="route-fade">
-            {children}
-          </div>
+          <div className="route-fade">{children}</div>
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
@@ -195,11 +194,46 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <button
+            type="button"
+            className={`ios-tab ${moreOpen || MORE.some((item) => isActive(path, item.href)) ? "active" : ""}`}
+            aria-expanded={moreOpen}
+            aria-label="More"
+            onClick={() => setMoreOpen(true)}
+          >
+            <span className="ios-tab-glyph" aria-hidden>
+              <Icon name="more" size={22} filled={moreOpen || MORE.some((item) => isActive(path, item.href))} />
+            </span>
+            More
+          </button>
         </nav>
       </div>
 
       <CommandPalette />
       <UndoHost />
+      {moreOpen ? (
+        <Drawer title="More" onClose={() => setMoreOpen(false)}>
+          <div className="card">
+            {MORE.map((item) => {
+              const active = isActive(path, item.href);
+              return (
+                <Link key={item.href} href={item.href} prefetch className="data-row" aria-current={active ? "page" : undefined} onClick={() => setMoreOpen(false)}>
+                  <span className={`more-glyph ${active ? "is-on" : ""}`}>
+                    <Icon name={item.icon} size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={`block font-medium ${active ? "text-[var(--accent-ink)]" : ""}`}>{item.label}</span>
+                    <span className="block text-[13px] text-[var(--muted)]">{item.hint}</span>
+                  </span>
+                  <span className="text-[var(--tertiary)]">
+                    <Icon name="chevron" size={16} />
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Drawer>
+      ) : null}
       {notesOpen ? (
         <Drawer
           title="Notifications"

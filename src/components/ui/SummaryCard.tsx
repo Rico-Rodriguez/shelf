@@ -133,7 +133,7 @@ export function SummaryCard({
         </div>
       </div>
       {figure}
-      {note ? <p className="summary-note">{note}</p> : null}
+      {note ? <div className="summary-note">{note}</div> : null}
       {live ? (
         <Chart
           chartRef={chartRef}
@@ -181,6 +181,18 @@ export function SummaryCard({
       ) : null}
     </Tag>
   );
+}
+
+function smoothLine(coords: { x: number; y: number }[]) {
+  if (!coords.length) return "";
+  let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const current = coords[i];
+    const next = coords[i + 1];
+    const mid = (current.x + next.x) / 2;
+    d += ` C${mid.toFixed(2)},${current.y.toFixed(2)} ${mid.toFixed(2)},${next.y.toFixed(2)} ${next.x.toFixed(2)},${next.y.toFixed(2)}`;
+  }
+  return d;
 }
 
 function Chart({
@@ -244,7 +256,7 @@ function Chart({
   }
 
   const coords = points.map((point, i) => ({ x: xOf(i), y: yOf(point.cents) }));
-  const line = coords.map((coord, i) => `${i === 0 ? "M" : "L"}${coord.x.toFixed(2)},${coord.y.toFixed(2)}`).join(" ");
+  const line = smoothLine(coords);
   const area = `${line} L${coords[coords.length - 1].x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
   const dot = coords[active ?? coords.length - 1];
   const refY = reference ? yOf(reference.cents) : null;

@@ -54,14 +54,13 @@ export default function HomePage() {
   const usualLine = versusPhrase(dash.usual?.deltaCents ?? null);
   const status = next
     ? {
-        label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
+        label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `Next · ${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
         tone: "neutral" as const,
       }
     : null;
   const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const spendTotal = categories.reduce((sum, row) => sum + row.cents, 0) || 1;
-  const maxCategory = Math.max(...categories.map((row) => row.cents), 1);
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
 
   async function loadSample() {
@@ -90,23 +89,31 @@ export default function HomePage() {
           note={
             scrub ? null : (
               <>
-                Income <MoneyText cents={dash.safeToSpend?.incomeCents ?? dash.cashFlow.incomeCents} />
-                {" · "}
-                Bills <MoneyText cents={dash.safeToSpend?.committedCents ?? 0} />
-                {goalsCents > 0 ? (
-                  <>
-                    {" · "}
-                    Goals <MoneyText cents={goalsCents} />
-                  </>
+                <span className="safe-facts">
+                  <span>
+                    <span className="safe-kicker">Income</span>
+                    <MoneyText cents={dash.safeToSpend?.incomeCents ?? dash.cashFlow.incomeCents} />
+                  </span>
+                  <span>
+                    <span className="safe-kicker">{goalsCents > 0 ? "Bills & goals" : "Bills"}</span>
+                    <MoneyText cents={(dash.safeToSpend?.committedCents ?? 0) + goalsCents} />
+                  </span>
+                  <span>
+                    <span className="safe-kicker">Spent</span>
+                    <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
+                  </span>
+                </span>
+                {usualLine || pending > 0 ? (
+                  <span className="safe-aside">
+                    {usualLine}
+                    {usualLine && pending > 0 ? " " : null}
+                    {pending > 0 ? (
+                      <>
+                        Pending <MoneyText cents={pending} /> isn’t counted yet.
+                      </>
+                    ) : null}
+                  </span>
                 ) : null}
-                {" · "}
-                Day to day <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
-                {pending > 0 ? (
-                  <>
-                    . Pending <MoneyText cents={pending} /> is not counted yet.
-                  </>
-                ) : null}
-                {usualLine ? <span className="mt-1 block">{usualLine}</span> : null}
               </>
             )
           }
@@ -153,10 +160,11 @@ export default function HomePage() {
                 <div className="card">
                   {bills.map((bill) => (
                     <Link key={bill.id} href="/recurring" className="data-row justify-between gap-3">
-                      <span className="truncate font-medium">{bill.merchantName}</span>
-                      <span className="shrink-0 text-[var(--muted)]">
-                        {inDaysPhrase(bill.nextDate)} · <MoneyText cents={bill.amountCents} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{bill.merchantName}</span>
+                        <span className="block text-[12px] text-[var(--tertiary)]">{inDaysPhrase(bill.nextDate)}</span>
                       </span>
+                      <MoneyText className="shrink-0" cents={bill.amountCents} />
                     </Link>
                   ))}
                   {suggestions > 0 ? (
@@ -199,8 +207,8 @@ export default function HomePage() {
                     </span>
                     <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
                       <span
-                        className="block h-full rounded-full"
-                        style={{ width: `${Math.min(100, (category.cents / maxCategory) * 100)}%`, background: shelfColor(category.color) }}
+                        className="spend-bar"
+                        style={{ width: `${Math.max(pct, 2)}%`, background: shelfColor(category.color) }}
                       />
                     </span>
                   </Link>
