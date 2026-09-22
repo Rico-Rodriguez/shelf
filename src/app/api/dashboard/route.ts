@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, budgetItems, categories, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spendByDay, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
 import { addDays, todayISO, yearMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
@@ -141,6 +141,22 @@ export async function GET() {
     }
     await refreshNotifications(dek);
 
+    const safeBase = incomeBase - committed - goalsMonthly;
+    const monthStart = `${now.year}-${String(now.month).padStart(2, "0")}-01`;
+    const variableSeries = await spendByDay(now.year, now.month, dek, (id) => !fixedIds.has(id));
+    const safeSeries: { date: string; cents: number }[] = [{ date: monthStart, cents: safeBase }];
+    for (const point of variableSeries) {
+      const cents = safeBase - point.cents;
+      const last = safeSeries[safeSeries.length - 1];
+      if (last?.date === point.date) last.cents = cents;
+      else safeSeries.push({ date: point.date, cents });
+    }
+    const todayCents = safeBase - variableSpent;
+    if (!safeSeries.some((point) => point.date === today)) safeSeries.push({ date: today, cents: todayCents });
+    safeSeries.sort((a, b) => a.date.localeCompare(b.date));
+    safeSeries[safeSeries.length - 1].cents = todayCents;
+    if (safeSeries.length < 2) safeSeries.push({ date: today, cents: todayCents });
+
     return NextResponse.json({
       layout,
       netWorth: nw,
@@ -163,6 +179,7 @@ export async function GET() {
         usualCents: trail.total,
         deltaCents: trail.total == null ? null : spentTotal - trail.total,
       },
+      safeSeries,
       forecast: projectBalances(cash, activeRecurring, 30).filter((_, index) => index % 3 === 0 || index === 29),
       suggestedSubscriptions,
       goals: goalViews.slice(0, 4),

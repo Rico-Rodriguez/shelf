@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
-import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { monthRange, shortDate, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { formatMoney } from "@/lib/money";
+import { useQuery } from "@/lib/use-query";
 import { versusPhrase, versusShort } from "@/lib/voice";
 
 type Report = {
@@ -30,18 +30,12 @@ type Report = {
 export default function InsightsPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
-  const [data, setData] = useState<Report | null>(null);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`).then((next) => {
-      if (active) setData(next);
-    });
-    return () => {
-      active = false;
-    };
-  }, [cursor]);
+  const { data, loading } = useQuery<Report>(
+    `insights:${cursor.year}-${cursor.month}`,
+    `/api/reports?year=${cursor.year}&month=${cursor.month}`,
+    { keepPrevious: true },
+  );
 
   const points = useMemo(
     () => (data?.snapshots ?? []).map((row) => ({ date: row.date, cents: row.netWorthCents })),
@@ -49,9 +43,10 @@ export default function InsightsPage() {
   );
   const latest = points.length ? points[points.length - 1] : null;
 
+  if (!data && loading) return <PageSkeleton title="Insights" rows={5} />;
   if (!data) return <PageSkeleton title="Insights" rows={5} />;
 
-  const range = monthRange(cursor.year, cursor.month);
+  const range = monthRange(data.year, data.month);
   const max = Math.max(...data.byCategory.map((row) => row.cents), 1);
   const shown = scrub?.cents ?? latest?.cents ?? data.netWorth.netWorthCents;
   const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
@@ -66,7 +61,14 @@ export default function InsightsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Insights">
-        <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
+        <MonthNav
+          year={data.year}
+          month={data.month}
+          onChange={(year, month) => {
+            setScrub(null);
+            setCursor({ year, month });
+          }}
+        />
       </PageHeader>
 
       <SummaryCard
@@ -74,7 +76,7 @@ export default function InsightsPage() {
         cents={shown}
         status={scrub ? null : movedStatus}
         points={points}
-        chartLabel="Drag across the line to see a value"
+        chartLabel="Net worth"
         onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
         footer={
           <>
@@ -97,7 +99,7 @@ export default function InsightsPage() {
       />
 
       <section>
-        <h2 className="mb-2 text-[13px] font-medium text-[var(--muted)]">Spending</h2>
+        <h2 className="ios-section">Spending</h2>
         <div className="card">
           {data.byCategory.map((category) => (
             <Link
@@ -128,7 +130,7 @@ export default function InsightsPage() {
 
       {data.byMerchant?.length ? (
         <section>
-          <h2 className="mb-2 text-[13px] font-medium text-[var(--muted)]">Merchants</h2>
+          <h2 className="ios-section">Merchants</h2>
           <div className="card">
             {data.byMerchant.map((merchant) => (
               <Link

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
+import { yearMonth } from "@/lib/dates";
+import { warmQuery } from "@/lib/use-query";
 import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
 import { UndoHost } from "./UndoHost";
@@ -16,14 +18,14 @@ const GROUPS = [
     items: [
       { href: "/", label: "Home", icon: "home" },
       { href: "/accounts", label: "Accounts", icon: "wallet" },
-      { href: "/transactions", label: "Transactions", icon: "list" },
+      { href: "/transactions", label: "Activity", icon: "list" },
     ],
   },
   {
     label: "Plan",
     items: [
       { href: "/budget", label: "Budget", icon: "chart" },
-      { href: "/recurring", label: "Recurring", icon: "calendar" },
+      { href: "/recurring", label: "Bills", icon: "calendar" },
       { href: "/goals", label: "Goals", icon: "flag" },
     ],
   },
@@ -40,8 +42,12 @@ const PRIMARY = [
   { href: "/accounts", label: "Accounts", icon: "wallet" },
 ];
 
-const MORE = GROUPS.flatMap((group) => group.items).filter((item) => !PRIMARY.some((primary) => primary.href === item.href));
-MORE.push({ href: "/settings", label: "Settings", icon: "gear" });
+const OVERFLOW = [
+  { href: "/recurring", label: "Bills", icon: "calendar" },
+  { href: "/goals", label: "Goals", icon: "flag" },
+  { href: "/insights", label: "Insights", icon: "flow" },
+  { href: "/settings", label: "Settings", icon: "gear" },
+];
 
 const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
 
@@ -64,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [titleOn, setTitleOn] = useState(false);
   const [arrive, setArrive] = useState(false);
   const scrollerRef = useRef<HTMLElement>(null);
-  const moreActive = MORE.some((item) => isActive(path, item.href));
+  const moreActive = OVERFLOW.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
     void api<{ notifications: Note[]; unread: number }>("/api/notifications")
@@ -111,6 +117,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     for (const href of PREFETCH) router.prefetch(href);
+    const now = yearMonth();
+    warmQuery("dashboard", "/api/dashboard");
+    warmQuery("accounts", "/api/accounts");
+    warmQuery("budget:current", "/api/budget");
+    warmQuery("activity:", "/api/transactions");
+    warmQuery(`insights:${now.year}-${now.month}`, `/api/reports?year=${now.year}&month=${now.month}`);
+    warmQuery("bills", "/api/recurring");
+    warmQuery("goals", "/api/goals");
   }, [router]);
 
   useEffect(() => {
@@ -198,7 +212,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:h-auto md:min-h-dvh md:overflow-visible">
         <div className="z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] backdrop-blur md:hidden">
-          <span className="text-[12px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
+          <span className="text-[15px] font-semibold tracking-[-0.03em]">{syncLabel || "Shelf"}</span>
           <span className={`nav-title ${titleOn && pageTitle ? "is-shown" : ""}`}>{pageTitle}</span>
           <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={20} />
@@ -244,24 +258,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {moreOpen ? (
         <Drawer title="More" onClose={() => setMoreOpen(false)}>
-          {GROUPS.map((group) => (
-            <div key={group.label}>
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--tertiary)]">{group.label}</div>
-              <div className="card">
-                {group.items.map((item) => (
-                  <Link key={item.href} href={item.href} prefetch className="data-row" onClick={() => setMoreOpen(false)}>
-                    <Icon name={item.icon} size={18} />
-                    <span className="flex-1">{item.label}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
           <div className="card">
-            <Link href="/settings" prefetch className="data-row" onClick={() => setMoreOpen(false)}>
-              <Icon name="gear" size={18} />
-              <span className="flex-1">Settings</span>
-            </Link>
+            {OVERFLOW.map((item) => (
+              <Link key={item.href} href={item.href} prefetch className="data-row" onClick={() => setMoreOpen(false)}>
+                <Icon name={item.icon} size={18} />
+                <span className="flex-1">{item.label}</span>
+              </Link>
+            ))}
           </div>
         </Drawer>
       ) : null}

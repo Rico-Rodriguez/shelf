@@ -61,11 +61,12 @@ export default function BudgetPage() {
   const [moving, setMoving] = useState(false);
   const [moveForm, setMoveForm] = useState({ from: "", to: "", amount: "" });
   const [editor, setEditor] = useState<Editor>(null);
+  const [planOpen, setPlanOpen] = useState(false);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
   const askedClose = useRef(false);
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
-  const { data, loading, refreshing, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`);
+  const { data, loading, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
 
   useEffect(() => {
     if (data) setIncome((data.plannedIncomeCents / 100).toFixed(0));
@@ -163,7 +164,7 @@ export default function BudgetPage() {
   const rolled = closeMonth?.rows.filter((row) => row.category.rollover && row.remainingCents > 0) ?? [];
 
   return (
-    <PageShell refreshing={refreshing}>
+    <PageShell>
       <div className="space-y-4">
         <PageHeader title="Budget">
           <MonthNav
@@ -173,19 +174,10 @@ export default function BudgetPage() {
               void refreshMonth(year, month);
             }}
           />
+          <button className="text-btn" type="button" onClick={() => setPlanOpen(true)}>
+            Edit
+          </button>
         </PageHeader>
-
-        <div className="flex flex-wrap gap-x-4">
-          <button className="text-btn" type="button" onClick={() => void suggest()}>
-            Suggest
-          </button>
-          <button className="text-btn" type="button" onClick={() => setMoving(true)}>
-            Move money
-          </button>
-          <button className="text-btn" type="button" onClick={() => void openAdd()}>
-            Add category
-          </button>
-        </div>
 
         <BudgetSummary budget={budget} income={income} setIncome={setIncome} saveIncome={saveIncome} />
 
@@ -233,10 +225,10 @@ export default function BudgetPage() {
 
         {flexRows.length > 0 ? (
           <section>
-            <h2 className="mb-2 text-[13px] font-medium text-[var(--muted)]">Everything else</h2>
+            <h2 className="ios-section">Safe to spend</h2>
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
-                <span className="font-medium">Flex</span>
+                <span className="font-medium">Left</span>
                 <MoneyText cents={flexPlan - flexSpent} signed />
               </span>
               <span className="my-2.5 block">
@@ -248,6 +240,46 @@ export default function BudgetPage() {
               </span>
             </button>
           </section>
+        ) : null}
+
+        {planOpen ? (
+          <Sheet title="Edit plan" onClose={() => setPlanOpen(false)}>
+            <div className="card">
+              <button
+                type="button"
+                className="data-row w-full items-start text-left"
+                onClick={() => {
+                  setPlanOpen(false);
+                  void suggest();
+                }}
+              >
+                <span>
+                  <span className="block font-medium">Use your usual spending</span>
+                  <span className="mt-0.5 block text-[13px] font-normal text-[var(--muted)]">Fills each category from the last three months.</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="data-row w-full text-left font-medium"
+                onClick={() => {
+                  setPlanOpen(false);
+                  setMoving(true);
+                }}
+              >
+                Move money
+              </button>
+              <button
+                type="button"
+                className="data-row w-full text-left font-medium"
+                onClick={() => {
+                  setPlanOpen(false);
+                  void openAdd();
+                }}
+              >
+                Add category
+              </button>
+            </div>
+          </Sheet>
         ) : null}
 
         {moving ? (
@@ -349,7 +381,7 @@ export default function BudgetPage() {
               <button className="shelf-btn w-full">Save</button>
               <div className="flex flex-wrap gap-x-4">
                 <Link href={activityHref({ categoryId: editor.row.category.id, start: range.start, end: range.end })} className="text-btn">
-                  Transactions
+                  Activity
                 </Link>
                 <button
                   className="text-btn"
@@ -362,7 +394,7 @@ export default function BudgetPage() {
                     });
                   }}
                 >
-                  Share the flex amount
+                  Count this in safe to spend
                 </button>
                 <button
                   className="text-btn"
@@ -383,7 +415,7 @@ export default function BudgetPage() {
         ) : null}
 
         {editor?.kind === "flex" ? (
-          <Sheet title="Everything else" onClose={() => setEditor(null)}>
+          <Sheet title="Safe to spend" onClose={() => setEditor(null)}>
             <form
               className="space-y-4"
               onSubmit={(event) => {
@@ -392,7 +424,7 @@ export default function BudgetPage() {
               }}
             >
               <label className="field">
-                <span className="field-label">Flex amount</span>
+                <span className="field-label">Amount</span>
                 <input className="shelf-input" inputMode="decimal" value={editor.amount} onChange={(event) => setEditor({ ...editor, amount: event.target.value })} />
               </label>
               <ul className="card">
@@ -409,7 +441,7 @@ export default function BudgetPage() {
                         });
                       }}
                     >
-                      Own line
+                      Budget on its own
                     </button>
                   </li>
                 ))}

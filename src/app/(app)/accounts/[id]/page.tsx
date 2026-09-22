@@ -109,6 +109,12 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
     window.location.href = "/accounts";
   }
 
+  async function disconnectBank() {
+    if (!acct?.plaidItemId) return;
+    await api(`/api/plaid/items/${acct.plaidItemId}`, { method: "DELETE" });
+    window.location.href = "/accounts";
+  }
+
   return (
     <div className="space-y-4">
       <Link href="/accounts" className="ios-back">
@@ -165,9 +171,14 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           Hidden
           <span className={`switch ${acct.isHidden ? "on" : ""}`} />
         </button>
+        {acct.plaidItemId ? (
+          <button type="button" className="data-row w-full text-left text-[var(--danger)]" onClick={() => void disconnectBank()}>
+            Disconnect bank
+          </button>
+        ) : null}
       </div>
 
-      <div className="shelf-panel max-w-lg space-y-3 p-4">
+      <div className="card max-w-lg space-y-3 p-4">
         <label className="block text-[15px]">
           Name
           <input className="shelf-input mt-1" value={name} onChange={(e) => setName(e.target.value)} />

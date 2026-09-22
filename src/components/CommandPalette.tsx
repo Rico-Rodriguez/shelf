@@ -9,7 +9,7 @@ const PAGES = [
   { href: "/transactions", label: "Activity" },
   { href: "/budget", label: "Budget" },
   { href: "/accounts", label: "Accounts" },
-  { href: "/recurring", label: "Recurring" },
+  { href: "/recurring", label: "Bills" },
   { href: "/goals", label: "Goals" },
   { href: "/insights", label: "Insights" },
   { href: "/settings", label: "Settings" },

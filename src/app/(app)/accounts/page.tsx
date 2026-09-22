@@ -81,12 +81,6 @@ export default function AccountsPage() {
     reload();
   }
 
-  async function disconnect(itemId: string) {
-    await api(`/api/plaid/items/${itemId}`, { method: "DELETE" });
-    invalidateQueries("accounts");
-    reload();
-  }
-
   async function sync() {
     await api("/api/plaid/sync", { method: "POST", body: "{}" });
     invalidateQueries("accounts");
@@ -158,14 +152,7 @@ export default function AccountsPage() {
           <section key={group.key}>
             <h2 className="ios-section flex items-center justify-between gap-3">
               <span>{group.name}</span>
-              <span className="flex items-center gap-3">
-                {group.key !== "manual" ? (
-                  <button className="text-[13px] font-medium text-[var(--danger)]" type="button" onClick={() => disconnect(group.key)}>
-                    Disconnect
-                  </button>
-                ) : null}
-                <MoneyText cents={total} signed />
-              </span>
+              <MoneyText cents={total} signed />
             </h2>
             <div className="card">
               {group.rows.map((account) => (

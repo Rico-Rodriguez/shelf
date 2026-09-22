@@ -39,10 +39,10 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" subtitle="Password, household, and how Shelf looks." />
-      {status ? <p className="shelf-panel p-3 text-[15px]">{status}</p> : null}
+      {status ? <p className="card p-3 text-[15px]">{status}</p> : null}
 
-      <section className="shelf-panel space-y-3 p-4">
-        <h2 className="text-[15px] font-semibold tracking-tight">Appearance</h2>
+      <section className="card space-y-3 p-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Appearance</h2>
         <Segment
           value={theme}
           onChange={(mode) => {
@@ -75,8 +75,8 @@ export default function SettingsPage() {
       </section>
 
       {demoLoaded ? null : (
-      <section className="shelf-panel space-y-3 p-4">
-        <h2 className="text-[20px] font-bold tracking-tight">Sample data</h2>
+      <section className="card space-y-3 p-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Sample data</h2>
         <p className="text-[15px] text-[var(--muted)]">Load sample accounts, bills, and holdings before a bank is connected.</p>
         <button className="shelf-btn" type="button" onClick={seed}>
           Load sample data
@@ -84,16 +84,16 @@ export default function SettingsPage() {
       </section>
       )}
 
-      <section className="shelf-panel space-y-3 p-4">
-        <h2 className="text-[20px] font-bold tracking-tight">Rules</h2>
+      <section className="card space-y-3 p-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Rules</h2>
         <p className="text-[15px] text-[var(--muted)]">Rename, categorize, hide, or tag transactions that match a merchant.</p>
         <Link href="/settings/rules" className="text-btn">
           Manage rules
         </Link>
       </section>
 
-      <section className="shelf-panel space-y-3 p-4">
-        <h2 className="text-[20px] font-bold tracking-tight">Import</h2>
+      <section className="card space-y-3 p-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Import</h2>
         <p className="text-[15px] text-[var(--muted)]">CSV with date, name, and amount. Positive amounts are money out.</p>
         <select className="shelf-input" value={importAccount} onChange={(event) => setImportAccount(event.target.value)} aria-label="Import account">
           {accounts.map((account) => (
@@ -119,8 +119,8 @@ export default function SettingsPage() {
         />
       </section>
 
-      <section className="shelf-panel space-y-3 p-4">
-        <h2 className="text-[20px] font-bold tracking-tight">Export</h2>
+      <section className="card space-y-3 p-4">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Export</h2>
         <div className="flex gap-4">
           <a className="text-btn" href="/api/export?format=json">
             JSON
@@ -131,9 +131,9 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <form onSubmit={changePw} className="shelf-panel grid gap-4 p-5 md:grid-cols-2">
+      <form onSubmit={changePw} className="card grid gap-4 p-5 md:grid-cols-2">
         <div className="md:col-span-2">
-          <h2 className="text-[18px] font-semibold tracking-tight">Password</h2>
+          <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Password</h2>
           <p className="mt-1 text-[14px] text-[var(--muted)]">This password opens the sealed balances and transactions.</p>
         </div>
         <label className="field">
@@ -148,8 +148,8 @@ export default function SettingsPage() {
       </form>
 
       <HouseholdPanel onStatus={setStatus} />
-      <section className="shelf-panel space-y-2 p-4 text-[15px]">
-        <h2 className="text-[20px] font-semibold tracking-tight">Session</h2>
+      <section className="card space-y-2 p-4 text-[15px]">
+        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Session</h2>
         <button className="text-btn" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
           Log out
         </button>
@@ -183,8 +183,8 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
 
   if (!data) return null;
   return (
-    <section className="shelf-panel space-y-3 p-4">
-      <h2 className="text-[20px] font-semibold tracking-tight">Household</h2>
+    <section className="card space-y-3 p-4">
+      <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Household</h2>
       <p className="text-[15px] text-[var(--muted)]">People you invite share this vault. The code works once.</p>
       <ul className="space-y-2 text-[15px]">
         {data.members.map((member) => (
