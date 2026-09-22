@@ -5,11 +5,13 @@ export function MoneyText({
   signed = false,
   className = "",
   hero = false,
+  figure = false,
 }: {
   cents: number;
   signed?: boolean;
   className?: string;
   hero?: boolean;
+  figure?: boolean;
 }) {
   const value = signed ? formatMoney(Math.abs(cents)) : formatMoney(cents);
   const prefix = signed ? (cents > 0 ? "+" : cents < 0 ? "-" : "") : "";
@@ -21,7 +23,7 @@ export function MoneyText({
         : ""
     : "";
   return (
-    <span className={`money ${hero ? "hero-number" : ""} ${tone} ${className}`}>
+    <span className={`money ${hero ? "hero-number" : ""} ${figure ? "money-figure" : ""} ${tone} ${className}`}>
       {prefix}
       {value}
     </span>
