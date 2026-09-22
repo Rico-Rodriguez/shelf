@@ -47,11 +47,11 @@ export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
   return (
     <div className="space-y-2">
       {!token ? (
-        <button type="button" className="pixel-btn" onClick={start} disabled={busy}>
+        <button type="button" className="shelf-btn" onClick={start} disabled={busy}>
           {busy ? "Opening the box…" : "Connect a bank"}
         </button>
       ) : (
-        <button type="button" className="pixel-btn" onClick={() => open()} disabled={!ready}>
+        <button type="button" className="shelf-btn" onClick={() => open()} disabled={!ready}>
           Continue with Plaid
         </button>
       )}

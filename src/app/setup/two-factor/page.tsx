@@ -57,7 +57,7 @@ export default function TwoFactorPage() {
     <div className="flex min-h-screen items-center justify-center px-6 py-10">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
         <div>
-          <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
+          <p className="text-[15px] font-semibold text-[var(--ink)]">Shelf</p>
           <h1 className="mt-2 text-[34px] font-bold tracking-tight">Add an authenticator</h1>
           <p className="mt-1 text-[15px] text-[var(--muted)]">
             Scan this with 1Password, Google Authenticator, or Authy. The app stays locked until this is on.
@@ -75,15 +75,15 @@ export default function TwoFactorPage() {
           </p>
         ) : null}
         <input
-          className="pixel-input"
+          className="shelf-input"
           inputMode="numeric"
           autoComplete="one-time-code"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="6-digit code"
         />
-        {error ? <p className="text-[15px] text-[var(--terracotta)]">{error}</p> : null}
-        <button className="pixel-btn w-full" disabled={busy || !secret}>
+        {error ? <p className="text-[15px] text-[var(--ink)]">{error}</p> : null}
+        <button className="shelf-btn w-full" disabled={busy || !secret}>
           {busy ? "Confirming…" : "Turn on 2FA"}
         </button>
       </form>

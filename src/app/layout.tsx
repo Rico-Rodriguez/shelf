@@ -1,19 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import localFont from "next/font/local";
+import { Fraunces, Outfit } from "next/font/google";
 import { ZoomLock } from "@/components/ZoomLock";
 import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
-const inter = localFont({
-  src: "../fonts/InterVariable.woff2",
-  variable: "--font-inter",
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
   display: "swap",
-  weight: "100 900",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Shelf",
-  description: "Accounts, budget, and cash flow in one place.",
+  description: "A private luxury money app — accounts, budget, and cash flow.",
   applicationName: "Shelf",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -28,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f5f5f5",
+  themeColor: "#f3f5f7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -38,7 +43,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="antialiased">
         <ZoomLock />
         <PwaRegister />

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
@@ -30,7 +31,17 @@ type Dash = {
     items: { id: string; name: string; amountCents: number; date: string; categoryName?: string | null }[];
   };
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
-  goals: { id: string; name: string; targetCents: number; kind: string }[];
+  goals: {
+    id: string;
+    name: string;
+    targetCents: number;
+    targetDate: string | null;
+    kind: string;
+    progressCents: number;
+    remainingCents: number;
+    pace: { label: string; tone: "on" | "behind" | "ahead" | "muted" };
+  }[];
+  accountCount: number;
   transactions: { id: string; name: string; amountCents: number; date: string }[];
   investments: { totalCents: number; count: number };
   plaidConfigured: boolean;
@@ -67,6 +78,14 @@ export default function HomePage() {
     await api("/api/dashboard", { method: "PUT", body: JSON.stringify({ layout }) });
   }
 
+  function reorder(from: number, to: number) {
+    if (!dash || from === to || from < 0 || to < 0 || to >= dash.layout.length) return;
+    const layout = dash.layout.map((item) => ({ ...item }));
+    const [item] = layout.splice(from, 1);
+    layout.splice(to, 0, item);
+    void saveLayout(layout);
+  }
+
   function move(id: string, dir: -1 | 1) {
     if (!dash) return;
     const layout = dash.layout.map((item) => ({ ...item }));
@@ -100,17 +119,28 @@ export default function HomePage() {
   return (
     <PageShell refreshing={refreshing}>
     <div className="space-y-5">
-      <PageHeader title="Shelf" subtitle="One glance at your money — then clear what's new.">
-        <button className="pixel-btn ghost" type="button" onClick={() => setCustomizing(true)}>
+      <PageHeader
+        title="This month"
+        subtitle={
+          dash.budget.plannedCents > 0
+            ? dash.budget.remainingCents >= 0
+              ? "You are inside the plan. Review anything new, then leave it."
+              : "Spending is past the plan. Adjust a category or pause a bill."
+            : "Set a budget so this page can answer whether the month is okay."
+        }
+      >
+        <button className="shelf-btn ghost" type="button" onClick={() => setCustomizing(true)}>
           Customize
         </button>
       </PageHeader>
 
       {netWorthWidget ? (
         <Card className="p-5">
-          <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">Net worth</p>
-          <Link href="/reports" className="hero-number block">
-            <MoneyText cents={dash.netWorth.netWorthCents} />
+          <p className="mb-2 text-[13px] font-medium text-[var(--muted)]">
+            {dash.budget.plannedCents > 0 ? "Left in the plan" : "Net worth"}
+          </p>
+          <Link href={dash.budget.plannedCents > 0 ? "/budget" : "/insights?tab=worth"} className="block">
+            <MoneyText hero cents={dash.budget.plannedCents > 0 ? dash.budget.remainingCents : dash.netWorth.netWorthCents} signed={dash.budget.plannedCents > 0} />
           </Link>
           <p className="mt-2 text-[14px] text-[var(--muted)]">
             Assets <MoneyText cents={dash.netWorth.assetsCents} /> · Debts <MoneyText cents={dash.netWorth.liabilitiesCents} />
@@ -121,12 +151,25 @@ export default function HomePage() {
                 <AreaChart data={dash.snapshots.map((row) => ({ ...row, value: row.netWorthCents / 100 }))}>
                   <YAxis hide domain={["dataMin", "dataMax"]} />
                   <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} labelFormatter={(label) => String(label)} />
-                  <Area dataKey="value" stroke="#00c805" fill="rgba(0,200,5,0.14)" strokeWidth={2} />
+                  <Area dataKey="value" stroke="#1b7a62" fill="rgba(27,122,98,0.14)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           ) : null}
         </Card>
+      ) : null}
+
+      {dash.accountCount === 0 && dash.transactions.length === 0 ? (
+        <EmptyState
+          title="Start with one account"
+          action={
+            <Link href="/accounts" className="shelf-btn">
+              Add an account
+            </Link>
+          }
+        >
+          Connect a bank, or add a manual balance. Sample data is in Settings if you want to look around first.
+        </EmptyState>
       ) : null}
 
       {dash.unreviewed.count > 0 ? (
@@ -135,7 +178,7 @@ export default function HomePage() {
             Review means: open each one, fix the category if it&apos;s wrong, then tap <strong>Done</strong>. That keeps your budget honest.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href={activityHref({ reviewed: "false" })} className="pixel-btn soft">
+            <Link href={activityHref({ reviewed: "false" })} className="shelf-btn soft">
               Start reviewing
             </Link>
             <span className="self-center text-[13px] text-[var(--muted)]">
@@ -150,7 +193,7 @@ export default function HomePage() {
       )}
 
       {visible.length === 0 ? (
-        <EmptyState title="Home is empty" action={<button className="pixel-btn" type="button" onClick={() => setCustomizing(true)}>Show cards</button>}>
+        <EmptyState title="Home is empty" action={<button className="shelf-btn" type="button" onClick={() => setCustomizing(true)}>Show cards</button>}>
           Every card is hidden. Customize to bring one back.
         </EmptyState>
       ) : null}
@@ -168,8 +211,8 @@ export default function HomePage() {
                 <p className="text-[14px]">
                   Income <MoneyText cents={dash.cashFlow.incomeCents} /> · Spending <MoneyText cents={dash.cashFlow.spendingCents} />
                 </p>
-                <Link href="/cash-flow" className="text-link text-[14px]">
-                  Open cash flow
+                <Link href="/insights?tab=flow" className="text-link text-[14px]">
+                  Open insights
                 </Link>
               </div>
             )}
@@ -181,7 +224,7 @@ export default function HomePage() {
                     <p className="text-[14px]">
                       Spent so far <MoneyText cents={dash.budget.spentCents} />
                     </p>
-                    <Link href="/budget" className="pixel-btn soft inline-flex">
+                    <Link href="/budget" className="shelf-btn soft inline-flex">
                       Set up budget
                     </Link>
                   </>
@@ -252,16 +295,20 @@ export default function HomePage() {
               </div>
             )}
             {item.id === "goals" && (
-              <div className="space-y-2">
-                <ul className="space-y-2 text-[14px]">
-                  {dash.goals.map((goal) => (
-                    <li key={goal.id} className="flex justify-between gap-3">
-                      <span className="truncate">{goal.name}</span>
-                      <span className="text-[var(--muted)]">{goal.kind === "pay_down" ? "Pay down" : "Save"}</span>
-                    </li>
-                  ))}
-                  {dash.goals.length === 0 ? <li className="text-[var(--muted)]">No goals yet.</li> : null}
-                </ul>
+              <div className="space-y-3">
+                {dash.goals.map((goal) => (
+                  <Link key={goal.id} href="/goals" className="block">
+                    <div className="mb-1 flex items-center justify-between gap-3 text-[14px]">
+                      <span className="truncate font-medium">{goal.name}</span>
+                      <span className={`pace-${goal.pace.tone === "muted" ? "on" : goal.pace.tone}`}>{goal.pace.label}</span>
+                    </div>
+                    <ProgressBar value={goal.progressCents} max={Math.max(goal.targetCents, goal.progressCents + goal.remainingCents, 1)} />
+                    <p className="mt-1 text-[13px] text-[var(--muted)]">
+                      <MoneyText cents={goal.remainingCents} /> left
+                    </p>
+                  </Link>
+                ))}
+                {dash.goals.length === 0 ? <p className="text-[var(--muted)]">No goals yet. One target is enough to start.</p> : null}
                 <Link href="/goals" className="text-link text-[14px]">
                   Open goals
                 </Link>
@@ -272,7 +319,10 @@ export default function HomePage() {
                 <ul className="space-y-2 text-[14px]">
                   {dash.transactions.map((tx) => (
                     <li key={tx.id} className="flex justify-between gap-3">
-                      <span className="truncate">{tx.name}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <MerchantMark name={tx.name} />
+                        <span className="truncate">{tx.name}</span>
+                      </span>
                       <MoneyText cents={-tx.amountCents} signed />
                     </li>
                   ))}
@@ -285,7 +335,7 @@ export default function HomePage() {
             )}
             {item.id === "investments" && (
               <div>
-                <Link href="/investments" className="text-[28px] font-semibold tracking-[-0.03em]">
+                <Link href="/insights?tab=holdings" className="text-[28px] font-semibold tracking-[-0.03em]">
                   <MoneyText cents={dash.investments.totalCents} />
                 </Link>
                 <p className="text-[14px] text-[var(--muted)]">{dash.investments.count} holdings</p>
@@ -300,8 +350,23 @@ export default function HomePage() {
           <p className="text-[14px] text-[var(--muted)]">Show, hide, or reorder what appears on Home.</p>
           <div className="card">
             {dash.layout.map((widget, index) => (
-              <div key={widget.id} className="data-row justify-between gap-3">
-                <span>{LABELS[widget.id] ?? widget.id}</span>
+              <div
+                key={widget.id}
+                className="data-row justify-between gap-3"
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  reorder(Number(event.dataTransfer.getData("text/plain")), index);
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="drag-handle" aria-hidden>
+                    ⋮⋮
+                  </span>
+                  {LABELS[widget.id] ?? widget.id}
+                </span>
                 <span className="flex items-center gap-1">
                   <button className="ios-icon-btn" type="button" aria-label={`Move ${widget.id} up`} onClick={() => move(widget.id, -1)} disabled={index === 0}>
                     ↑

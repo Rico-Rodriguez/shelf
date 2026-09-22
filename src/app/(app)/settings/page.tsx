@@ -71,50 +71,50 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" subtitle="Household, categories, connections, and the password that opens your data." />
-      {status ? <p className="pixel-panel p-3 text-[15px]">{status}</p> : null}
+      {status ? <p className="shelf-panel p-3 text-[15px]">{status}</p> : null}
 
-      <section className="pixel-panel space-y-3 p-4">
+      <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Sample data</h2>
         <p className="text-[15px] text-[var(--muted)]">Load sample accounts, bills, and holdings before a bank is connected.</p>
-        <button className="pixel-btn" type="button" onClick={seed}>
+        <button className="shelf-btn" type="button" onClick={seed}>
           Load sample data
         </button>
       </section>
 
-      <section className="pixel-panel space-y-3 p-4">
+      <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Rules</h2>
         <p className="text-[15px] text-[var(--muted)]">Rename, categorize, hide, or tag transactions that match a merchant.</p>
-        <Link href="/settings/rules" className="pixel-btn inline-flex">
+        <Link href="/settings/rules" className="shelf-btn inline-flex">
           Manage rules
         </Link>
       </section>
 
-      <section className="pixel-panel space-y-3 p-4">
+      <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Export</h2>
         <div className="flex gap-2">
-          <a className="pixel-btn" href="/api/export?format=json">
+          <a className="shelf-btn" href="/api/export?format=json">
             JSON
           </a>
-          <a className="pixel-btn secondary" href="/api/export?format=csv">
+          <a className="shelf-btn secondary" href="/api/export?format=csv">
             CSV
           </a>
         </div>
       </section>
 
-      <form onSubmit={changePw} className="pixel-panel grid gap-4 p-5 md:grid-cols-2">
+      <form onSubmit={changePw} className="shelf-panel grid gap-4 p-5 md:grid-cols-2">
         <div className="md:col-span-2">
           <h2 className="text-[18px] font-semibold tracking-tight">Password</h2>
           <p className="mt-1 text-[14px] text-[var(--muted)]">This password opens the sealed balances and transactions.</p>
         </div>
         <label className="field">
           <span className="field-label">Current password</span>
-          <input className="pixel-input" type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
+          <input className="shelf-input" type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
         </label>
         <label className="field">
           <span className="field-label">New password</span>
-          <input className="pixel-input" type="password" placeholder="12+ characters" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
+          <input className="shelf-input" type="password" placeholder="12+ characters" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
         </label>
-        <button className="pixel-btn justify-self-start md:col-span-2">Change password</button>
+        <button className="shelf-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
       <section className="space-y-3">
@@ -131,19 +131,19 @@ export default function SettingsPage() {
             e.currentTarget.reset();
           }}
         >
-          <input className="pixel-input max-w-xs" name="group" placeholder="New group" required />
-          <button className="pixel-btn secondary">Add group</button>
+          <input className="shelf-input max-w-xs" name="group" placeholder="New group" required />
+          <button className="shelf-btn secondary">Add group</button>
         </form>
         <form onSubmit={addCat} className="flex flex-wrap gap-2">
-          <select className="pixel-input max-w-xs" value={newCat.groupId} onChange={(e) => setNewCat({ ...newCat, groupId: e.target.value })} aria-label="Group">
+          <select className="shelf-input max-w-xs" value={newCat.groupId} onChange={(e) => setNewCat({ ...newCat, groupId: e.target.value })} aria-label="Group">
             {groups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
               </option>
             ))}
           </select>
-          <input className="pixel-input max-w-xs" placeholder="New category" value={newCat.name} onChange={(e) => setNewCat({ ...newCat, name: e.target.value })} required />
-          <button className="pixel-btn">Add</button>
+          <input className="shelf-input max-w-xs" placeholder="New category" value={newCat.name} onChange={(e) => setNewCat({ ...newCat, name: e.target.value })} required />
+          <button className="shelf-btn">Add</button>
         </form>
         {groups.map((group) => (
           <section key={group.id}>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                 <li key={category.id} className="space-y-2 border-b border-[var(--line)] px-4 py-3 last:border-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <input
-                      className="pixel-input min-w-40 flex-1"
+                      className="shelf-input min-w-40 flex-1"
                       defaultValue={category.name}
                       key={category.name}
                       aria-label={`${category.name} name`}
@@ -185,7 +185,7 @@ export default function SettingsPage() {
                       }}
                     />
                     <select
-                      className="pixel-input max-w-40"
+                      className="shelf-input max-w-40"
                       value={category.groupId}
                       aria-label={`${category.name} group`}
                       onChange={(e) => void saveCat({ id: category.id, groupId: e.target.value })}
@@ -199,7 +199,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <select
-                      className="pixel-input max-w-48"
+                      className="shelf-input max-w-48"
                       value={category.flexBucket ?? ""}
                       aria-label={`${category.name} flex bucket`}
                       onChange={(e) => void saveCat({ id: category.id, flexBucket: e.target.value || null })}
@@ -234,9 +234,9 @@ export default function SettingsPage() {
       <TagsPanel />
       <ConnectionsPanel />
 
-      <section className="pixel-panel space-y-2 p-4 text-[15px]">
+      <section className="shelf-panel space-y-2 p-4 text-[15px]">
         <h2 className="text-[20px] font-semibold tracking-tight">Session</h2>
-        <button className="pixel-btn ghost" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
+        <button className="shelf-btn ghost" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
           Log out
         </button>
       </section>
@@ -269,9 +269,9 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
 
   if (!data) return null;
   return (
-    <section className="pixel-panel space-y-3 p-4">
+    <section className="shelf-panel space-y-3 p-4">
       <h2 className="text-[20px] font-semibold tracking-tight">Household</h2>
-      <p className="text-[15px] text-[var(--muted)]">Members share this vault. Advisors can look, and cannot change anything.</p>
+      <p className="text-[15px] text-[var(--muted)]">Members share this vault and can edit. Advisors see the same screens and cannot change anything.</p>
       <ul className="space-y-2 text-[15px]">
         {data.members.map((member) => (
           <li key={member.userId} className="flex items-center justify-between gap-3">
@@ -288,10 +288,10 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
       </ul>
       {data.role === "owner" ? (
         <div className="flex flex-wrap gap-2">
-          <button className="pixel-btn" type="button" onClick={() => invite("member")}>
+          <button className="shelf-btn" type="button" onClick={() => invite("member")}>
             Invite member
           </button>
-          <button className="pixel-btn secondary" type="button" onClick={() => invite("advisor")}>
+          <button className="shelf-btn secondary" type="button" onClick={() => invite("advisor")}>
             Invite advisor
           </button>
         </div>
@@ -314,7 +314,7 @@ function TagsPanel() {
     load();
   }, [load]);
   return (
-    <section className="pixel-panel space-y-3 p-4">
+    <section className="shelf-panel space-y-3 p-4">
       <h2 className="text-[20px] font-semibold tracking-tight">Tags</h2>
       <form
         className="flex gap-2"
@@ -326,8 +326,8 @@ function TagsPanel() {
           });
         }}
       >
-        <input className="pixel-input" placeholder="New tag" value={name} onChange={(e) => setName(e.target.value)} required />
-        <button className="pixel-btn">Add</button>
+        <input className="shelf-input" placeholder="New tag" value={name} onChange={(e) => setName(e.target.value)} required />
+        <button className="shelf-btn">Add</button>
       </form>
       <ul className="space-y-2">
         {tags.map((tag) => (
@@ -354,9 +354,17 @@ function ConnectionsPanel() {
     );
   }, []);
   return (
-    <section className="pixel-panel space-y-2 p-4">
+    <section className="shelf-panel space-y-2 p-4">
       <h2 className="text-[20px] font-semibold tracking-tight">Connections</h2>
-      {items.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No banks connected. Add one from Accounts.</p> : null}
+      {items.length === 0 ? (
+        <p className="text-[15px] text-[var(--muted)]">
+          No banks connected. <Link href="/accounts" className="text-link">Connect one from Accounts.</Link>
+        </p>
+      ) : (
+        <p className="text-[15px] text-[var(--muted)]">
+          Connect, refresh, and disconnect live on <Link href="/accounts" className="text-link">Accounts</Link>.
+        </p>
+      )}
       <ul className="space-y-1 text-[15px]">
         {items.map((item, index) => (
           <li key={index}>

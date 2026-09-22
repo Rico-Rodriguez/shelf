@@ -168,6 +168,16 @@ export default function BudgetPage() {
           />
         </PageHeader>
 
+        <p className="story-line">
+          {budget.mode === "flex"
+            ? `${budget.flexRemainingCents >= 0 ? "Flex pot still has room." : "The flex pot is spent."} Rollover categories keep unused amounts for next month.`
+            : budget.expensePlannedCents > 0
+              ? budget.expenseSpentCents > budget.expensePlannedCents
+                ? "A few categories are past their plan. Open one and lower it, or move the extra into flex."
+                : "You are inside the category plan. Leftover amounts stay put unless rollover is on."
+              : "No amounts yet. Suggest from recent history, or copy last month to start the ritual."}
+        </p>
+
         <div className="flex flex-col gap-2">
           <Segment
             className="w-full"
@@ -179,21 +189,21 @@ export default function BudgetPage() {
             ]}
           />
           <div className="grid grid-cols-2 gap-2">
-            <button className="pixel-btn ghost w-full" type="button" onClick={copyLastMonth}>
+            <button className="shelf-btn ghost w-full" type="button" onClick={copyLastMonth}>
               Use last month
             </button>
-            <button className="pixel-btn ghost w-full" type="button" onClick={suggest}>
+            <button className="shelf-btn ghost w-full" type="button" onClick={suggest}>
               Suggest
             </button>
           </div>
         </div>
 
-        <div className="pixel-panel overflow-hidden">
+        <div className="shelf-panel overflow-hidden">
           <div className="grid grid-cols-2">
             <label className="field min-w-0 border-b border-r border-[var(--line)] px-3.5 py-3">
               <span className="field-label">Planned income</span>
               <input
-                className="pixel-input compact mt-1.5"
+                className="shelf-input compact mt-1.5"
                 inputMode="decimal"
                 aria-label="Planned income"
                 value={income}
@@ -296,7 +306,7 @@ function CategoryRow({
         <label className="field min-w-0 flex-1">
           <span className="field-label">Planned</span>
           <input
-            className="pixel-input compact mt-1"
+            className="shelf-input compact mt-1"
             inputMode="decimal"
             defaultValue={(row.plannedCents / 100).toFixed(0)}
             key={`${row.category.id}-${row.plannedCents}`}
@@ -336,7 +346,7 @@ function Bucket({
   const planned = rows.reduce((sum, row) => sum + row.availableCents, 0);
   const spent = rows.reduce((sum, row) => sum + row.spentCents, 0);
   return (
-    <section className="pixel-panel p-4">
+    <section className="shelf-panel p-4">
       <h2 className="text-[17px] font-semibold">{title}</h2>
       <p className="my-2 text-[15px]">
         <MoneyText cents={spent} /> / <MoneyText cents={planned} />
@@ -366,13 +376,13 @@ function FlexPot({
 }) {
   const planned = pool;
   return (
-    <section className="pixel-panel p-4">
+    <section className="shelf-panel p-4">
       <h2 className="text-[17px] font-semibold">Flex</h2>
       <p className="my-2 text-[13px] text-[var(--muted)]">One amount for everything in this bucket.</p>
       <label className="field">
         <span className="field-label">Flex budget</span>
         <input
-          className="pixel-input compact mt-1"
+          className="shelf-input compact mt-1"
           inputMode="decimal"
           key={planned}
           defaultValue={(planned / 100).toFixed(0)}

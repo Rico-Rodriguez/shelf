@@ -81,6 +81,8 @@ export async function PATCH(request: Request) {
       merchantName?: string;
       cadence?: string;
       isIncome?: boolean;
+      categoryId?: string | null;
+      accountId?: string | null;
     };
     const db = await getDb();
     const [existing] = await db.select().from(recurrences).where(eq(recurrences.id, body.id));
@@ -103,6 +105,8 @@ export async function PATCH(request: Request) {
         nextDate: body.nextDate,
         cadence: body.cadence,
         isIncome: body.isIncome,
+        categoryId: body.categoryId,
+        accountId: body.accountId,
       })
       .where(eq(recurrences.id, body.id));
     return NextResponse.json({ ok: true });

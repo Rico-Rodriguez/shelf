@@ -23,9 +23,9 @@ type Flow = {
 type Point = { name: string; Income: number; Spending: number; Saved: number };
 
 const SERIES = [
-  { key: "Income", color: "#00c805" },
-  { key: "Saved", color: "#0d0d0d" },
-  { key: "Spending", color: "#ff5000" },
+  { key: "Income", color: "#1b7a62" },
+  { key: "Saved", color: "#14181f" },
+  { key: "Spending", color: "#d94a2e" },
 ] as const;
 
 function SavingsRate({ series }: { series: { income: number; spending: number }[] }) {
@@ -86,7 +86,7 @@ export default function CashFlowPage() {
             ]}
           />
           <input
-            className="pixel-input ios-search"
+            className="shelf-input ios-search"
             placeholder="Filter merchant"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -97,7 +97,7 @@ export default function CashFlowPage() {
             aria-label="Filter merchant"
           />
         </div>
-        <div className="pixel-panel chart-frame px-2 pb-3 pt-2">
+        <div className="shelf-panel chart-frame px-2 pb-3 pt-2">
           <div className="h-[220px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart

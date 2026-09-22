@@ -20,17 +20,13 @@ const GROUPS = [
     label: "Plan",
     items: [
       { href: "/budget", label: "Budget", icon: "chart" },
-      { href: "/cash-flow", label: "Cash flow", icon: "flow" },
       { href: "/recurring", label: "Recurring", icon: "calendar" },
       { href: "/goals", label: "Goals", icon: "flag" },
     ],
   },
   {
     label: "Insights",
-    items: [
-      { href: "/reports", label: "Reports", icon: "chart" },
-      { href: "/investments", label: "Investments", icon: "leaf" },
-    ],
+    items: [{ href: "/insights", label: "Insights", icon: "flow" }],
   },
 ];
 
@@ -44,7 +40,7 @@ const PRIMARY = [
 const MORE = GROUPS.flatMap((group) => group.items).filter((item) => !PRIMARY.some((primary) => primary.href === item.href));
 MORE.push({ href: "/settings", label: "Settings", icon: "gear" });
 
-const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/cash-flow", "/recurring", "/reports", "/investments", "/goals", "/settings"];
+const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
 
 type Note = { id: string; title: string; body: string; href: string | null; readAt: string | null };
 
@@ -103,10 +99,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh overflow-x-clip">
-      <aside className="sticky top-0 z-10 hidden h-dvh w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--linen)] px-3 py-5 md:flex">
+      <aside className="sticky top-0 z-10 hidden h-dvh w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--paper)] px-3 py-5 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
           <Link href="/" prefetch>
-            <div className="text-[22px] font-semibold tracking-[-0.04em]">Shelf</div>
+            <div className="brand-mark text-[26px]">Shelf</div>
             <div className="text-[12px] text-[var(--muted)]">{syncLabel || "Your money, clearly"}</div>
           </Link>
           <button type="button" className="relative text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
@@ -139,9 +135,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--parchment)]/92 px-4 py-2.5 backdrop-blur md:hidden">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 py-2.5 backdrop-blur md:hidden">
           <span className="text-[12px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
-          <button type="button" className="relative flex size-10 items-center justify-center text-[var(--espresso)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
+          <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={20} />
             {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>

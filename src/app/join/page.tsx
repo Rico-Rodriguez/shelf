@@ -29,15 +29,15 @@ export default function JoinPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6">
-      <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--terracotta)]">Shelf</p>
+      <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--ink)]">Shelf</p>
       <h1 className="mt-2 text-[32px] font-semibold tracking-[-0.03em]">Join the household</h1>
       <p className="mt-2 text-[15px] text-[var(--muted)]">Use the one-time code from the owner, then choose your own password.</p>
       <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-        <input className="pixel-input" placeholder="Invite code" value={code} onChange={(e) => setCode(e.target.value)} required />
-        <input className="pixel-input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required />
-        <input className="pixel-input" type="password" placeholder="Password (12+)" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input className="shelf-input" placeholder="Invite code" value={code} onChange={(e) => setCode(e.target.value)} required />
+        <input className="shelf-input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required />
+        <input className="shelf-input" type="password" placeholder="Password (12+)" value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error ? <p className="text-[14px] text-[var(--danger)]">{error}</p> : null}
-        <button className="pixel-btn w-full" disabled={busy}>
+        <button className="shelf-btn w-full" disabled={busy}>
           {busy ? "Joining…" : "Join"}
         </button>
       </form>

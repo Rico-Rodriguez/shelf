@@ -41,14 +41,14 @@ export default function SetupPage() {
     <div className="flex min-h-screen items-center justify-center px-6">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
         <div>
-          <p className="text-[15px] font-semibold text-[var(--terracotta)]">Shelf</p>
+          <p className="text-[15px] font-semibold text-[var(--ink)]">Shelf</p>
           <h1 className="mt-2 text-[34px] font-bold tracking-tight">Set a lock</h1>
           <p className="mt-1 text-[15px] text-[var(--muted)]">
             Twelve or more characters. This password seals your balances and transactions.
           </p>
         </div>
         <input
-          className="pixel-input"
+          className="shelf-input"
           type="password"
           autoComplete="new-password"
           value={password}
@@ -56,15 +56,15 @@ export default function SetupPage() {
           placeholder="New password"
         />
         <input
-          className="pixel-input"
+          className="shelf-input"
           type="password"
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           placeholder="Confirm"
         />
-        {error ? <p className="text-[15px] text-[var(--terracotta)]">{error}</p> : null}
-        <button className="pixel-btn w-full" disabled={busy}>
+        {error ? <p className="text-[15px] text-[var(--ink)]">{error}</p> : null}
+        <button className="shelf-btn w-full" disabled={busy}>
           {busy ? "Saving…" : "Continue"}
         </button>
       </form>
