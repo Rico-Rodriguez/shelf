@@ -165,9 +165,17 @@ export async function GET() {
         const group = groupRows.find((row) => row.id === category?.groupId);
         return { id, name: category?.name ?? "Other", cents, color: shelfColor(group?.color) };
       })
-      .filter((row) => row.cents > 0)
+      .filter((row) => row.cents > 0 && !fixedIds.has(row.id))
       .sort((a, b) => b.cents - a.cents)
       .slice(0, 5);
+    const variableUsual =
+      trail.total == null
+        ? null
+        : Math.round(
+            Object.entries(trail.byCategory)
+              .filter(([id]) => !fixedIds.has(id))
+              .reduce((sum, [, cents]) => sum + cents, 0),
+          );
 
     return NextResponse.json({
       layout,
@@ -187,9 +195,9 @@ export async function GET() {
         pendingCents,
       },
       usual: {
-        spentCents: spentTotal,
-        usualCents: trail.total,
-        deltaCents: trail.total == null ? null : spentTotal - trail.total,
+        spentCents: variableSpent,
+        usualCents: variableUsual,
+        deltaCents: variableUsual == null ? null : variableSpent - variableUsual,
       },
       safeSeries,
       spending,
