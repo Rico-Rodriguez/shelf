@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { Segment } from "@/components/ui/Segment";
-import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { periodRange } from "@/lib/dates";
+import { useQuery } from "@/lib/use-query";
 
 type Row = { id?: string; name: string; cents: number };
 
@@ -22,9 +23,9 @@ type Flow = {
 type Point = { name: string; Income: number; Spending: number; Saved: number };
 
 const SERIES = [
-  { key: "Income", color: "#1f7a45" },
-  { key: "Saved", color: "#1f4d45" },
-  { key: "Spending", color: "#b23b32" },
+  { key: "Income", color: "#00c805" },
+  { key: "Saved", color: "#0d0d0d" },
+  { key: "Spending", color: "#ff5000" },
 ] as const;
 
 function SavingsRate({ series }: { series: { income: number; spending: number }[] }) {
@@ -38,21 +39,19 @@ function SavingsRate({ series }: { series: { income: number; spending: number }[
   );
 }
 
-const tick = { fill: "rgba(60, 60, 67, 0.6)", fontSize: 11 };
+const tick = { fill: "rgba(13, 13, 13, 0.45)", fontSize: 11 };
 
 export default function CashFlowPage() {
   const router = useRouter();
-  const [data, setData] = useState<Flow | null>(null);
   const [grain, setGrain] = useState("month");
   const [merchant, setMerchant] = useState("");
+  const [draft, setDraft] = useState("");
+  const qs = new URLSearchParams({ grain, months: "12" });
+  if (merchant) qs.set("merchant", merchant);
+  const { data, loading, refreshing } = useQuery<Flow>(`cash-flow:${qs}`, `/api/cash-flow?${qs}`);
 
-  useEffect(() => {
-    const qs = new URLSearchParams({ grain, months: "12" });
-    if (merchant) qs.set("merchant", merchant);
-    void api<Flow>(`/api/cash-flow?${qs}`).then(setData);
-  }, [grain, merchant]);
-
-  if (!data) return <p className="text-[var(--muted)]">Loading…</p>;
+  if (!data && loading) return <PageSkeleton title="Cash flow" rows={5} />;
+  if (!data) return <PageSkeleton title="Cash flow" rows={5} />;
 
   const chart = visible(
     data.series.map((s) => ({
@@ -72,75 +71,78 @@ export default function CashFlowPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Cash flow" subtitle="What came in, what went out, and what was left. Open a month or a row to see the transactions." />
-      <SavingsRate series={data.series} />
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Segment
-          className="sm:w-56"
-          value={grain}
-          onChange={(value) => setGrain(value as "month" | "quarter")}
-          options={[
-            { value: "month", label: "Monthly" },
-            { value: "quarter", label: "Quarterly" },
-          ]}
-        />
-        <input
-          className="pixel-input ios-search sm:max-w-xs"
-          placeholder="Filter merchant"
-          value={merchant}
-          onChange={(e) => setMerchant(e.target.value)}
-          aria-label="Filter merchant"
-        />
-      </div>
-      <div className="pixel-panel px-1 pb-3 pt-2">
-        <div className="h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chart}
-              barGap={3}
-              barCategoryGap="28%"
-              margin={{ top: 12, right: 8, left: 0, bottom: 0 }}
-              onClick={(state) => {
-                const key = state?.activeLabel;
-                if (typeof key === "string") openPeriod(key);
-              }}
-            >
-              <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.1)" />
-              <XAxis
-                dataKey="name"
-                tick={tick}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(key: string) => axisLabel(key, multiYear)}
-                interval="preserveStartEnd"
-              />
-              <YAxis tick={tick} axisLine={false} tickLine={false} width={48} tickFormatter={axisMoney} />
-              <Tooltip content={<FlowTip />} cursor={{ fill: "rgba(120,120,128,0.08)" }} />
-              {SERIES.map((s) => (
-                <Bar key={s.key} dataKey={s.key} fill={s.color} maxBarSize={28} radius={[3, 3, 3, 3]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+    <PageShell refreshing={refreshing}>
+      <div className="space-y-4">
+        <PageHeader title="Cash flow" subtitle="Income, spending, and what’s left each month." />
+        <SavingsRate series={data.series} />
+        <div className="flex flex-col gap-2">
+          <Segment
+            className="w-full"
+            value={grain}
+            onChange={(value) => setGrain(value as "month" | "quarter")}
+            options={[
+              { value: "month", label: "Monthly" },
+              { value: "quarter", label: "Quarterly" },
+            ]}
+          />
+          <input
+            className="pixel-input ios-search"
+            placeholder="Filter merchant"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => setMerchant(draft.trim())}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setMerchant(draft.trim());
+            }}
+            aria-label="Filter merchant"
+          />
         </div>
-        <div className="mt-1 flex items-center justify-center gap-4">
-          {SERIES.map((s) => (
-            <span key={s.key} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">
-              <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
-              {s.key}
-            </span>
-          ))}
+        <div className="pixel-panel chart-frame px-2 pb-3 pt-2">
+          <div className="h-[220px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chart}
+                barGap={2}
+                barCategoryGap="24%"
+                margin={{ top: 8, right: 4, left: 4, bottom: 0 }}
+                onClick={(state) => {
+                  const key = state?.activeLabel;
+                  if (typeof key === "string") openPeriod(key);
+                }}
+              >
+                <CartesianGrid vertical={false} stroke="rgba(13,13,13,0.08)" />
+                <XAxis
+                  dataKey="name"
+                  tick={tick}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(key: string) => axisLabel(key, multiYear)}
+                  interval="preserveStartEnd"
+                  minTickGap={18}
+                />
+                <YAxis tick={tick} axisLine={false} tickLine={false} width={40} tickFormatter={axisMoney} />
+                <Tooltip content={<FlowTip />} cursor={{ fill: "rgba(120,120,128,0.08)" }} />
+                {SERIES.map((s) => (
+                  <Bar key={s.key} dataKey={s.key} fill={s.color} maxBarSize={22} radius={[3, 3, 3, 3]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            {SERIES.map((s) => (
+              <span key={s.key} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">
+                <span className="size-2 rounded-[2px]" style={{ background: s.color }} />
+                {s.key}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-5 md:grid-cols-2">
+          <List title="By category" rows={data.byCategory} hrefFor={(row) => activityHref({ categoryId: row.id || undefined, ...span })} />
+          <List title="By merchant" rows={data.byMerchant} hrefFor={(row) => activityHref({ q: row.name, ...span })} />
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
-        <List
-          title="By category"
-          rows={data.byCategory}
-          hrefFor={(row) => activityHref({ categoryId: row.id || undefined, ...span })}
-        />
-        <List title="By merchant" rows={data.byMerchant} hrefFor={(row) => activityHref({ q: row.name, ...span })} />
-      </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -219,7 +221,7 @@ function FlowTip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-[22px] bg-white px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),inset_0_0_0_0.5px_rgba(0,0,0,0.12),0_8px_28px_rgba(0,0,0,0.10)]">
+    <div className="rounded-[14px] border border-[var(--line)] bg-white px-3 py-2 shadow-sm">
       <div className="mb-1 text-[13px] font-semibold tracking-[-0.08px]">{tipLabel(String(label ?? ""))}</div>
       {payload.map((row) => (
         <div key={row.name} className="flex items-center justify-between gap-4 text-[13px] leading-[18px]">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { Icon } from "./Icon";
@@ -36,13 +36,15 @@ const GROUPS = [
 
 const PRIMARY = [
   { href: "/", label: "Home", icon: "home" },
-  { href: "/transactions", label: "Transactions", icon: "list" },
+  { href: "/transactions", label: "Activity", icon: "list" },
   { href: "/budget", label: "Budget", icon: "chart" },
   { href: "/accounts", label: "Accounts", icon: "wallet" },
 ];
 
 const MORE = GROUPS.flatMap((group) => group.items).filter((item) => !PRIMARY.some((primary) => primary.href === item.href));
 MORE.push({ href: "/settings", label: "Settings", icon: "gear" });
+
+const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/cash-flow", "/recurring", "/reports", "/investments", "/goals", "/settings"];
 
 type Note = { id: string; title: string; body: string; href: string | null; readAt: string | null };
 
@@ -52,6 +54,7 @@ function isActive(path: string, href: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -73,6 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [loadNotes, path]);
 
   useEffect(() => {
+    for (const href of PREFETCH) router.prefetch(href);
+  }, [router]);
+
+  useEffect(() => {
     const onSync = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
       if (detail === "syncing" || detail === "synced" || detail === "error") setSync(detail);
@@ -81,20 +88,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("shelf-sync", onSync);
   }, []);
 
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [path]);
+
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
 
   async function readNote(note: Note) {
     await api("/api/notifications", { method: "POST", body: JSON.stringify({ id: note.id }) });
     setNotesOpen(false);
     loadNotes();
-    if (note.href) window.location.href = note.href;
+    if (note.href) router.push(note.href);
   }
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="flex min-h-dvh overflow-x-clip">
       <aside className="sticky top-0 z-10 hidden h-dvh w-[232px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--linen)] px-3 py-5 md:flex">
         <div className="mb-6 flex items-center justify-between px-2">
-          <Link href="/">
+          <Link href="/" prefetch>
             <div className="text-[22px] font-semibold tracking-[-0.04em]">Shelf</div>
             <div className="text-[12px] text-[var(--muted)]">{syncLabel || "Your money, clearly"}</div>
           </Link>
@@ -111,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {group.items.map((item) => {
                   const active = isActive(path, item.href);
                   return (
-                    <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
+                    <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
                       <Icon name={item.icon} size={16} />
                       {item.label}
                     </Link>
@@ -120,36 +131,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           ))}
-          <Link href="/settings" aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav ${isActive(path, "/settings") ? "active" : ""}`}>
+          <Link href="/settings" prefetch aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav ${isActive(path, "/settings") ? "active" : ""}`}>
             <Icon name="gear" size={16} />
             Settings
           </Link>
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--parchment)]/90 px-4 py-2 backdrop-blur md:hidden">
-          <span className="text-[12px] text-[var(--muted)]">{syncLabel}</span>
-          <button type="button" className="relative text-[var(--espresso)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--line)] bg-[var(--parchment)]/92 px-4 py-2.5 backdrop-blur md:hidden">
+          <span className="text-[12px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
+          <button type="button" className="relative flex size-10 items-center justify-center text-[var(--espresso)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={20} />
-            {unread ? <span className="absolute -right-1 -top-1 size-2 rounded-full bg-[var(--danger)]" /> : null}
+            {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>
         </div>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-8 pt-4 md:px-8 md:pb-12 md:pt-8">{children}</main>
-        <nav className="ios-tabbar md:hidden">
+        <main className="app-main">{children}</main>
+        <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);
             return (
-              <Link key={item.href} href={item.href} className={`ios-tab ${active ? "active" : ""}`}>
-                <span className="ios-tab-glyph">
-                  <Icon name={item.icon} size={22} />
+              <Link key={item.href} href={item.href} prefetch className={`ios-tab ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
+                <span className="ios-tab-glyph" aria-hidden>
+                  <Icon name={item.icon} size={24} />
                 </span>
                 {item.label}
               </Link>
             );
           })}
-          <button type="button" className={`ios-tab ${moreActive ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
-            <span className="ios-tab-glyph">
+          <button
+            type="button"
+            className={`ios-tab ${moreActive && !PRIMARY.some((item) => isActive(path, item.href)) ? "active" : ""}`}
+            onClick={() => setMoreOpen(true)}
+            aria-label="More"
+          >
+            <span className="ios-tab-glyph" aria-hidden>
               <Icon name="more" size={22} />
             </span>
             More
@@ -158,29 +174,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {moreOpen ? (
-        <div className="ios-sheet-backdrop md:hidden" onClick={() => setMoreOpen(false)}>
-          <div className="ios-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="ios-sheet-handle" />
-            <h2 className="mb-3 text-[18px] font-semibold">More</h2>
-            {GROUPS.map((group) => (
-              <div key={group.label} className="mb-4">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--tertiary)]">{group.label}</div>
-                <div className="card">
-                  {group.items.map((item) => (
-                    <Link key={item.href} href={item.href} className="data-row" onClick={() => setMoreOpen(false)}>
-                      <Icon name={item.icon} size={16} />
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
+        <Drawer title="More" onClose={() => setMoreOpen(false)}>
+          {GROUPS.map((group) => (
+            <div key={group.label}>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--tertiary)]">{group.label}</div>
+              <div className="card">
+                {group.items.map((item) => (
+                  <Link key={item.href} href={item.href} prefetch className="data-row" onClick={() => setMoreOpen(false)}>
+                    <Icon name={item.icon} size={18} />
+                    <span className="flex-1">{item.label}</span>
+                  </Link>
+                ))}
               </div>
-            ))}
-            <Link href="/settings" className="data-row card" onClick={() => setMoreOpen(false)}>
-              <Icon name="gear" size={16} />
-              Settings
+            </div>
+          ))}
+          <div className="card">
+            <Link href="/settings" prefetch className="data-row" onClick={() => setMoreOpen(false)}>
+              <Icon name="gear" size={18} />
+              <span className="flex-1">Settings</span>
             </Link>
           </div>
-        </div>
+        </Drawer>
       ) : null}
 
       {notesOpen ? (
@@ -189,7 +203,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setNotesOpen(false)}
           action={
             unread ? (
-              <button className="text-[13px] font-medium text-[var(--terracotta)]" type="button" onClick={() => api("/api/notifications", { method: "POST", body: JSON.stringify({ all: true }) }).then(loadNotes)}>
+              <button
+                className="text-[13px] font-medium text-[var(--positive)]"
+                type="button"
+                onClick={() => api("/api/notifications", { method: "POST", body: JSON.stringify({ all: true }) }).then(loadNotes)}
+              >
                 Mark all read
               </button>
             ) : null
