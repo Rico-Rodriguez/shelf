@@ -97,7 +97,26 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
   return out;
 }
 
-export async function pendingInMonth(year: number, month: number, dek: Buffer): Promise<number> {
+export async function trailingCategoryAverage(year: number, month: number, dek: Buffer) {
+  const samples: Record<string, number>[] = [];
+  for (let i = 1; i <= 3; i += 1) {
+    const prev = addMonths(year, month, -i);
+    const spent = await spentByCategory(prev.year, prev.month, dek);
+    if (Object.values(spent).some((cents) => cents > 0)) samples.push(spent);
+  }
+  const byCategory: Record<string, number> = {};
+  if (!samples.length) return { byCategory, total: null as number | null };
+  for (const spent of samples) {
+    for (const [id, cents] of Object.entries(spent)) byCategory[id] = (byCategory[id] ?? 0) + cents;
+  }
+  for (const id of Object.keys(byCategory)) byCategory[id] = Math.round(byCategory[id] / samples.length);
+  const total = Math.round(
+    samples.reduce((sum, spent) => sum + Object.values(spent).reduce((inner, cents) => inner + cents, 0), 0) / samples.length,
+  );
+  return { byCategory, total };
+}
+
+export async function pendingOutflow(year: number, month: number, dek: Buffer) {
   const db = await getDb();
   const { start, end } = monthRange(year, month);
   const txs = (
@@ -106,12 +125,13 @@ export async function pendingInMonth(year: number, month: number, dek: Buffer): 
       .from(transactions)
       .where(and(gte(transactions.date, start), lte(transactions.date, end)))
   ).map((tx) => openTx(tx, dek));
-  let total = 0;
-  for (const tx of txs) {
-    if (tx.hidden || tx.isTransfer || !tx.pending || tx.amountCents <= 0) continue;
-    total += tx.amountCents;
-  }
-  return total;
+  return txs
+    .filter((tx) => tx.pending && !tx.hidden && !tx.isTransfer && tx.amountCents > 0)
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+}
+
+export async function pendingInMonth(year: number, month: number, dek: Buffer): Promise<number> {
+  return pendingOutflow(year, month, dek);
 }
 
 export async function readMonthLeft(year: number, month: number, dek: Buffer): Promise<number | null> {

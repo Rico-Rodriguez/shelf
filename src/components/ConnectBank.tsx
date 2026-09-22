@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
 import { api } from "@/lib/client";
 
-export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
+export function ConnectBank({ onLinked, itemId, label }: { onLinked?: () => void; itemId?: string; label?: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -13,7 +13,10 @@ export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ linkToken: string }>("/api/plaid/link-token", { method: "POST" });
+      const res = await api<{ linkToken: string; update?: boolean }>("/api/plaid/link-token", {
+        method: "POST",
+        body: JSON.stringify(itemId ? { itemId } : {}),
+      });
       setToken(res.linkToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start Plaid");
@@ -24,13 +27,16 @@ export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>(
     async (public_token, metadata) => {
-      if (!public_token) return;
       setBusy(true);
       try {
-        await api("/api/plaid/exchange", {
-          method: "POST",
-          body: JSON.stringify({ public_token, metadata }),
-        });
+        if (itemId) {
+          await api("/api/plaid/sync", { method: "POST", body: "{}" });
+        } else if (public_token) {
+          await api("/api/plaid/exchange", {
+            method: "POST",
+            body: JSON.stringify({ public_token, metadata }),
+          });
+        }
         onLinked?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not link");
@@ -39,7 +45,7 @@ export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
         setToken(null);
       }
     },
-    [onLinked],
+    [itemId, onLinked],
   );
 
   const { open, ready } = usePlaidLink({ token, onSuccess });
@@ -48,7 +54,7 @@ export function ConnectBank({ onLinked }: { onLinked?: () => void }) {
     <div className="space-y-2">
       {!token ? (
         <button type="button" className="shelf-btn" onClick={start} disabled={busy}>
-          {busy ? "Opening the box…" : "Connect a bank"}
+          {busy ? "Opening…" : label || "Connect a bank"}
         </button>
       ) : (
         <button type="button" className="shelf-btn" onClick={() => open()} disabled={!ready}>

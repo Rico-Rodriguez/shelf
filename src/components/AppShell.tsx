@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
+import { UndoHost } from "./UndoHost";
 import { Drawer } from "./ui/Drawer";
 import { readPageTitle } from "./ui/PageHeader";
 
@@ -59,6 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
   const [pageTitle, setPageTitle] = useState("");
   const [titleOn, setTitleOn] = useState(false);
+  const [arrive, setArrive] = useState(false);
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
@@ -73,6 +76,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadNotes();
   }, [loadNotes, path]);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("shelf-arrived")) return;
+      setArrive(true);
+      sessionStorage.setItem("shelf-arrived", "1");
+    } catch {
+      setArrive(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const unreadNotes = notes.filter((note) => !note.readAt);
+    if (!unreadNotes.length || !("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.ready.then((registration) => {
+      for (const note of unreadNotes) {
+        const key = `shelf-note-${note.id}`;
+        if (sessionStorage.getItem(key)) continue;
+        sessionStorage.setItem(key, "1");
+        void registration.showNotification(note.title, { body: note.body, tag: note.id, data: { href: note.href || "/" } });
+      }
+    });
+  }, [notes]);
 
   useEffect(() => {
     for (const href of PREFETCH) router.prefetch(href);
@@ -159,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>
         </div>
-        <main className="app-main">{children}</main>
+        <main className={`app-main${arrive ? " app-arrive" : ""}`}>{children}</main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);
@@ -210,6 +237,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Drawer>
       ) : null}
 
+      <CommandPalette />
+      <UndoHost />
       {notesOpen ? (
         <Drawer
           title="Notifications"

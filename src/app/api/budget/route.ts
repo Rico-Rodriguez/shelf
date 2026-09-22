@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { budgetItems, budgetMonths, categories, categoryGroups, settings } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, pendingInMonth, readMonthLeft, spentByCategory, suggestBudget } from "@/lib/budget";
-import { addMonths, yearMonth } from "@/lib/dates";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spentByCategory, suggestBudget, trailingCategoryAverage } from "@/lib/budget";
+import { yearMonth } from "@/lib/dates";
 import { nid } from "@/lib/ids";
 import { openBudgetItem, openSettings, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "@/lib/secrets";
 
@@ -26,10 +26,11 @@ export async function GET(request: Request) {
     const groups = await db.select().from(categoryGroups);
     const spent = await spentByCategory(year, month, dek);
     const actualIncome = await incomeInMonth(year, month, dek);
+    const trail = await trailingCategoryAverage(year, month, dek);
+    const pendingCents = await pendingOutflow(year, month, dek);
     const [cfgRow] = await db.select().from(settings);
     const cfg = cfgRow ? openSettings(cfgRow, dek) : null;
 
-    const usual = await suggestBudget(year, month, dek);
     const rows = cats
       .filter((c) => c.kind === "expense")
       .map((c) => {
@@ -46,12 +47,9 @@ export async function GET(request: Request) {
           availableCents: planned + rolloverIn,
           spentCents: used,
           remainingCents: planned + rolloverIn - used,
-          usualCents: usual.suggested[c.id] ?? 0,
+          usualCents: trail.total == null ? null : (trail.byCategory[c.id] ?? 0),
         };
       });
-    const prev = addMonths(year, month, -1);
-    const previousLeftCents = await readMonthLeft(prev.year, prev.month, dek);
-    const pendingCents = await pendingInMonth(year, month, dek);
 
     const flex = {
       fixed: rows.filter((r) => r.category.flexBucket === "fixed"),
@@ -61,7 +59,11 @@ export async function GET(request: Request) {
     const mode = cfg?.budgetMode ?? "category";
     const flexPoolCents = monthRow.flexPoolCents ?? 0;
     const flexSpent = flex.flex.reduce((s, r) => s + r.spentCents, 0);
-    const expensePlanned = rows.reduce((s, r) => s + r.availableCents, 0);
+    const bucketPlanned = (list: typeof rows) => list.reduce((s, r) => s + r.availableCents, 0);
+    const expensePlanned =
+      mode === "flex"
+        ? bucketPlanned(flex.fixed) + bucketPlanned(flex.non_monthly) + flexPoolCents
+        : rows.reduce((s, r) => s + r.availableCents, 0);
     const expenseSpent = rows.reduce((s, r) => s + r.spentCents, 0);
 
     return NextResponse.json({
@@ -77,15 +79,7 @@ export async function GET(request: Request) {
       expensePlannedCents: expensePlanned,
       expenseSpentCents: expenseSpent,
       pendingCents,
-      handoff:
-        previousLeftCents == null
-          ? null
-          : {
-              previousYear: prev.year,
-              previousMonth: prev.month,
-              previousLeftCents,
-              rolledCents: rows.reduce((sum, row) => sum + row.rolloverInCents, 0),
-            },
+      usualSpentCents: trail.total,
       rows,
       flex,
     });
@@ -105,6 +99,7 @@ export async function PUT(request: Request) {
       flexPoolCents?: number;
       mode?: "category" | "flex";
       items?: { categoryId: string; plannedCents: number }[];
+      move?: { fromCategoryId: string; toCategoryId: string; cents: number };
     };
     const db = await getDb();
     const monthRow = await getOrCreateBudgetMonth(body.year, body.month, dek);
@@ -138,6 +133,31 @@ export async function PUT(request: Request) {
             budgetMonthId: monthRow.id,
             categoryId: item.categoryId,
             ...sealedBudgetItemWrite(item.plannedCents, 0, dek),
+          });
+        }
+      }
+    }
+    if (body.move && body.move.cents > 0 && body.move.fromCategoryId !== body.move.toCategoryId) {
+      const existing = await db.select().from(budgetItems);
+      const from = existing.find((item) => item.budgetMonthId === monthRow.id && item.categoryId === body.move!.fromCategoryId);
+      const to = existing.find((item) => item.budgetMonthId === monthRow.id && item.categoryId === body.move!.toCategoryId);
+      if (from) {
+        const openedFrom = openBudgetItem(from, dek);
+        const nextFrom = Math.max(0, openedFrom.plannedCents - body.move.cents);
+        const moved = openedFrom.plannedCents - nextFrom;
+        await db.update(budgetItems).set(sealedBudgetItemWrite(nextFrom, openedFrom.rolloverInCents, dek)).where(eq(budgetItems.id, from.id));
+        if (moved > 0 && to) {
+          const openedTo = openBudgetItem(to, dek);
+          await db
+            .update(budgetItems)
+            .set(sealedBudgetItemWrite(openedTo.plannedCents + moved, openedTo.rolloverInCents, dek))
+            .where(eq(budgetItems.id, to.id));
+        } else if (moved > 0) {
+          await db.insert(budgetItems).values({
+            id: nid(),
+            budgetMonthId: monthRow.id,
+            categoryId: body.move.toCategoryId,
+            ...sealedBudgetItemWrite(moved, 0, dek),
           });
         }
       }

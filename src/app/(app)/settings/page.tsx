@@ -4,45 +4,25 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
 import { PageHeader } from "@/components/ui/PageHeader";
-
-type Category = {
-  id: string;
-  name: string;
-  flexBucket: string | null;
-  rollover: boolean;
-  groupId: string;
-};
-
-type Group = {
-  id: string;
-  name: string;
-  color: string;
-  categories: Category[];
-};
-
-const BUCKETS = [
-  ["", "None"],
-  ["fixed", "Fixed"],
-  ["flex", "Flex"],
-  ["non_monthly", "Non-monthly"],
-] as const;
+import { Segment } from "@/components/ui/Segment";
 
 export default function SettingsPage() {
-  const [groups, setGroups] = useState<Group[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [pw, setPw] = useState({ current: "", next: "" });
-  const [newCat, setNewCat] = useState({ groupId: "", name: "" });
-
-  const load = useCallback(() => {
-    void api<{ groups: Group[] }>("/api/categories").then((r) => {
-      setGroups(r.groups);
-      if (r.groups[0]) setNewCat((current) => ({ ...current, groupId: current.groupId || r.groups[0].id }));
-    });
-  }, []);
+  const [demoLoaded, setDemoLoaded] = useState(true);
+  const [theme, setTheme] = useState("system");
+  const [importAccount, setImportAccount] = useState("");
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void api<{ demoLoaded?: boolean }>("/api/auth/session").then((res) => setDemoLoaded(Boolean(res.demoLoaded))).catch(() => setDemoLoaded(false));
+    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => {
+      setAccounts(res.accounts);
+      if (res.accounts[0]) setImportAccount((current) => current || res.accounts[0].id);
+    }).catch(() => undefined);
+    const stored = window.localStorage.getItem("shelf-theme");
+    setTheme(stored === "dark" || stored === "light" ? stored : "system");
+  }, []);
 
   async function seed() {
     const res = await api<{ already?: boolean }>("/api/demo/seed", { method: "POST" });
@@ -56,23 +36,45 @@ export default function SettingsPage() {
     setPw({ current: "", next: "" });
   }
 
-  async function addCat(e: FormEvent) {
-    e.preventDefault();
-    await api("/api/categories", { method: "POST", body: JSON.stringify(newCat) });
-    setNewCat((current) => ({ ...current, name: "" }));
-    load();
-  }
-
-  async function saveCat(patch: { id: string; name?: string; groupId?: string; flexBucket?: string | null; rollover?: boolean }) {
-    await api("/api/categories", { method: "PATCH", body: JSON.stringify(patch) });
-    load();
-  }
-
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" subtitle="Household, categories, connections, and the password that opens your data." />
+      <PageHeader title="Settings" subtitle="Password, household, and how Shelf looks." />
       {status ? <p className="shelf-panel p-3 text-[15px]">{status}</p> : null}
 
+      <section className="shelf-panel space-y-3 p-4">
+        <h2 className="text-[15px] font-semibold tracking-tight">Appearance</h2>
+        <Segment
+          value={theme}
+          onChange={(mode) => {
+            setTheme(mode);
+            if (mode === "system") {
+              window.localStorage.removeItem("shelf-theme");
+              delete document.documentElement.dataset.theme;
+            } else {
+              window.localStorage.setItem("shelf-theme", mode);
+              document.documentElement.dataset.theme = mode;
+            }
+          }}
+          options={[
+            { value: "system", label: "System" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+          ]}
+        />
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            if (typeof Notification === "undefined") return;
+            void Notification.requestPermission();
+          }}
+        >
+          Allow alerts
+        </button>
+        <p className="text-[13px] text-[var(--muted)]">Search with Ctrl or Cmd K.</p>
+      </section>
+
+      {demoLoaded ? null : (
       <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Sample data</h2>
         <p className="text-[15px] text-[var(--muted)]">Load sample accounts, bills, and holdings before a bank is connected.</p>
@@ -80,22 +82,50 @@ export default function SettingsPage() {
           Load sample data
         </button>
       </section>
+      )}
 
       <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Rules</h2>
         <p className="text-[15px] text-[var(--muted)]">Rename, categorize, hide, or tag transactions that match a merchant.</p>
-        <Link href="/settings/rules" className="shelf-btn inline-flex">
+        <Link href="/settings/rules" className="text-btn">
           Manage rules
         </Link>
       </section>
 
       <section className="shelf-panel space-y-3 p-4">
+        <h2 className="text-[20px] font-bold tracking-tight">Import</h2>
+        <p className="text-[15px] text-[var(--muted)]">CSV with date, name, and amount. Positive amounts are money out.</p>
+        <select className="shelf-input" value={importAccount} onChange={(event) => setImportAccount(event.target.value)} aria-label="Import account">
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.name}
+            </option>
+          ))}
+        </select>
+        <input
+          className="text-[14px]"
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="CSV file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file || !importAccount) return;
+            void file.text().then((csv) =>
+              api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId: importAccount, csv }) }).then((res) => {
+                setStatus(`Imported ${res.created} transactions.`);
+              }),
+            );
+          }}
+        />
+      </section>
+
+      <section className="shelf-panel space-y-3 p-4">
         <h2 className="text-[20px] font-bold tracking-tight">Export</h2>
-        <div className="flex gap-2">
-          <a className="shelf-btn" href="/api/export?format=json">
+        <div className="flex gap-4">
+          <a className="text-btn" href="/api/export?format=json">
             JSON
           </a>
-          <a className="shelf-btn secondary" href="/api/export?format=csv">
+          <a className="text-btn" href="/api/export?format=csv">
             CSV
           </a>
         </div>
@@ -117,126 +147,10 @@ export default function SettingsPage() {
         <button className="shelf-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
-      <section className="space-y-3">
-        <h2 className="text-[20px] font-bold tracking-tight">Categories</h2>
-        <form
-          className="flex flex-wrap gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const form = new FormData(e.currentTarget);
-            void api("/api/categories", {
-              method: "POST",
-              body: JSON.stringify({ entity: "group", name: String(form.get("group") || ""), kind: "expense" }),
-            }).then(load);
-            e.currentTarget.reset();
-          }}
-        >
-          <input className="shelf-input max-w-xs" name="group" placeholder="New group" required />
-          <button className="shelf-btn secondary">Add group</button>
-        </form>
-        <form onSubmit={addCat} className="flex flex-wrap gap-2">
-          <select className="shelf-input max-w-xs" value={newCat.groupId} onChange={(e) => setNewCat({ ...newCat, groupId: e.target.value })} aria-label="Group">
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-          <input className="shelf-input max-w-xs" placeholder="New category" value={newCat.name} onChange={(e) => setNewCat({ ...newCat, name: e.target.value })} required />
-          <button className="shelf-btn">Add</button>
-        </form>
-        {groups.map((group) => (
-          <section key={group.id}>
-            <h3 className="ios-section flex items-center justify-between" style={{ color: group.color }}>
-              <span>{group.name}</span>
-              <span className="flex gap-2">
-                <button
-                  type="button"
-                  className="text-[var(--muted)]"
-                  onClick={() => {
-                    const index = groups.findIndex((item) => item.id === group.id);
-                    if (index <= 0) return;
-                    const order = groups.map((item, i) => ({ id: item.id, sortOrder: i, entity: "group" as const }));
-                    const prev = order[index - 1];
-                    order[index - 1] = order[index];
-                    order[index] = prev;
-                    void api("/api/categories", { method: "PATCH", body: JSON.stringify({ order: order.map((item, i) => ({ ...item, sortOrder: i })) }) }).then(load);
-                  }}
-                >
-                  Up
-                </button>
-                <button className="text-[var(--danger)]" type="button" onClick={() => void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: group.id, entity: "group" }) }).then(load)}>
-                  Delete
-                </button>
-              </span>
-            </h3>
-            <ul className="card">
-              {group.categories.map((category) => (
-                <li key={category.id} className="space-y-2 border-b border-[var(--line)] px-4 py-3 last:border-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      className="shelf-input min-w-40 flex-1"
-                      defaultValue={category.name}
-                      key={category.name}
-                      aria-label={`${category.name} name`}
-                      onBlur={(e) => {
-                        const name = e.target.value.trim();
-                        if (name && name !== category.name) void saveCat({ id: category.id, name });
-                      }}
-                    />
-                    <select
-                      className="shelf-input max-w-40"
-                      value={category.groupId}
-                      aria-label={`${category.name} group`}
-                      onChange={(e) => void saveCat({ id: category.id, groupId: e.target.value })}
-                    >
-                      {groups.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <select
-                      className="shelf-input max-w-48"
-                      value={category.flexBucket ?? ""}
-                      aria-label={`${category.name} flex bucket`}
-                      onChange={(e) => void saveCat({ id: category.id, flexBucket: e.target.value || null })}
-                    >
-                      {BUCKETS.map(([value, label]) => (
-                        <option key={value || "none"} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 text-[15px] text-[var(--muted)]"
-                      aria-pressed={category.rollover}
-                      onClick={() => void saveCat({ id: category.id, rollover: !category.rollover })}
-                    >
-                      Rolls over
-                      <span className={`switch ${category.rollover ? "on" : ""}`} />
-                    </button>
-                    <button className="text-[13px] font-medium text-[var(--danger)]" type="button" onClick={() => void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: category.id, entity: "category" }) }).then(load)}>
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-      </section>
-
       <HouseholdPanel onStatus={setStatus} />
-      <TagsPanel />
-      <ConnectionsPanel />
-
       <section className="shelf-panel space-y-2 p-4 text-[15px]">
         <h2 className="text-[20px] font-semibold tracking-tight">Session</h2>
-        <button className="shelf-btn ghost" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
+        <button className="text-btn" type="button" onClick={() => fetch("/api/auth/logout", { method: "POST" }).then(() => (window.location.href = "/login"))}>
           Log out
         </button>
       </section>
@@ -271,7 +185,7 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
   return (
     <section className="shelf-panel space-y-3 p-4">
       <h2 className="text-[20px] font-semibold tracking-tight">Household</h2>
-      <p className="text-[15px] text-[var(--muted)]">Members share this vault and can edit. Advisors see the same screens and cannot change anything.</p>
+      <p className="text-[15px] text-[var(--muted)]">People you invite share this vault. The code works once.</p>
       <ul className="space-y-2 text-[15px]">
         {data.members.map((member) => (
           <li key={member.userId} className="flex items-center justify-between gap-3">
@@ -289,89 +203,15 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
       {data.role === "owner" ? (
         <div className="flex flex-wrap gap-2">
           <button className="shelf-btn" type="button" onClick={() => invite("member")}>
-            Invite member
-          </button>
-          <button className="shelf-btn secondary" type="button" onClick={() => invite("advisor")}>
-            Invite advisor
+            Invite someone
           </button>
         </div>
       ) : null}
       {code ? <p className="rounded-[10px] bg-[var(--fill)] p-3 font-mono text-[14px]">{code}</p> : null}
       <p className="text-[13px] text-[var(--muted)]">
-        New people open <span className="font-medium">/join</span> and enter the code.
+        They open Shelf, choose Join, and enter the code.
       </p>
     </section>
   );
 }
 
-function TagsPanel() {
-  const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([]);
-  const [name, setName] = useState("");
-  const load = useCallback(() => {
-    void api<{ tags: { id: string; name: string; color: string }[] }>("/api/tags").then((r) => setTags(r.tags));
-  }, []);
-  useEffect(() => {
-    load();
-  }, [load]);
-  return (
-    <section className="shelf-panel space-y-3 p-4">
-      <h2 className="text-[20px] font-semibold tracking-tight">Tags</h2>
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void api("/api/tags", { method: "POST", body: JSON.stringify({ name }) }).then(() => {
-            setName("");
-            load();
-          });
-        }}
-      >
-        <input className="shelf-input" placeholder="New tag" value={name} onChange={(e) => setName(e.target.value)} required />
-        <button className="shelf-btn">Add</button>
-      </form>
-      <ul className="space-y-2">
-        {tags.map((tag) => (
-          <li key={tag.id} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2">
-              <span className="size-2.5 rounded-full" style={{ background: tag.color }} />
-              {tag.name}
-            </span>
-            <button className="text-[13px] text-[var(--danger)]" type="button" onClick={() => api("/api/tags", { method: "DELETE", body: JSON.stringify({ id: tag.id }) }).then(load)}>
-              Delete
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ConnectionsPanel() {
-  const [items, setItems] = useState<{ institutionName: string | null; status: string; errorCode: string | null }[]>([]);
-  useEffect(() => {
-    void api<{ items: { institutionName: string | null; status: string; errorCode: string | null }[]; plaidConfigured: boolean }>("/api/accounts").then((r) =>
-      setItems(r.items),
-    );
-  }, []);
-  return (
-    <section className="shelf-panel space-y-2 p-4">
-      <h2 className="text-[20px] font-semibold tracking-tight">Connections</h2>
-      {items.length === 0 ? (
-        <p className="text-[15px] text-[var(--muted)]">
-          No banks connected. <Link href="/accounts" className="text-link">Connect one from Accounts.</Link>
-        </p>
-      ) : (
-        <p className="text-[15px] text-[var(--muted)]">
-          Connect, refresh, and disconnect live on <Link href="/accounts" className="text-link">Accounts</Link>.
-        </p>
-      )}
-      <ul className="space-y-1 text-[15px]">
-        {items.map((item, index) => (
-          <li key={index}>
-            {item.institutionName || "Bank"} · {item.status === "ok" ? "Connected" : item.errorCode || item.status}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}

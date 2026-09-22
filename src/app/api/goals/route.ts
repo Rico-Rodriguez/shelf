@@ -6,6 +6,7 @@ import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { classifyAccount } from "@/lib/networth";
+import { monthlyNeed } from "@/lib/plan";
 import { openAccount, openGoal, openTx, sealedGoalWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export async function GET() {
         accounts: linked,
         progressCents,
         remainingCents,
+        monthlyCents: monthlyNeed(remainingCents, g.targetDate),
         transactions: linkedTx,
       };
     });
@@ -62,6 +64,7 @@ export async function POST(request: Request) {
       target?: number;
       targetDate?: string;
       accountIds?: string[];
+      categoryId?: string | null;
     };
     const db = await getDb();
     const id = nid();
@@ -70,6 +73,7 @@ export async function POST(request: Request) {
       id,
       kind: body.kind,
       targetDate: body.targetDate,
+      categoryId: body.categoryId || null,
       ...sealedGoalWrite({ name: body.name, targetCents }, dek),
     });
     for (const accountId of body.accountIds ?? []) {
@@ -92,6 +96,7 @@ export async function PATCH(request: Request) {
       target?: number;
       targetDate?: string | null;
       accountIds?: string[];
+      categoryId?: string | null;
     };
     const db = await getDb();
     const [existing] = await db.select().from(goals).where(eq(goals.id, body.id));
@@ -112,6 +117,7 @@ export async function PATCH(request: Request) {
     }
     if (body.targetDate !== undefined) patch.targetDate = body.targetDate;
     if (body.kind) patch.kind = body.kind;
+    if (body.categoryId !== undefined) patch.categoryId = body.categoryId || null;
     if (Object.keys(patch).length) {
       await db.update(goals).set(patch).where(eq(goals.id, body.id));
     }

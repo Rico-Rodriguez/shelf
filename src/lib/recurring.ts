@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { recurrences, transactions } from "@/db/schema";
 import { addDays, todayISO } from "./dates";
 import { nid } from "./ids";
+import { inferRecurringKind } from "./plan";
 import { openRecurrence, openTx, sealedRecurrenceWrite } from "./secrets";
 
 function normalizeMerchant(name: string): string {
@@ -51,6 +52,7 @@ export type RecurrenceDraft = {
   accountId: string | null;
   isIncome: boolean;
   lastPaidDate: string;
+  kind?: "bill" | "subscription";
 };
 
 async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
@@ -125,6 +127,7 @@ export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
       isActive: true,
       source: "detected",
       lastPaidDate: draft.lastPaidDate,
+      kind: draft.kind ?? inferRecurringKind(draft),
     });
     existing.add(merchant);
     created += 1;

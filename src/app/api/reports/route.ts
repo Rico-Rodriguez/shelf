@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { categories, categoryGroups, netWorthSnapshots, transactionSplits, transactions } from "@/db/schema";
+import { budgetItems, categories, categoryGroups, netWorthSnapshots, transactionSplits, transactions } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
 import { computeNetWorth } from "@/lib/networth";
-import { monthRange, yearMonth } from "@/lib/dates";
+import { addMonths, monthRange, yearMonth } from "@/lib/dates";
 import { transactionParts } from "@/lib/spend";
-import { openSnapshot, openSplit, openTx } from "@/lib/secrets";
+import { getOrCreateBudgetMonth } from "@/lib/budget";
+import { eq } from "drizzle-orm";
+import { openBudgetItem, openSnapshot, openSplit, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -71,12 +73,78 @@ export async function GET(request: Request) {
       links.push({ source: row.group, target: row.name, value: row.cents / 100 });
     }
 
+    function spendBetween(rangeStart: string, rangeEnd: string) {
+      const map: Record<string, number> = {};
+      for (const tx of txs) {
+        if (tx.date < rangeStart || tx.date > rangeEnd || tx.hidden || tx.pending || tx.isTransfer) continue;
+        for (const part of transactionParts(tx, splits)) {
+          if (part.amountCents <= 0) continue;
+          if (part.categoryId && incomeIds.has(part.categoryId)) continue;
+          const key = part.categoryId ?? "uncat";
+          map[key] = (map[key] ?? 0) + part.amountCents;
+        }
+      }
+      return map;
+    }
+    const prev = addMonths(year, month, -1);
+    const prevRange = monthRange(prev.year, prev.month);
+    const lastMap = spendBetween(prevRange.start, prevRange.end);
+    const avgMap: Record<string, number> = {};
+    for (const delta of [-1, -2, -3]) {
+      const cursor = addMonths(year, month, delta);
+      const range = monthRange(cursor.year, cursor.month);
+      for (const [key, cents] of Object.entries(spendBetween(range.start, range.end))) {
+        avgMap[key] = (avgMap[key] ?? 0) + cents;
+      }
+    }
+    const budgetMonth = await getOrCreateBudgetMonth(year, month, dek);
+    const plannedItems = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, budgetMonth.id))).map((row) =>
+      openBudgetItem(row, dek),
+    );
+    const plannedByCat = Object.fromEntries(plannedItems.map((item) => [item.categoryId, item.plannedCents + item.rolloverInCents]));
+    const byMerchant = new Map<string, number>();
+    let pendingCents = 0;
+    for (const tx of txs) {
+      if (tx.date < start || tx.date > end || tx.hidden || tx.isTransfer) continue;
+      if (tx.pending && tx.amountCents > 0) pendingCents += tx.amountCents;
+    }
+    for (const tx of monthTx) {
+      let spend = 0;
+      for (const part of transactionParts(tx, splits)) {
+        if (part.amountCents <= 0) continue;
+        if (part.categoryId && incomeIds.has(part.categoryId)) continue;
+        spend += part.amountCents;
+      }
+      if (spend <= 0) continue;
+      const name = tx.merchantName || tx.name;
+      byMerchant.set(name, (byMerchant.get(name) ?? 0) + spend);
+    }
+    const usualSum = Object.values(avgMap).reduce((sum, cents) => sum + cents, 0);
+
+    const compared = Object.values(catSpend)
+      .sort((a, b) => b.cents - a.cents)
+      .map((row) => {
+        const key = row.id || "uncat";
+        return {
+          ...row,
+          lastCents: lastMap[key] ?? 0,
+          avgCents: Math.round((avgMap[key] ?? 0) / 3),
+          plannedCents: plannedByCat[row.id] ?? 0,
+        };
+      });
+
     return NextResponse.json({
       year,
       month,
       incomeCents: income,
       spendingCents: Object.values(catSpend).reduce((s, r) => s + r.cents, 0),
-      byCategory: Object.values(catSpend).sort((a, b) => b.cents - a.cents),
+      usualSpentCents: usualSum > 0 ? Math.round(usualSum / 3) : null,
+      pendingCents,
+      byMerchant: [...byMerchant.entries()]
+        .map(([name, cents]) => ({ name, cents }))
+        .sort((a, b) => b.cents - a.cents)
+        .slice(0, 8),
+      byCategory: compared,
       byGroup: Object.entries(groupSpend).map(([name, cents]) => ({ name, cents })),
       sankey: { nodes, links },
       netWorth: nw,

@@ -50,6 +50,56 @@
   --accent-soft-legacy: rgba(20, 24, 31, 0.07);
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #101216;
+  --paper: #1a1e26;
+  --fill: #262b34;
+  --fill-strong: #343b46;
+  --ink: #f4f1ea;
+  --ink-strong: #ffffff;
+  --accent: #3dbe9a;
+  --accent-soft: rgba(61, 190, 154, 0.16);
+  --accent-ink: #b7f3df;
+  --muted: #b0b6c0;
+  --tertiary: #8b939e;
+  --line: rgba(244, 241, 234, 0.1);
+  --line-strong: rgba(244, 241, 234, 0.18);
+  --danger: #ff6b4a;
+  --positive: #3dbe9a;
+  --warn: #e0a15a;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #101216;
+    --paper: #1a1e26;
+    --fill: #262b34;
+    --fill-strong: #343b46;
+    --ink: #f4f1ea;
+    --ink-strong: #ffffff;
+    --accent: #3dbe9a;
+    --accent-soft: rgba(61, 190, 154, 0.16);
+    --accent-ink: #b7f3df;
+    --muted: #b0b6c0;
+    --tertiary: #8b939e;
+    --line: rgba(244, 241, 234, 0.1);
+    --line-strong: rgba(244, 241, 234, 0.18);
+    --danger: #ff6b4a;
+    --positive: #3dbe9a;
+    --warn: #e0a15a;
+  }
+
+  html:not([data-theme="light"]) body {
+    background: #101216;
+  }
+}
+
+html[data-theme="dark"] body {
+  background: #101216;
+}
+
 @theme inline {
   --color-cream: var(--surface);
   --color-cream-dark: var(--fill);
@@ -180,23 +230,52 @@ a:focus-visible {
 
 @layer components {
   .page-enter > * {
-    animation: rise-in 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: none;
   }
 
-  .page-enter > *:nth-child(2) {
-    animation-delay: 45ms;
+  .app-arrive {
+    animation: fade-in 280ms ease both;
   }
 
-  .page-enter > *:nth-child(3) {
-    animation-delay: 90ms;
+  .text-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
-  .page-enter > *:nth-child(4) {
-    animation-delay: 135ms;
+  .text-btn:active {
+    opacity: 0.6;
   }
 
-  .page-enter > *:nth-child(5) {
-    animation-delay: 180ms;
+  button.chip {
+    cursor: pointer;
+  }
+
+  .scrub-chart {
+    display: block;
+    width: 100%;
+    height: 140px;
+    touch-action: none;
+  }
+
+  .alloc-bar {
+    display: flex;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: var(--fill);
+  }
+
+  .alloc-bar span {
+    display: block;
+    height: 100%;
   }
 
   .page-header {
@@ -622,6 +701,78 @@ a:focus-visible {
     animation: slide-done 220ms ease forwards;
   }
 
+  .chip.is-on {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+
+  .is-pending {
+    opacity: 0.55;
+  }
+
+  .undo-bar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 16px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 12px 10px 16px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .undo-bar button {
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font-weight: 650;
+  }
+
+  .command-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(10, 12, 16, 0.36);
+    padding: 12vh 16px 16px;
+  }
+
+  .command-panel {
+    width: min(560px, 100%);
+    margin: 0 auto;
+    border-radius: 18px;
+    background: var(--paper);
+    padding: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .command-list {
+    max-height: 50vh;
+    margin-top: 8px;
+    overflow: auto;
+  }
+
+  .command-hit {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    background: transparent;
+    padding: 10px 12px;
+    border-radius: 12px;
+    text-align: left;
+  }
+
+  .command-hit:hover {
+    background: var(--fill);
+  }
+
   .merchant-mark {
     display: inline-flex;
     width: 36px;
@@ -758,7 +909,7 @@ a:focus-visible {
     border: 0;
     border-top: 1px solid var(--line);
     border-radius: 0;
-    background: #ffffff;
+    background: var(--paper);
     box-shadow: 0 -1px 0 rgba(20, 24, 31, 0.02);
   }
 
@@ -1030,6 +1181,7 @@ main h1 + p,
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter > *,
+  .app-arrive,
   .hint,
   .empty-state,
   .ios-sheet,

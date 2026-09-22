@@ -5,7 +5,6 @@ import { googleConfigured } from "@/lib/google-config";
 const INSIGHT_REDIRECTS: Record<string, string> = {
   "/cash-flow": "flow",
   "/reports": "month",
-  "/investments": "holdings",
 };
 
 const PUBLIC = [
@@ -47,6 +46,13 @@ export function middleware(request: NextRequest) {
   if (!cookie && !pathname.startsWith("/api/")) {
     const login = new URL("/login", publicOrigin(request));
     return NextResponse.redirect(login);
+  }
+  if (cookie && pathname === "/investments") {
+    const dest = request.nextUrl.clone();
+    dest.pathname = "/accounts";
+    dest.search = "";
+    dest.hash = "";
+    return NextResponse.redirect(dest);
   }
   const insightHash = INSIGHT_REDIRECTS[pathname];
   if (cookie && insightHash) {

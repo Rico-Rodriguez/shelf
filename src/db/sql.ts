@@ -278,6 +278,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS transfer_pair_id TEXT;
 ALTER TABLE budget_months ADD COLUMN IF NOT EXISTS flex_pool_cents INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE recurrences ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'bill';
+ALTER TABLE goals ADD COLUMN IF NOT EXISTS category_id TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_idx ON notifications (dedupe_key);
 CREATE INDEX IF NOT EXISTS tx_date_idx ON transactions (date);
