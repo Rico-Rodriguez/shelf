@@ -38,6 +38,7 @@ export function SummaryCard({
   footer,
   footerIcon,
   detail,
+  note,
   compact = false,
   onClick,
   className = "",
@@ -60,6 +61,8 @@ export function SummaryCard({
   footer?: React.ReactNode;
   footerIcon?: string;
   detail?: React.ReactNode;
+  /** Always-visible one-line explanation under the figure. */
+  note?: React.ReactNode;
   compact?: boolean;
   onClick?: () => void;
   className?: string;
@@ -130,6 +133,7 @@ export function SummaryCard({
         </div>
       </div>
       {figure}
+      {note ? <p className="summary-note">{note}</p> : null}
       {live ? (
         <Chart
           chartRef={chartRef}

@@ -7,7 +7,7 @@ import { api } from "@/lib/client";
 const PAGES = [
   { href: "/", label: "Home" },
   { href: "/transactions", label: "Activity" },
-  { href: "/budget", label: "Plan" },
+  { href: "/budget", label: "Budget" },
   { href: "/accounts", label: "Accounts" },
   { href: "/recurring", label: "Bills" },
   { href: "/goals", label: "Goals" },

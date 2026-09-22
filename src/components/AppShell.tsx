@@ -14,8 +14,14 @@ import { Drawer } from "./ui/Drawer";
 const PRIMARY = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/transactions", label: "Activity", icon: "list" },
-  { href: "/budget", label: "Plan", icon: "chart" },
+  { href: "/budget", label: "Budget", icon: "chart" },
   { href: "/accounts", label: "Accounts", icon: "wallet" },
+];
+
+const MORE = [
+  { href: "/insights", label: "Insights", icon: "spark" },
+  { href: "/recurring", label: "Bills", icon: "calendar" },
+  { href: "/goals", label: "Goals", icon: "flag" },
 ];
 
 const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
@@ -97,6 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [path]);
 
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
+  const monthLabel = new Date().toLocaleDateString("en-US", { month: "long" });
 
   async function readNote(note: Note) {
     await api("/api/notifications", { method: "POST", body: JSON.stringify({ id: note.id }) });
@@ -111,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mb-6 flex items-center justify-between px-2">
           <Link href="/" prefetch>
             <div className="brand-mark text-[26px]">Shelf</div>
-            <div className="text-[12px] text-[var(--muted)]">{syncLabel || "Your money, clearly"}</div>
+            <div className="text-[12px] text-[var(--muted)]">{syncLabel || monthLabel}</div>
           </Link>
           <button type="button" className="relative text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={18} />
@@ -129,6 +136,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <div className="mt-5 flex flex-col gap-0.5">
+            {MORE.map((item) => {
+              const active = isActive(path, item.href);
+              return (
+                <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
+                  <Icon name={item.icon} size={16} />
+                  <span className="flex-1">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
           <Link href="/settings" prefetch aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav mt-auto ${isActive(path, "/settings") ? "active" : ""}`}>
             <Icon name="gear" size={16} />
             Settings
@@ -137,9 +155,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:h-auto md:min-h-dvh md:overflow-visible">
-        <div className="z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)] px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:hidden">
-          <span className="text-[13px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
-          <span className="flex items-center">
+        <div className="mobile-bar md:hidden">
+          <span className={`mobile-sync ${sync === "error" ? "is-error" : ""}`}>{syncLabel}</span>
+          <Link href="/" prefetch className="brand-mark mobile-brand">
+            Shelf
+          </Link>
+          <span className="mobile-actions">
             <Link href="/settings" prefetch className="flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Settings">
               <Icon name="gear" size={20} />
             </Link>
@@ -150,7 +171,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
         <main ref={scrollerRef} className="app-main">
-          {children}
+          <div key={path} className="app-arrive">
+            {children}
+          </div>
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {

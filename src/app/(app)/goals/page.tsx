@@ -96,7 +96,7 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Goals" subtitle="A target for something ahead, or a balance you want gone.">
+      <PageHeader title="Goals" subtitle="Save toward something, or pay a balance down.">
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add
         </button>

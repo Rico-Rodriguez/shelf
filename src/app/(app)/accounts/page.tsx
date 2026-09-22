@@ -136,7 +136,7 @@ export default function AccountsPage() {
         </div>
       ) : null}
 
-      {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No accounts yet.</p> : null}
+      {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">Add a bank or a balance to see it here.</p> : null}
 
       {institutions.map((group) => {
         const total = group.rows.reduce((sum, account) => {

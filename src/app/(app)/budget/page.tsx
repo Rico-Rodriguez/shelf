@@ -162,7 +162,7 @@ export default function BudgetPage() {
   return (
     <PageShell>
       <div className="space-y-4">
-        <PageHeader title="Plan">
+        <PageHeader title="Budget">
           <MonthNav
             year={budget.year}
             month={budget.month}
@@ -221,10 +221,10 @@ export default function BudgetPage() {
 
         {flexRows.length > 0 ? (
           <section>
-            <h2 className="ios-section">Flex</h2>
+            <h2 className="ios-section">Safe to spend</h2>
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
-                <span className="font-medium">Flex</span>
+                <span className="font-medium">Remaining</span>
                 <MoneyText cents={flexPlan - flexSpent} signed />
               </span>
               <span className="my-2.5 block">
@@ -247,7 +247,7 @@ export default function BudgetPage() {
               <div className="mb-2 flex items-baseline justify-between">
                 <h2 className="ios-section mb-0">Bills</h2>
                 <Link href="/recurring" className="text-btn">
-                  All
+                  See all
                 </Link>
               </div>
               <div className="card">
@@ -265,7 +265,7 @@ export default function BudgetPage() {
         })()}
 
         {planOpen ? (
-          <Sheet title="Edit plan" onClose={() => setPlanOpen(false)}>
+          <Sheet title="Edit budget" onClose={() => setPlanOpen(false)}>
             <label className="field">
               <span className="field-label">Planned income</span>
               <input
@@ -587,17 +587,22 @@ function BudgetSummary({ budget }: { budget: Budget }) {
 
   return (
     <SummaryCard
-      label="Left"
+      label="Left to spend"
       cents={left}
       signed={left < 0}
-      empty={budget.expensePlannedCents <= 0 ? "Set a plan" : undefined}
+      empty={budget.expensePlannedCents <= 0 ? "Set a budget" : undefined}
       status={budget.expensePlannedCents > 0 ? status : null}
       points={points}
       chartLabel="Left to spend through the month"
-      detail={
-        budget.pendingCents ? (
+      note={
+        budget.expensePlannedCents > 0 ? (
           <>
-            Pending <MoneyText cents={budget.pendingCents} /> is not included.
+            Spent <MoneyText cents={budget.expenseSpentCents} /> of <MoneyText cents={budget.expensePlannedCents} />
+            {budget.pendingCents ? (
+              <>
+                . Pending <MoneyText cents={budget.pendingCents} /> is not included.
+              </>
+            ) : null}
           </>
         ) : null
       }
