@@ -59,7 +59,7 @@ export function budgetPace(
   month: number,
   today = new Date(),
 ): { label: string; tone: "on" | "hot" | "over" | "muted" } {
-  if (available <= 0) return { label: spent > 0 ? "No plan" : "", tone: "muted" };
+  if (available <= 0) return { label: spent > 0 ? "No budget" : "", tone: "muted" };
   if (spent > available) return { label: "Over", tone: "over" };
   const days = new Date(year, month, 0).getDate();
   const inMonth = today.getFullYear() === year && today.getMonth() + 1 === month;

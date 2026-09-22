@@ -10,7 +10,7 @@ import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
 import { dayLabel, inDaysPhrase, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
-import { versusStatus } from "@/lib/voice";
+import { versusPhrase } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Dash = {
@@ -34,10 +34,6 @@ type Dash = {
   suggestedSubscriptions?: { merchantName: string }[];
 };
 
-function weekdayName(iso: string) {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" });
-}
-
 export default function HomePage() {
   const { data: dash, loading, reload } = useQuery<Dash>("dashboard", "/api/dashboard");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
@@ -55,12 +51,14 @@ export default function HomePage() {
   const next = dash.recurring.find((row) => row.nextDate >= today);
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
   const series = dash.safeSeries ?? [];
-  const usual = versusStatus(dash.usual?.deltaCents ?? null, "your usual month");
-  const status =
-    usual ??
-    (next
-      ? { label: `${next.isIncome ? "Payday" : next.merchantName} ${weekdayName(next.nextDate)}`, tone: "neutral" as const }
-      : null);
+  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null);
+  const status = next
+    ? {
+        label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
+        tone: "neutral" as const,
+      }
+    : null;
+  const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const spendTotal = categories.reduce((sum, row) => sum + row.cents, 0) || 1;
   const maxCategory = Math.max(...categories.map((row) => row.cents), 1);
@@ -95,15 +93,20 @@ export default function HomePage() {
                 Income <MoneyText cents={dash.safeToSpend?.incomeCents ?? dash.cashFlow.incomeCents} />
                 {" · "}
                 Bills <MoneyText cents={dash.safeToSpend?.committedCents ?? 0} />
+                {goalsCents > 0 ? (
+                  <>
+                    {" · "}
+                    Goals <MoneyText cents={goalsCents} />
+                  </>
+                ) : null}
                 {" · "}
-                Goals <MoneyText cents={dash.safeToSpend?.goalsCents ?? 0} />
-                {" · "}
-                Spent <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
+                Day to day <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
                 {pending > 0 ? (
                   <>
                     . Pending <MoneyText cents={pending} /> is not counted yet.
                   </>
                 ) : null}
+                {usualLine ? <span className="mt-1 block">{usualLine}</span> : null}
               </>
             )
           }
@@ -158,9 +161,7 @@ export default function HomePage() {
                   ))}
                   {suggestions > 0 ? (
                     <Link href="/recurring" className="data-row justify-between gap-3">
-                      <span>
-                        {suggestions} charge{suggestions === 1 ? "" : "s"} look like bills
-                      </span>
+                      <span>{suggestions === 1 ? "1 charge looks like a bill" : `${suggestions} charges look like bills`}</span>
                       <span className="text-btn">Check</span>
                     </Link>
                   ) : null}

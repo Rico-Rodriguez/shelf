@@ -190,7 +190,13 @@ export default function BudgetPage() {
               >
                 <span>{group.name}</span>
                 <span className="tabular-nums">
-                  <MoneyText cents={spent} /> / <MoneyText cents={planned} />
+                  {planned > 0 ? (
+                    <>
+                      <MoneyText cents={spent} /> / <MoneyText cents={planned} />
+                    </>
+                  ) : (
+                    <MoneyText cents={spent} />
+                  )}
                 </span>
               </button>
               {isClosed ? null : (
@@ -224,15 +230,23 @@ export default function BudgetPage() {
             <h2 className="ios-section">Safe to spend</h2>
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
-                <span className="font-medium">Remaining</span>
-                <MoneyText cents={flexPlan - flexSpent} signed />
+                <span className="font-medium">{flexPlan > 0 ? "Remaining" : "Spent"}</span>
+                <MoneyText cents={flexPlan > 0 ? flexPlan - flexSpent : flexSpent} signed={flexPlan > 0} />
               </span>
-              <span className="my-2.5 block">
-                <ProgressBar value={flexSpent} max={flexPlan || 1} />
-              </span>
-              <span className="block text-[13px] text-[var(--muted)]">
-                <MoneyText cents={flexSpent} /> of <MoneyText cents={flexPlan} />
-                {versusShort(flexSpent, flexUsual) ? ` · ${versusShort(flexSpent, flexUsual)}` : ""}
+              {flexPlan > 0 ? (
+                <span className="my-2.5 block">
+                  <ProgressBar value={flexSpent} max={flexPlan} />
+                </span>
+              ) : null}
+              <span className="mt-2 block text-[13px] text-[var(--muted)]">
+                {flexPlan > 0 ? (
+                  <>
+                    <MoneyText cents={flexSpent} /> of <MoneyText cents={flexPlan} />
+                    {versusShort(flexSpent, flexUsual) ? ` · ${versusShort(flexSpent, flexUsual)}` : ""}
+                  </>
+                ) : (
+                  "No budget yet"
+                )}
               </span>
             </button>
           </section>
@@ -623,26 +637,36 @@ function CategoryRow({
   month: number;
   onOpen: () => void;
 }) {
+  const paced = row.availableCents > 0;
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
   const usual = versusShort(row.spentCents, row.usualCents ?? null);
+  const showUsual = Boolean(usual) && (row.spentCents > 0 || (row.usualCents ?? 0) > 0);
   return (
     <button type="button" className="block w-full border-b border-[var(--line)] px-4 py-3.5 text-left last:border-0" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0 font-medium">{row.category.name}</span>
-        <MoneyText className="shrink-0" cents={row.remainingCents} signed />
+        {paced ? (
+          <MoneyText className="shrink-0" cents={row.remainingCents} signed />
+        ) : (
+          <MoneyText className="shrink-0" cents={row.spentCents} />
+        )}
       </span>
-      <span className="my-2.5 block">
-        <ProgressBar value={row.spentCents} max={row.availableCents || 1} color={color} />
-      </span>
-      <span className="flex flex-wrap gap-x-3 text-[13px] text-[var(--muted)]">
-        {row.rolloverInCents > 0 ? (
-          <span>
-            +<MoneyText cents={row.rolloverInCents} /> carried in
-          </span>
-        ) : null}
-        {pace.label ? <span className={pace.tone === "over" || pace.tone === "hot" ? "text-[var(--danger)]" : ""}>{pace.label}</span> : null}
-        {usual ? <span>{usual}</span> : null}
-      </span>
+      {paced ? (
+        <span className="my-2.5 block">
+          <ProgressBar value={row.spentCents} max={row.availableCents} color={color} />
+        </span>
+      ) : null}
+      {row.rolloverInCents > 0 || pace.label || showUsual ? (
+        <span className={`flex flex-wrap gap-x-3 text-[13px] text-[var(--muted)] ${paced ? "" : "mt-1"}`}>
+          {row.rolloverInCents > 0 ? (
+            <span>
+              +<MoneyText cents={row.rolloverInCents} /> carried in
+            </span>
+          ) : null}
+          {pace.label ? <span className={pace.tone === "over" || pace.tone === "hot" ? "text-[var(--danger)]" : ""}>{pace.label}</span> : null}
+          {showUsual ? <span>{usual}</span> : null}
+        </span>
+      ) : null}
     </button>
   );
 }
