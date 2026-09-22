@@ -58,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [arrive, setArrive] = useState(false);
   const moreActive = MORE.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
@@ -72,6 +73,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadNotes();
   }, [loadNotes, path]);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("shelf-arrived")) return;
+      setArrive(true);
+      sessionStorage.setItem("shelf-arrived", "1");
+    } catch {
+      setArrive(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -158,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>
         </div>
-        <main className="app-main">{children}</main>
+        <main className={`app-main${arrive ? " app-arrive" : ""}`}>{children}</main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
             const active = isActive(path, item.href);

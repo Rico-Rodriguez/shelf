@@ -8,8 +8,9 @@ import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { classifyAccount, formatMoney } from "@/lib/money";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { classifyAccount } from "@/lib/money";
+import { payoffMonths } from "@/lib/voice";
+import { ScrubChart } from "@/components/ScrubChart";
 
 type Account = {
   id: string;
@@ -39,6 +40,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
   const [missing, setMissing] = useState(false);
+  const [holds, setHolds] = useState<{ id: string; institutionValueCents: number; security: { name: string; ticker: string | null; type: string | null } | null }[]>([]);
 
   const load = useCallback(() => {
     void api<{ accounts: Account[]; items: Item[] }>("/api/accounts").then((res) => {
@@ -66,6 +68,13 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!acct || acct.type !== "investment") return;
+    void api<{ holdings: { id: string; institutionValueCents: number; account: { id: string } | null; security: { name: string; ticker: string | null; type: string | null } | null }[] }>(
+      "/api/investments",
+    ).then((res) => setHolds(res.holdings.filter((holding) => holding.account?.id === id)));
+  }, [acct, id]);
 
   if (missing) return <p className="text-[var(--muted)]">That account is gone.</p>;
   if (!acct) return <p className="text-[var(--muted)]">Loading…</p>;
@@ -157,15 +166,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
       </div>
 
       {snapshots.length > 1 ? (
-        <div className="shelf-panel h-28 p-3">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={snapshots.map((row) => ({ ...row, value: row.balanceCents / 100 }))}>
-              <YAxis hide domain={["dataMin", "dataMax"]} />
-              <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} />
-              <Area dataKey="value" stroke="#1b7a62" fill="rgba(27,122,98,0.12)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <ScrubChart points={snapshots.map((row) => ({ date: row.date, cents: row.balanceCents }))} />
       ) : null}
 
       {liability ? (
@@ -184,6 +185,33 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
               <span className="text-[var(--muted)]">Next due</span>
               <span>{liability.due ?? "—"}</span>
             </li>
+          </ul>
+          {liability.apr != null && liability.minimumCents != null ? (
+            <p className="mt-2 text-[13px] text-[var(--muted)]">
+              {(() => {
+                const months = payoffMonths(acct.currentBalanceCents, liability.apr, liability.minimumCents);
+                return months == null ? "The minimum does not cover interest." : `At the minimum, about ${months} months.`;
+              })()}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {holds.length ? (
+        <section>
+          <h2 className="ios-section">Holdings</h2>
+          <div className="alloc-bar mb-3" aria-hidden>
+            {allocation(holds).map((slice) => (
+              <span key={slice.name} style={{ width: `${slice.pct}%`, background: slice.color }} />
+            ))}
+          </div>
+          <ul className="card">
+            {holds.map((holding) => (
+              <li key={holding.id} className="data-row justify-between gap-3">
+                <span className="min-w-0 truncate">{holding.security?.ticker || holding.security?.name || "Holding"}</span>
+                <MoneyText cents={holding.institutionValueCents} />
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}
@@ -204,10 +232,26 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
           ))}
           {txs.length === 0 ? <div className="data-row text-[var(--muted)]">No transactions yet.</div> : null}
         </div>
-        <Link href={activityHref({ accountId: id })} className="mt-2 inline-block text-[17px] text-[var(--ink)]">
+        <Link href={activityHref({ accountId: id })} className="text-btn mt-2">
           All activity
         </Link>
       </section>
     </div>
   );
+}
+
+const HOLDING_TONES = ["var(--ink)", "color-mix(in srgb, var(--ink) 55%, transparent)", "var(--accent)", "color-mix(in srgb, var(--accent) 45%, transparent)"];
+
+function allocation(rows: { institutionValueCents: number; security: { type: string | null } | null }[]) {
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.security?.type || "Other";
+    map.set(key, (map.get(key) ?? 0) + row.institutionValueCents);
+  }
+  const total = [...map.values()].reduce((sum, cents) => sum + cents, 0) || 1;
+  return [...map.entries()].map(([name, cents], index) => ({
+    name,
+    pct: (cents / total) * 100,
+    color: HOLDING_TONES[index % HOLDING_TONES.length],
+  }));
 }

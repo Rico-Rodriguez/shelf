@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     const start = url.searchParams.get("start");
     const end = url.searchParams.get("end");
     const tag = url.searchParams.get("tag")?.trim().toLowerCase() ?? "";
+    const merchant = url.searchParams.get("merchant")?.trim().toLowerCase() ?? "";
     const pairFor = url.searchParams.get("pairFor");
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 500);
     const offset = Number(url.searchParams.get("offset") ?? 0);
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(transactions.date), desc(transactions.createdAt));
-    const stored = q || tag ? await base : await base.limit(limit).offset(offset);
+    const stored = q || tag || merchant ? await base : await base.limit(limit).offset(offset);
     let rows = stored.map((tx) => openTx(tx, dek));
 
     const [acctRows, catRows, groupRows, splitRows, tagRows, txTags] = await Promise.all([
@@ -81,6 +82,9 @@ export async function GET(request: Request) {
     const openedAccounts = acctRows.map((row) => openAccount(row, dek));
     const openedSplits = splitRows.map((row) => openSplit(row, dek));
 
+    if (merchant) {
+      rows = rows.filter((tx) => (tx.merchantName || tx.name).toLowerCase() === merchant);
+    }
     if (q) {
       const amount = /^(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)$/.exec(q.trim());
       if (amount) {
@@ -109,7 +113,7 @@ export async function GET(request: Request) {
         .filter((tag): tag is (typeof tagRows)[number] => Boolean(tag)),
     }));
     const filtered = tag ? tagged.filter((row) => row.tags.some((item) => item.name.toLowerCase() === tag)) : tagged;
-    const page = q || tag ? filtered.slice(offset, offset + limit) : filtered;
+    const page = q || tag || merchant ? filtered.slice(offset, offset + limit) : filtered;
     const data = page.map(({ tx, tags: txTagRows }) => {
       const category = catRows.find((c) => c.id === tx.categoryId) ?? null;
       const group = category ? groupRows.find((g) => g.id === category.groupId) : null;

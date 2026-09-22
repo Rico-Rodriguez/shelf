@@ -51,7 +51,7 @@ A `Dockerfile` is included if you prefer a container. Health check: `GET /api/he
 
 ## What Shelf includes
 
-Home leads with safe-to-spend, a 30-day cash forecast, and a one-at-a-time review. Budget shows pace and can move money between categories. Insights compares this month with last month and a three-month average. Recurring splits bills from subscriptions. Settings has appearance, alerts, and CSV import. JSON/CSV export stays there too.
+Home leads with safe-to-spend, the next bills, and a short review queue. Budget is a category list with one flex line. Insights is this month against your usual month, plus a net worth line you can scrub. Recurring opens on a monthly bill total. JSON/CSV export stays in Settings.
 
 ## Scripts
 

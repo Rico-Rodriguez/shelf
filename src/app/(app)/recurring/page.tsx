@@ -52,7 +52,7 @@ export default function RecurringPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
   const [rows, setRows] = useState<Rec[]>([]);
-  const [view, setView] = useState<"list" | "calendar">("calendar");
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [bucket, setBucket] = useState<"all" | "bill" | "subscription">("all");
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Rec | "new" | null>(null);
@@ -78,6 +78,9 @@ export default function RecurringPage() {
     );
   }, [active, cursor]);
 
+  const monthlyBills = rows
+    .filter((row) => row.isActive && !row.isIncome)
+    .reduce((sum, row) => sum + Math.round(annualizedCents(row.amountCents, row.cadence) / 12), 0);
   const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
   const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
 
@@ -158,24 +161,23 @@ export default function RecurringPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Bills & recurring"
-        subtitle={
-          <>
-            Subscriptions and bills Shelf spotted for you. {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In{" "}
-            <MoneyText cents={income} />
-          </>
-        }
-      >
-        <div className="flex flex-wrap gap-2">
-          <button className="shelf-btn secondary" type="button" onClick={detect}>
-            Detect
-          </button>
-          <button className="shelf-btn" type="button" onClick={openNew}>
-            Add
-          </button>
-        </div>
+      <PageHeader title="Bills">
+        <button className="text-btn" type="button" onClick={detect}>
+          Detect
+        </button>
+        <button className="shelf-btn" type="button" onClick={openNew}>
+          Add
+        </button>
       </PageHeader>
+      <section>
+        <p className="text-[13px] text-[var(--muted)]">A month of bills</p>
+        <div className="mt-1">
+          <MoneyText hero cents={monthlyBills} />
+        </div>
+        <p className="mt-2 text-[13px] text-[var(--muted)]">
+          {monthName(cursor.year, cursor.month)} · Out <MoneyText cents={outflow} /> · In <MoneyText cents={income} />
+        </p>
+      </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
@@ -184,8 +186,8 @@ export default function RecurringPage() {
           value={view}
           onChange={(value) => setView(value as "calendar" | "list")}
           options={[
-            { value: "calendar", label: "Calendar" },
             { value: "list", label: "List" },
+            { value: "calendar", label: "Calendar" },
           ]}
         />
       </div>
