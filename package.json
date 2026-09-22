@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@number-flow/react": "^0.6.2",
     "drizzle-orm": "^0.45.2",
     "iron-session": "^9.0.1",
     "jose": "^6.2.12",

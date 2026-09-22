@@ -82,10 +82,10 @@ export function SummaryCard({
     <p className="summary-figure">
       {href ? (
         <Link href={href} className="summary-figure-link">
-          <MoneyText hero cents={cents} signed={signed} />
+          <MoneyText hero animate live={index != null} cents={cents} signed={signed} />
         </Link>
       ) : (
-        <MoneyText hero cents={cents} signed={signed} />
+        <MoneyText hero animate live={index != null} cents={cents} signed={signed} />
       )}
       {suffix ? <span className="summary-unit">{suffix}</span> : null}
     </p>
@@ -272,7 +272,7 @@ function Chart({
   return (
     <div
       ref={chartRef}
-      className={`summary-chart ${interactive ? "is-live" : ""}`}
+      className={`summary-chart ${interactive ? "is-live" : ""} ${active != null ? "is-scrubbing" : ""}`}
       onPointerDown={
         interactive
           ? (event) => {

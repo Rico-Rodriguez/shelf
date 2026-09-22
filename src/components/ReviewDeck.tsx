@@ -47,6 +47,8 @@ export function ReviewDeck({
   const [categoryId, setCategoryId] = useState(current?.categoryId ?? "");
   const [always, setAlways] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [burst, setBurst] = useState(false);
+  const burstLock = useRef(false);
   const [similar, setSimilar] = useState<number | null>(null);
   const [memoryReady, setMemoryReady] = useState(false);
   const visibleRef = useRef(current);
@@ -95,6 +97,8 @@ export function ReviewDeck({
     const timer = window.setTimeout(() => {
       setVisible(next);
       setLeaving(false);
+      setBurst(false);
+      burstLock.current = false;
       setCategoryId(next?.categoryId ?? "");
       setAlways(false);
       setSimilar(null);
@@ -131,9 +135,20 @@ export function ReviewDeck({
 
   const confirmRef = useRef<() => void>(() => undefined);
   confirmRef.current = () => {
-    if (!visible || busy || leaving) return;
-    setBusy(true);
-    void onConfirm(visible, categoryId || null, always && Boolean(categoryId)).finally(() => setBusy(false));
+    if (!visible || busy || leaving || burstLock.current) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const run = () => {
+      if (!visibleRef.current) return;
+      setBusy(true);
+      void onConfirm(visibleRef.current, categoryId || null, always && Boolean(categoryId)).finally(() => setBusy(false));
+    };
+    if (reduce) {
+      run();
+      return;
+    }
+    burstLock.current = true;
+    setBurst(true);
+    window.setTimeout(run, 420);
   };
 
   useEffect(() => {
@@ -163,7 +178,17 @@ export function ReviewDeck({
   }
 
   return (
-    <section className={`review-card shelf-panel space-y-4 p-5 ${leaving ? "is-leaving" : ""}`}>
+    <section className={`review-card shelf-panel space-y-4 p-5 ${leaving ? "is-leaving" : ""} ${burst ? "is-confirmed" : ""}`}>
+      {burst ? (
+        <div className="confirm-burst" role="status" aria-label="Saved">
+          <span className="confirm-mark">
+            <svg viewBox="0 0 52 52" aria-hidden>
+              <circle className="confirm-ring" cx="26" cy="26" r="23" />
+              <path className="confirm-tick" d="M15 27.5 22.5 35 37.5 18" />
+            </svg>
+          </span>
+        </div>
+      ) : null}
       <div className="review-meter" aria-hidden>
         <span style={{ width: `${progress}%` }} />
       </div>
@@ -185,7 +210,7 @@ export function ReviewDeck({
           </div>
         </div>
       </div>
-      <MoneyText hero cents={visible.amountCents} flow />
+      <MoneyText hero animate cents={visible.amountCents} flow />
       <div className="flex flex-wrap gap-2">
         {quick.map((category, index) => (
           <button
@@ -210,10 +235,10 @@ export function ReviewDeck({
         <span className={`switch ${always ? "on" : ""}`} />
       </button>
       <div className="flex gap-2">
-        <button className="shelf-btn ghost flex-1" type="button" onClick={() => visible && onSkip(visible)} disabled={busy || leaving}>
+        <button className="shelf-btn ghost flex-1" type="button" onClick={() => visible && onSkip(visible)} disabled={busy || leaving || burst}>
           Skip
         </button>
-        <button className="shelf-btn flex-1" type="button" onClick={() => void confirm()} disabled={busy || leaving}>
+        <button className="shelf-btn flex-1" type="button" onClick={() => void confirm()} disabled={busy || leaving || burst}>
           {busy ? "Saving…" : "Confirm"}
         </button>
       </div>

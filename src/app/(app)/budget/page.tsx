@@ -602,15 +602,16 @@ function BudgetSummary({ budget }: { budget: Budget }) {
       ? { label: pace.label, tone: paceTone }
       : versusStatus(budget.usualSpentCents == null ? null : budget.expenseSpentCents - budget.usualSpentCents);
 
+  const unplanned = budget.expensePlannedCents <= 0;
+
   return (
     <SummaryCard
-      label="Left to spend"
-      cents={left}
-      signed={left < 0}
-      empty={budget.expensePlannedCents <= 0 ? "Set a budget" : undefined}
-      status={budget.expensePlannedCents > 0 ? status : null}
+      label={unplanned ? "Spent this month" : "Left to spend"}
+      cents={unplanned ? budget.expenseSpentCents : left}
+      signed={!unplanned && left < 0}
+      status={unplanned ? { label: "No plan yet", tone: "neutral" } : status}
       points={points}
-      chartLabel="Left to spend through the month"
+      chartLabel={unplanned ? "Spending this month" : "Left to spend through the month"}
     />
   );
 }
