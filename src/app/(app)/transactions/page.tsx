@@ -133,25 +133,7 @@ function Activity() {
     { keepPrevious: true },
   );
   const { data: dash } = useQuery<{ cashFlow: { spendingCents: number } }>("dashboard", "/api/dashboard");
-  const [swipeHint, setSwipeHint] = useState(false);
   const load = reload;
-
-  useEffect(() => {
-    try {
-      if (!sessionStorage.getItem("shelf-swipe-hint")) setSwipeHint(true);
-    } catch {
-      setSwipeHint(true);
-    }
-  }, []);
-
-  function dismissSwipeHint() {
-    setSwipeHint(false);
-    try {
-      sessionStorage.setItem("shelf-swipe-hint", "1");
-    } catch {
-      /* ignore */
-    }
-  }
   const [payloadSeen, setPayloadSeen] = useState<TxPayload | null>(null);
   if (payload && payload !== payloadSeen) {
     setPayloadSeen(payload);
@@ -363,7 +345,6 @@ function Activity() {
 
   const accountName = accounts.find((account) => account.id === accountId)?.name;
   const categoryName = groups.flatMap((group) => group.categories).find((category) => category.id === categoryId)?.name;
-  const pendingCount = rows.filter((tx) => tx.pending).length;
 
   if (!payload && loading) return <PageSkeleton variant="activity" />;
   if (!payload) return <PageError title="Activity" message={error} onRetry={() => void reload()} />;
@@ -391,8 +372,6 @@ function Activity() {
           aria-label="Search transactions"
         />
       </div>
-
-      {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending purchases are not counted yet.</p> : null}
 
       <div className="activity-tools">
         {unreviewed > 0 ? (
@@ -438,12 +417,6 @@ function Activity() {
           ) : null}
         </div>
       </div>
-
-      {swipeHint && !selecting && grouped.length > 0 ? (
-        <button type="button" className="swipe-hint" onClick={dismissSwipeHint}>
-          Swipe left to review or hide.
-        </button>
-      ) : null}
 
       {focus && inReviewMode ? (
         <ReviewDeck
@@ -568,7 +541,7 @@ function Activity() {
             ) : undefined
           }
         >
-          {inReviewMode ? "New purchases will land here after sync." : "Try another search or clear a filter."}
+          {inReviewMode ? undefined : "Try another search or clear a filter."}
         </EmptyState>
       ) : null}
 
@@ -592,14 +565,9 @@ function Activity() {
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openEdit(tx)}>
                     <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
                     <span className="min-w-0">
-                      <div className="tx-name flex items-center gap-2 truncate font-medium">
-                        <span className="truncate">{tx.name}</span>
-                        {!tx.reviewed && !tx.categoryId ? <span className="chip warn">Needs a category</span> : null}
-                      </div>
+                      <div className="tx-name truncate font-medium">{tx.name}</div>
                       <div className="truncate text-[13px] text-[var(--muted)]">
-                        {tx.category?.name ?? "Uncategorized"}
-                        {tx.account?.name ? ` · ${tx.account.name}` : ""}
-                        {tx.pending ? " · Pending" : ""}
+                        {[tx.category?.name, tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ") || "Uncategorized"}
                       </div>
                     </span>
                   </button>
@@ -668,7 +636,7 @@ function Activity() {
               ))}
             </select>
           </Field>
-          <Field label="Linked transfer" hint="Pair the other side of a move between accounts.">
+          <Field label="Linked transfer">
             <select
               className="shelf-input"
               value={edit.transferPairId ?? ""}
@@ -687,7 +655,7 @@ function Activity() {
           <Field label="Note">
             <textarea className="shelf-input" rows={2} value={edit.notes ?? ""} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
           </Field>
-          <Field label="Tags" hint="Comma-separated, like travel, reimbursable.">
+          <Field label="Tags">
             <input className="shelf-input" value={edit.tagText} onChange={(e) => setEdit({ ...edit, tagText: e.target.value })} />
           </Field>
 
@@ -757,12 +725,9 @@ function Activity() {
 
             </>
           ) : null}
-          <button type="button" className="data-row w-full items-start justify-between gap-3 text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
-            <span>
-              <span className="block">Always categorize this merchant this way</span>
-              <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">Also clears other purchases from this merchant that are still waiting.</span>
-            </span>
-            <span className={`switch mt-1 ${always ? "on" : ""}`} />
+          <button type="button" className="data-row w-full justify-between gap-3 text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
+            <span>Always categorize this merchant this way</span>
+            <span className={`switch ${always ? "on" : ""}`} />
           </button>
           <button className="shelf-btn w-full" type="button" onClick={saveEdit}>
             Save
@@ -826,7 +791,7 @@ function Activity() {
                   required
                 />
               </Field>
-              <Field label="Amount" hint={manual.income ? "Money that came in." : "A purchase."}>
+              <Field label="Amount">
                 <input
                   className="shelf-input"
                   inputMode="decimal"

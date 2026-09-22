@@ -19,9 +19,9 @@ const PRIMARY = [
 ];
 
 const MORE = [
-  { href: "/insights", label: "Insights", icon: "spark", hint: "This month against your usual" },
-  { href: "/recurring", label: "Bills", icon: "calendar", hint: "What’s due next" },
-  { href: "/goals", label: "Goals", icon: "flag", hint: "What you’re saving for" },
+  { href: "/insights", label: "Insights", icon: "spark" },
+  { href: "/recurring", label: "Bills", icon: "calendar" },
+  { href: "/goals", label: "Goals", icon: "flag" },
 ];
 
 const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
@@ -104,7 +104,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [path]);
 
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
-  const monthLabel = new Date().toLocaleDateString("en-US", { month: "long" });
 
   async function readNote(note: Note) {
     await api("/api/notifications", { method: "POST", body: JSON.stringify({ id: note.id }) });
@@ -119,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mb-6 flex items-center justify-between px-2">
           <Link href="/" prefetch>
             <div className="brand-mark text-[26px]">Shelf</div>
-            <div className="text-[12px] text-[var(--muted)]">{syncLabel || monthLabel}</div>
+            {syncLabel ? <div className="text-[12px] text-[var(--muted)]">{syncLabel}</div> : null}
           </Link>
           <button type="button" className="relative text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
             <Icon name="bell" size={18} />
@@ -221,10 +220,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <span className={`more-glyph ${active ? "is-on" : ""}`}>
                     <Icon name={item.icon} size={18} />
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block font-medium ${active ? "text-[var(--accent-ink)]" : ""}`}>{item.label}</span>
-                    <span className="block text-[13px] text-[var(--muted)]">{item.hint}</span>
-                  </span>
+                  <span className={`min-w-0 flex-1 font-medium ${active ? "text-[var(--accent-ink)]" : ""}`}>{item.label}</span>
                   <span className="text-[var(--tertiary)]">
                     <Icon name="chevron" size={16} />
                   </span>

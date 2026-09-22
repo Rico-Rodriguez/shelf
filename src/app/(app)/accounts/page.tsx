@@ -154,7 +154,7 @@ export default function AccountsPage() {
                 <Link key={account.id} href={`/accounts/${account.id}`} className="data-row justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-[17px] font-medium">{account.name}</div>
-                    <div className="truncate text-[13px] text-[var(--muted)]">{accountLine(account)}</div>
+                    {accountLine(account) ? <div className="truncate text-[13px] text-[var(--muted)]">{accountLine(account)}</div> : null}
                   </div>
                   <MoneyText
                     cents={classifyAccount(account.type) === "liability" ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents}
@@ -211,18 +211,9 @@ export default function AccountsPage() {
   );
 }
 
-function accountLine(account: { type: string; subtype: string | null; mask: string | null; currentBalanceCents: number; availableBalanceCents?: number | null }) {
+function accountLine(account: { type: string; subtype: string | null; mask: string | null }) {
   const kind = account.subtype || account.type;
   const label = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "";
   const mask = account.mask ? `···${account.mask}` : "";
-  return [label, mask, creditUse(account)].filter(Boolean).join(" · ");
-}
-
-function creditUse(account: { type: string; currentBalanceCents: number; availableBalanceCents?: number | null }) {
-  if (account.type !== "credit" || account.availableBalanceCents == null) return "";
-  const balance = Math.abs(account.currentBalanceCents);
-  const limit = balance + account.availableBalanceCents;
-  if (limit <= 0) return "";
-  const used = Math.round((balance / limit) * 100);
-  return `${used}% of limit used`;
+  return [label, mask].filter(Boolean).join(" · ");
 }

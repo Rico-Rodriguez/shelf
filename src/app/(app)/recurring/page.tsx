@@ -83,7 +83,6 @@ export default function RecurringPage() {
     .filter((row) => row.isActive && !row.isIncome)
     .reduce((sum, row) => sum + Math.round(annualizedCents(row.amountCents, row.cadence) / 12), 0);
   const outflow = projected.filter((row) => !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
-  const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
 
   if (!data && loading) return <PageSkeleton title="Bills" rows={5} />;
   if (!data) return <PageError title="Bills" message={error} onRetry={() => void reload()} />;
@@ -178,7 +177,6 @@ export default function RecurringPage() {
         month={cursor.month}
         monthlyBills={monthlyBills}
         outflow={outflow}
-        income={income}
         projected={projected}
       />
 
@@ -207,7 +205,6 @@ export default function RecurringPage() {
       {suggestions.length ? (
         <section className="shelf-panel space-y-3 p-4">
           <h2 className="text-[17px] font-semibold">Detected</h2>
-          <p className="text-[15px] text-[var(--muted)]">These are not on the calendar until you keep them.</p>
           <ul className="card">
             {suggestions.map((draft) => (
               <li key={draft.merchantName} className="data-row justify-between gap-3">
@@ -269,11 +266,8 @@ export default function RecurringPage() {
                 <div className="min-w-0 flex-1">
                   <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
                   <div className="truncate text-[13px] text-[var(--muted)]">
-                    {row.isIncome ? "Income" : (row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"}
-                    {" · "}
-                    {row.cadence.charAt(0).toUpperCase() + row.cadence.slice(1)}
-                    {row.isActive ? ` · ${row.isIncome ? "Payday" : "Due"} ${inDaysPhrase(row.nextDate)}` : " · Paused"}
-                    {row.priceDeltaCents ? ` · price ${row.priceDeltaCents > 0 ? "up" : "down"}` : ""}
+                    {row.isActive ? `${row.isIncome ? "Payday" : "Due"} ${inDaysPhrase(row.nextDate)}` : "Paused"}
+                    {row.priceDeltaCents ? ` · ${row.priceDeltaCents > 0 ? "Up" : "Down"}` : ""}
                   </div>
                 </div>
                 <MoneyText className="shrink-0" cents={row.isIncome ? -row.amountCents : row.amountCents} flow />
@@ -344,14 +338,12 @@ function BillsSummary({
   month,
   monthlyBills,
   outflow,
-  income,
   projected,
 }: {
   year: number;
   month: number;
   monthlyBills: number;
   outflow: number;
-  income: number;
   projected: { merchantName: string; amountCents: number; date: string; isIncome: boolean }[];
 }) {
   const now = yearMonth();
@@ -398,23 +390,6 @@ function BillsSummary({
       chartLabel="Bills landing through the month"
       footer={next ? `${next.isIncome ? "Payday" : next.merchantName} ${inDaysPhrase(next.date)}` : null}
       footerIcon={next ? "calendar" : undefined}
-      detail={
-        monthlyBills > 0 || income > 0 ? (
-          <>
-            {monthlyBills > 0 ? (
-              <>
-                A typical month is <MoneyText cents={monthlyBills} />.
-              </>
-            ) : null}
-            {income > 0 ? (
-              <>
-                {" "}
-                Income <MoneyText cents={income} />.
-              </>
-            ) : null}
-          </>
-        ) : null
-      }
     />
   );
 }

@@ -229,16 +229,14 @@ function Rules() {
         </span>
         Settings
       </Link>
-      <PageHeader title="Rules" subtitle="Earlier rules win. Edit any rule, preview matches, then apply them to history.">
+      <PageHeader title="Rules">
         <button className="shelf-btn" type="button" onClick={() => { setForm(empty); setEditingId(null); setPreview(null); setOpen(true); }}>
           Add
         </button>
       </PageHeader>
 
       {rules.length === 0 ? (
-        <EmptyState title="No rules yet" action={<button className="shelf-btn" type="button" onClick={() => setOpen(true)}>Add a rule</button>}>
-          A rule renames, categorizes, tags, hides, or links a goal the moment a merchant shows up.
-        </EmptyState>
+        <EmptyState title="No rules yet" action={<button className="shelf-btn" type="button" onClick={() => setOpen(true)}>Add a rule</button>} />
       ) : null}
 
       <ul className="card">

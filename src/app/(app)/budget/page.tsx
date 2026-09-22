@@ -15,7 +15,7 @@ import { addMonths, inDaysPhrase, monthName, monthRange, todayISO } from "@/lib/
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
-import { versusShort, versusStatus } from "@/lib/voice";
+import { versusStatus } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Row = {
@@ -112,9 +112,6 @@ export default function BudgetPage() {
         .filter((group) => group.rows.length > 0);
   const flexPlan = budget.flexPoolCents > 0 ? budget.flexPoolCents : flexRows.reduce((sum, row) => sum + row.availableCents, 0);
   const flexSpent = flexRows.reduce((sum, row) => sum + row.spentCents, 0);
-  const flexUsual = flexRows.some((row) => row.usualCents != null)
-    ? flexRows.reduce((sum, row) => sum + (row.usualCents ?? 0), 0)
-    : null;
   const range = monthRange(budget.year, budget.month);
 
   async function refreshMonth(year: number, month: number) {
@@ -248,20 +245,10 @@ export default function BudgetPage() {
                 <MoneyText cents={flexPlan > 0 ? flexPlan - flexSpent : flexSpent} signed={flexPlan > 0} />
               </span>
               {flexPlan > 0 ? (
-                <span className="my-2.5 block">
+                <span className="mt-2.5 block">
                   <ProgressBar value={flexSpent} max={flexPlan} />
                 </span>
               ) : null}
-              <span className="mt-2 block text-[13px] text-[var(--muted)]">
-                {flexPlan > 0 ? (
-                  <>
-                    <MoneyText cents={flexSpent} /> of <MoneyText cents={flexPlan} />
-                    {versusShort(flexSpent, flexUsual) ? ` · ${versusShort(flexSpent, flexUsual)}` : ""}
-                  </>
-                ) : (
-                  "No budget yet"
-                )}
-              </span>
             </button>
           </section>
         ) : null}
@@ -308,16 +295,13 @@ export default function BudgetPage() {
             <div className="card">
               <button
                 type="button"
-                className="data-row w-full items-start text-left"
+                className="data-row w-full text-left"
                 onClick={() => {
                   setPlanOpen(false);
                   void suggest();
                 }}
               >
-                <span>
-                  <span className="block font-medium">Use your usual spending</span>
-                  <span className="mt-0.5 block text-[13px] font-normal text-[var(--muted)]">Fills each category from the last three months.</span>
-                </span>
+                <span className="font-medium">Use your usual spending</span>
               </button>
               <button
                 type="button"
@@ -435,7 +419,6 @@ export default function BudgetPage() {
                 });
               }}
             >
-              <p className="text-[13px] text-[var(--muted)]">{versusShort(editor.row.spentCents, editor.row.usualCents ?? null)}</p>
               <label className="field">
                 <span className="field-label">Name</span>
                 <input className="shelf-input" value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} />
@@ -622,18 +605,6 @@ function BudgetSummary({ budget }: { budget: Budget }) {
       status={budget.expensePlannedCents > 0 ? status : null}
       points={points}
       chartLabel="Left to spend through the month"
-      note={
-        budget.expensePlannedCents > 0 ? (
-          <>
-            Spent <MoneyText cents={budget.expenseSpentCents} /> of <MoneyText cents={budget.expensePlannedCents} />
-            {budget.pendingCents ? (
-              <>
-                . Pending <MoneyText cents={budget.pendingCents} /> is not included.
-              </>
-            ) : null}
-          </>
-        ) : null
-      }
     />
   );
 }
@@ -653,8 +624,7 @@ function CategoryRow({
 }) {
   const paced = row.availableCents > 0;
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
-  const usual = versusShort(row.spentCents, row.usualCents ?? null);
-  const showUsual = Boolean(usual) && (row.spentCents > 0 || (row.usualCents ?? 0) > 0);
+  const paceNote = pace.tone === "over" ? "Over" : pace.tone === "hot" ? "Running hot" : "";
   return (
     <button type="button" className="block w-full border-b border-[var(--line)] px-4 py-3.5 text-left last:border-0" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
@@ -670,15 +640,14 @@ function CategoryRow({
           <ProgressBar value={row.spentCents} max={row.availableCents} color={color} />
         </span>
       ) : null}
-      {row.rolloverInCents > 0 || pace.label || showUsual ? (
+      {row.rolloverInCents > 0 || paceNote ? (
         <span className={`flex flex-wrap gap-x-3 text-[13px] text-[var(--muted)] ${paced ? "" : "mt-1"}`}>
           {row.rolloverInCents > 0 ? (
             <span>
               +<MoneyText cents={row.rolloverInCents} /> carried in
             </span>
           ) : null}
-          {pace.label ? <span className={pace.tone === "over" || pace.tone === "hot" ? "text-[var(--danger)]" : ""}>{pace.label}</span> : null}
-          {showUsual ? <span>{usual}</span> : null}
+          {paceNote ? <span className="text-[var(--danger)]">{paceNote}</span> : null}
         </span>
       ) : null}
     </button>

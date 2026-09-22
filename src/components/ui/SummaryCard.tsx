@@ -133,7 +133,6 @@ export function SummaryCard({
         </div>
       </div>
       {figure}
-      {note ? <div className="summary-note">{note}</div> : null}
       {live ? (
         <Chart
           chartRef={chartRef}
@@ -169,6 +168,7 @@ export function SummaryCard({
           <ProgressBar value={meter.value} max={meter.max} color={meter.color} />
         </div>
       ) : null}
+      {note ? <div className="summary-note">{note}</div> : null}
       {footer || (detail && open) ? (
         <div className="summary-foot">
           <div className="summary-foot-main">

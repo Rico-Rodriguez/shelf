@@ -126,10 +126,9 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
       <PageHeader
         title={acct.name}
         subtitle={
-          <>
-            {item?.institutionName || (acct.isManual ? "Added by you" : "Account")}
-            {item && item.status !== "ok" ? ` · ${item.errorCode || item.status}` : item ? " · Connected" : ""}
-          </>
+          item && item.status !== "ok"
+            ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}`
+            : item?.institutionName || undefined
         }
       />
       <SummaryCard
@@ -149,11 +148,8 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
             <>
               <MoneyText cents={acct.availableBalanceCents} /> available
             </>
-          ) : acct.type === "credit" ? (
-            "Card payments stay out of spending"
           ) : null
         }
-        detail={acct.type === "credit" && acct.availableBalanceCents != null ? "Card payments are transfers, so they stay out of spending." : null}
       />
       {item && item.status !== "ok" ? <ConnectBank itemId={item.id} label="Reconnect" onLinked={load} /> : null}
 
