@@ -27,6 +27,7 @@ type Dash = {
     cents: number;
     incomeCents?: number;
     committedCents?: number;
+    committedFrom?: "plan" | "bills";
     goalsCents?: number;
     spentCents?: number;
     pendingCents?: number;
@@ -54,13 +55,15 @@ export default function HomePage() {
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
   const series = dash.safeSeries ?? [];
   const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
+  const committedFromPlan = dash.safeToSpend?.committedFrom === "plan";
+  const committedLabel = committedFromPlan ? (goalsCents > 0 ? "Budgeted & goals" : "Budgeted") : goalsCents > 0 ? "Bills & goals" : "Bills";
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
-  const spendTotal = categories.reduce((sum, row) => sum + row.cents, 0) || 1;
   const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
     restCents > 0
       ? [...categories.slice(0, 5), { id: "rest", name: "Everything else", cents: restCents, color: "#8B939E" }]
       : categories;
+  const barMax = Math.max(...spendRows.map((row) => row.cents), 1);
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
 
   async function loadSample() {
@@ -97,7 +100,7 @@ export default function HomePage() {
                     <MoneyText cents={dash.safeToSpend?.incomeCents ?? dash.cashFlow.incomeCents} />
                   </span>
                   <span>
-                    <span className="safe-kicker">{goalsCents > 0 ? "Bills & goals" : "Bills"}</span>
+                    <span className="safe-kicker">{committedLabel}</span>
                     <MoneyText cents={(dash.safeToSpend?.committedCents ?? 0) + goalsCents} />
                   </span>
                   <span>
@@ -185,7 +188,7 @@ export default function HomePage() {
                         }))}
                       />
                       {spendRows.map((category) => {
-                        const pct = (category.cents / spendTotal) * 100;
+                        const pct = (category.cents / barMax) * 100;
                         return (
                           <Link
                             key={category.id || category.name}

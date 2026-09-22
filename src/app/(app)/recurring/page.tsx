@@ -289,7 +289,7 @@ export default function RecurringPage() {
                 </button>
               </DismissRow>
             ))}
-            {bills.length === 0 ? <div className="data-row text-[var(--muted)]">No bills yet.</div> : null}
+            {bills.length === 0 ? <div className="data-row text-[var(--muted)]">No bills yet. Find bills checks charges that repeat, including ones you removed.</div> : null}
           </div>
         </section>
       )}
@@ -297,7 +297,9 @@ export default function RecurringPage() {
       {findOpen ? (
         <Sheet title="Find bills" onClose={() => setFindOpen(false)}>
           {finding ? <p className="text-[15px] text-[var(--muted)]">Looking through activity…</p> : null}
-          {!finding && found.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No new bills turned up.</p> : null}
+          {!finding && found.length === 0 ? (
+            <p className="text-[15px] text-[var(--muted)]">Nothing repeated at least three times on a regular schedule. Removed bills show up here when they do.</p>
+          ) : null}
           {found.length ? (
             <>
               <div className="card">
