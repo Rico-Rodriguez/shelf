@@ -145,6 +145,42 @@ export async function applyRuleToUnreviewed(db: AppDb, rule: RuleRow, dek: Buffe
   return { applied: previous.length, ids: previous.map((row) => row.id), previous };
 }
 
+/** File every visible unreviewed purchase from this merchant, without saving a rule. */
+export async function categorizeSimilarUnreviewed(
+  db: AppDb,
+  dek: Buffer,
+  input: { matchMerchant: string; categoryId: string },
+) {
+  const matchMerchant = input.matchMerchant.trim();
+  if (!matchMerchant || !input.categoryId) return { applied: 0, ids: [] as string[], previous: [] as AppliedReview[] };
+  const rule = {
+    enabled: true,
+    matchMerchant,
+    matchDescription: null,
+    matchAmountMin: null,
+    matchAmountMax: null,
+    matchAccountId: null,
+    matchCategoryId: null,
+    actionCategoryId: input.categoryId,
+  } as RuleRow;
+  const txs = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
+  const previous: AppliedReview[] = [];
+  for (const tx of txs) {
+    const opened = openTx(tx, dek);
+    if (!ruleMatches(rule, opened)) continue;
+    const patch = sealTxPatch(applyRuleToFields(rule, {}), dek);
+    await db
+      .update(transactions)
+      .set({ ...patch, reviewed: true, updatedAt: new Date() })
+      .where(eq(transactions.id, tx.id));
+    previous.push({ id: tx.id, categoryId: tx.categoryId });
+  }
+  return { applied: previous.length, ids: previous.map((row) => row.id), previous };
+}
+
 export async function applyRuleToExisting(db: AppDb, rule: RuleRow, dek: Buffer) {
   const openedRule = openRule(rule, dek);
   const txs = await db.select().from(transactions);

@@ -16,15 +16,28 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
 import { rememberCategory } from "@/lib/category-memory";
-import { merchantMatchKey } from "@/lib/plan";
+import { matchesMerchantKey, merchantMatchKey } from "@/lib/plan";
 import { publishReviewCount } from "@/lib/review-count";
 
 type RuleApply = {
-  id: string;
+  id?: string;
   applied: number;
   ids: string[];
   previous: { id: string; categoryId: string | null }[];
 };
+
+function placeSkipped<T extends { id: string; reviewed: boolean }>(list: T[], skippedIds: string[]) {
+  if (!skippedIds.length) return list;
+  const rank = new Map(skippedIds.map((id, index) => [id, index]));
+  const head: T[] = [];
+  const tail: T[] = [];
+  for (const row of list) {
+    if (!row.reviewed && rank.has(row.id)) tail.push(row);
+    else head.push(row);
+  }
+  tail.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  return [...head, ...tail];
+}
 
 type Tx = {
   id: string;
@@ -93,6 +106,7 @@ function Activity() {
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const requestId = useRef(0);
   const cleared = useRef(new Set<string>());
+  const skipped = useRef<string[]>([]);
 
   useEffect(() => {
     setQ(urlQ);
@@ -128,8 +142,11 @@ function Activity() {
       for (const clearedId of [...cleared.current]) {
         if (!returned.has(clearedId)) cleared.current.delete(clearedId);
       }
+      const visible = r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed));
+      const waiting = new Set(visible.filter((tx) => !tx.reviewed).map((tx) => tx.id));
+      skipped.current = skipped.current.filter((item) => waiting.has(item));
       const ghosts = r.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
-      setRows(r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
+      setRows(reviewed === "false" ? placeSkipped(visible, skipped.current) : visible);
       const remaining = Math.max(0, r.unreviewed - ghosts);
       setUnreviewed(remaining);
       publishReviewCount(remaining);
@@ -188,17 +205,36 @@ function Activity() {
   }, [focus, inReviewMode, unreviewed]);
 
   function dropFromQueue(ids: string[]) {
-    if (!ids.length) return;
-    for (const id of ids) cleared.current.add(id);
-    const gone = new Set(ids);
+    const fresh = ids.filter((id) => id && !cleared.current.has(id));
+    if (!fresh.length) return;
+    for (const id of fresh) cleared.current.add(id);
+    const gone = new Set(fresh);
     setRows((current) => {
       if (reviewed === "false") return current.filter((row) => !gone.has(row.id));
       return current.map((row) => (gone.has(row.id) ? { ...row, reviewed: true } : row));
     });
     setUnreviewed((count) => {
-      const remaining = Math.max(0, count - ids.length);
+      const remaining = Math.max(0, count - fresh.length);
       publishReviewCount(remaining);
       return remaining;
+    });
+  }
+
+  function rememberSkip(id: string) {
+    skipped.current = skipped.current.filter((item) => item !== id);
+    skipped.current.push(id);
+  }
+
+  function forgetSkipped(ids: string[]) {
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    skipped.current = skipped.current.filter((item) => !gone.has(item));
+  }
+
+  async function categorizeSimilar(name: string, categoryId: string) {
+    return api<RuleApply>("/api/transactions/similar", {
+      method: "POST",
+      body: JSON.stringify({ matchMerchant: merchantMatchKey(name), categoryId }),
     });
   }
 
@@ -401,41 +437,49 @@ function Activity() {
           frequentCategoryIds={frequentCategoryIds}
           faces={faces}
           onSkip={(tx) => {
-            setRows((current) => {
-              const index = current.findIndex((row) => row.id === tx.id);
-              if (index < 0 || current.length < 2) return current;
-              const next = current.slice();
-              const [skipped] = next.splice(index, 1);
-              next.push(skipped);
-              return next;
-            });
+            rememberSkip(tx.id);
+            setRows((current) => placeSkipped(current, skipped.current));
           }}
           onConfirm={async (tx, nextCategoryId, makeRule) => {
             if (nextCategoryId) rememberCategory(nextCategoryId);
             const id = ++requestId.current;
-            dropFromQueue([tx.id]);
+            const merchant = tx.merchantName || tx.name;
+            const key = nextCategoryId ? merchantMatchKey(merchant) : "";
+            const siblings = key
+              ? rows.filter((row) => row.id !== tx.id && !row.reviewed && !row.hidden && matchesMerchantKey(row, key)).map((row) => row.id)
+              : [];
+            const optimistic = [tx.id, ...siblings];
+            forgetSkipped(optimistic);
+            dropFromQueue(optimistic);
             let applied: RuleApply | null = null;
             try {
               await api(`/api/transactions/${tx.id}`, {
                 method: "PATCH",
                 body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
               });
-              if (makeRule && nextCategoryId) {
-                applied = await createMerchantRule(tx.merchantName || tx.name, nextCategoryId);
-                dropFromQueue(applied.ids.filter((rowId) => rowId !== tx.id));
+              if (nextCategoryId && makeRule) {
+                applied = await createMerchantRule(merchant, nextCategoryId);
+              } else if (nextCategoryId) {
+                applied = await categorizeSimilar(merchant, nextCategoryId);
               }
-              const extra = applied?.applied ?? 0;
+              const extraIds = (applied?.ids ?? []).filter((rowId) => rowId !== tx.id);
+              forgetSkipped(extraIds);
+              dropFromQueue(extraIds);
+              const extra = extraIds.length;
               offerUndo(extra > 0 ? `Categorized ${extra + 1}` : "Reviewed", async () => {
-                restoreCleared([tx.id, ...(applied?.ids ?? [])]);
+                restoreCleared([tx.id, ...extraIds]);
                 await api("/api/transactions/review-all", {
                   method: "POST",
                   body: JSON.stringify({
-                    restore: [{ id: tx.id, categoryId: tx.categoryId }, ...(applied?.previous ?? [])],
+                    restore: [{ id: tx.id, categoryId: tx.categoryId }, ...(applied?.previous ?? []).filter((row) => row.id !== tx.id)],
                   }),
                 });
                 if (applied?.id) await api(`/api/rules/${applied.id}`, { method: "DELETE" });
                 load();
               });
+            } catch (err) {
+              restoreCleared(optimistic);
+              throw err;
             } finally {
               if (id === requestId.current) load();
             }

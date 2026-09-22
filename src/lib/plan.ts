@@ -148,3 +148,10 @@ export function merchantMatchKey(name: string) {
   if (cleaned.length >= 3) return cleaned;
   return merchantKey(name);
 }
+
+/** Same merchant test rules use: the stem appears in the merchant or the purchase name. */
+export function matchesMerchantKey(tx: { name: string; merchantName?: string | null }, key: string) {
+  if (!key) return false;
+  const hay = `${tx.merchantName ?? ""} ${tx.name}`.toLowerCase();
+  return hay.includes(key.toLowerCase());
+}

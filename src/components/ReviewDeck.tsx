@@ -110,7 +110,7 @@ export function ReviewDeck({
   }, [currentId]);
 
   useEffect(() => {
-    if (!always || !visible) {
+    if (!visible) {
       setSimilar(null);
       return;
     }
@@ -133,7 +133,7 @@ export function ReviewDeck({
     return () => {
       active = false;
     };
-  }, [always, merchant, visible]);
+  }, [merchant, visible]);
 
   const confirmRef = useRef<() => void>(() => undefined);
   confirmRef.current = () => {
@@ -207,20 +207,17 @@ export function ReviewDeck({
       <button type="button" className="data-row w-full items-start justify-between gap-3 rounded-[16px] text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
         <span>
           <span className="block">Always categorize {merchant} this way</span>
-          {always ? (
-            <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">
-              {similar == null
-                ? "Checking other purchases…"
-                : similar === 0
-                  ? "Future purchases from this merchant."
-                  : `Also clears ${similar} other purchase${similar === 1 ? "" : "s"} waiting for review.`}
-            </span>
-          ) : (
-            <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">Applies to every matching purchase still waiting.</span>
-          )}
+          <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">
+            {always ? "Future purchases from this merchant." : "Saves this category for the next purchase."}
+          </span>
         </span>
         <span className={`switch mt-1 ${always ? "on" : ""}`} />
       </button>
+      {categoryId && similar != null && similar > 0 ? (
+        <p className="text-[13px] text-[var(--muted)]">
+          Confirm also categorizes {similar} other purchase{similar === 1 ? "" : "s"} from {merchant}.
+        </p>
+      ) : null}
       <div className="flex gap-2">
         <button className="shelf-btn ghost flex-1" type="button" onClick={() => visible && onSkip(visible)} disabled={busy || leaving}>
           Skip
