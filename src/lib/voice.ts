@@ -8,6 +8,13 @@ export function versusPhrase(deltaCents: number | null, noun = "Spending"): stri
   return `${noun} is ${abs} under your usual month.`;
 }
 
+export function versusStatus(deltaCents: number | null, noun = "usual"): { label: string; tone: "good" | "bad" | "neutral" } | null {
+  if (deltaCents == null) return null;
+  if (Math.abs(deltaCents) < 100) return { label: `In line with ${noun}`, tone: "neutral" };
+  if (deltaCents > 0) return { label: `${formatMoney(deltaCents)} above ${noun}`, tone: "bad" };
+  return { label: `${formatMoney(-deltaCents)} under ${noun}`, tone: "good" };
+}
+
 export function versusShort(spentCents: number, usualCents: number | null): string | null {
   if (usualCents == null) return null;
   const delta = spentCents - usualCents;

@@ -97,6 +97,43 @@ export async function spentByCategory(year: number, month: number, dek: Buffer):
   return out;
 }
 
+/** Cumulative categorized spending through the month, one point per day that had spend. */
+export async function spendByDay(year: number, month: number, dek: Buffer) {
+  const db = await getDb();
+  const { start, end } = monthRange(year, month);
+  const txs = (
+    await db
+      .select()
+      .from(transactions)
+      .where(and(gte(transactions.date, start), lte(transactions.date, end)))
+  ).map((tx) => openTx(tx, dek));
+  const splits = (await db.select().from(transactionSplits)).map((split) => openSplit(split, dek));
+  const daily: Record<string, number> = {};
+  for (const tx of txs) {
+    if (tx.hidden || tx.isTransfer || tx.pending) continue;
+    if (tx.amountCents <= 0) continue;
+    const txSplits = splits.filter((split) => split.transactionId === tx.id);
+    let cents = 0;
+    if (txSplits.length) {
+      for (const split of txSplits) {
+        if (!split.categoryId) continue;
+        cents += split.amountCents;
+      }
+    } else if (tx.categoryId) {
+      cents = tx.amountCents;
+    }
+    if (cents <= 0) continue;
+    daily[tx.date] = (daily[tx.date] ?? 0) + cents;
+  }
+  let run = 0;
+  return Object.keys(daily)
+    .sort()
+    .map((date) => {
+      run += daily[date];
+      return { date, cents: run };
+    });
+}
+
 export async function trailingCategoryAverage(year: number, month: number, dek: Buffer) {
   const samples: Record<string, number>[] = [];
   for (let i = 1; i <= 3; i += 1) {

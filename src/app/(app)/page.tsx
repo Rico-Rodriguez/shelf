@@ -5,8 +5,10 @@ import { MoneyText } from "@/components/MoneyText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
-import { versusPhrase } from "@/lib/voice";
+import { inDaysPhrase, todayISO } from "@/lib/dates";
+import { versusStatus } from "@/lib/voice";
 import { useQuery } from "@/lib/use-query";
 
 type Dash = {
@@ -43,45 +45,62 @@ export default function HomePage() {
   const bills = dash.recurring.filter((row) => !row.isIncome).slice(0, 3);
   const review = dash.unreviewed.items.slice(0, 3);
   const forecast = dash.forecast?.length ? dash.forecast[dash.forecast.length - 1] : null;
-  const phrase = versusPhrase(dash.usual?.deltaCents ?? null);
   const pending = dash.safeToSpend?.pendingCents ?? 0;
+  const today = todayISO();
+  const next = dash.recurring.find((row) => row.nextDate >= today);
+  const cashPoints = (dash.forecast ?? []).map((point) => ({ date: point.date, cents: point.balanceCents }));
 
   return (
     <PageShell refreshing={refreshing}>
       <div className="space-y-6">
-        <PageHeader title="This month" subtitle={phrase ?? undefined} />
+        <PageHeader title="This month" />
 
-        <section>
-          <p className="text-[13px] text-[var(--muted)]">Safe to spend</p>
-          <Link href="/budget" className="mt-1 block">
-            <MoneyText hero cents={hero} />
-          </Link>
-          <p className="mt-3 text-[15px] text-[var(--muted)]">
-            Bills <MoneyText cents={dash.safeToSpend?.billsDueCents ?? 0} />
-            {" · "}
-            {dash.budget.plannedCents > 0 ? (
+        <SummaryCard
+          label="Safe to spend"
+          cents={hero}
+          href="/budget"
+          status={versusStatus(dash.usual?.deltaCents ?? null, "usual spend")}
+          points={cashPoints}
+          caption={cashPoints.length > 1 ? "30 days" : undefined}
+          chartLabel="Cash over the next 30 days"
+          footer={
+            next ? (
+              `${next.isIncome ? "Payday" : next.merchantName} ${inDaysPhrase(next.nextDate)}`
+            ) : forecast ? (
               <>
-                Plan <MoneyText cents={dash.safeToSpend?.planOpenCents ?? dash.budget.remainingCents} signed />
+                About <MoneyText cents={forecast.balanceCents} /> in 30 days
               </>
-            ) : (
-              <Link href="/budget" className="text-link">
-                Set a plan
-              </Link>
-            )}
-            {" · "}
-            Cash <MoneyText cents={dash.safeToSpend?.cashCents ?? 0} />
-          </p>
-          {pending > 0 ? (
-            <p className="mt-1 text-[13px] text-[var(--tertiary)]">
-              Pending <MoneyText cents={pending} /> is not included.
-            </p>
-          ) : null}
-          {forecast ? (
-            <p className="mt-1 text-[13px] text-[var(--tertiary)]">
-              About <MoneyText cents={forecast.balanceCents} /> in 30 days if bills post.
-            </p>
-          ) : null}
-        </section>
+            ) : null
+          }
+          footerIcon={next ? "calendar" : undefined}
+          detail={
+            <>
+              Bills <MoneyText cents={dash.safeToSpend?.billsDueCents ?? 0} />
+              {" · "}
+              {dash.budget.plannedCents > 0 ? (
+                <>
+                  Plan <MoneyText cents={dash.safeToSpend?.planOpenCents ?? dash.budget.remainingCents} signed />
+                </>
+              ) : (
+                <Link href="/budget" className="text-link">
+                  Set a plan
+                </Link>
+              )}
+              {" · "}
+              Cash <MoneyText cents={dash.safeToSpend?.cashCents ?? 0} />
+              {pending > 0 ? (
+                <>
+                  . Pending <MoneyText cents={pending} /> is not included.
+                </>
+              ) : null}
+              {forecast && next ? (
+                <>
+                  . About <MoneyText cents={forecast.balanceCents} /> in 30 days if bills post.
+                </>
+              ) : null}
+            </>
+          }
+        />
 
         {dash.accountCount === 0 && dash.transactions.length === 0 ? (
           <EmptyState

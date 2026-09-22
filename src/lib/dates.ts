@@ -48,6 +48,23 @@ const CADENCE_DAYS: Record<string, number> = {
   yearly: 365,
 };
 
+export function daysFromToday(iso: string, today = todayISO()) {
+  const a = new Date(`${today}T12:00:00`).getTime();
+  const b = new Date(`${iso}T12:00:00`).getTime();
+  return Math.round((b - a) / 86400000);
+}
+
+export function inDaysPhrase(iso: string, today = todayISO()) {
+  const days = daysFromToday(iso, today);
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days} days`;
+}
+
+export function shortDate(iso: string) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function dayLabel(iso: string, today = todayISO()): string {
   if (iso === today) return "Today";
   if (iso === addDays(today, -1)) return "Yesterday";

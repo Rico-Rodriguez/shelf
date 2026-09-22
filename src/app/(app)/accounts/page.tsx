@@ -7,6 +7,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
@@ -99,15 +100,7 @@ export default function AccountsPage() {
   return (
     <PageShell refreshing={refreshing}>
     <div className="space-y-5">
-      <PageHeader
-        title="Accounts"
-        subtitle={
-          <>
-            Assets <MoneyText cents={assetTotal} /> · Debts <MoneyText cents={debtTotal} />
-            {data.plaidConfigured ? ` · ${data.itemCount}/${data.trialLimit} banks` : ""}
-          </>
-        }
-      >
+      <PageHeader title="Accounts">
         <div className="flex flex-wrap gap-2">
           {data.plaidConfigured ? (
             <>
@@ -122,6 +115,18 @@ export default function AccountsPage() {
           </button>
         </div>
       </PageHeader>
+
+      {visible.length > 0 ? (
+        <SummaryCard
+          label="Net"
+          cents={assetTotal - debtTotal}
+          status={data.plaidConfigured ? { label: `${data.itemCount} of ${data.trialLimit} banks`, tone: "neutral" } : null}
+          shares={[
+            { label: "Assets", cents: assetTotal, color: "var(--accent)" },
+            { label: "Debts", cents: debtTotal, color: "var(--danger)" },
+          ]}
+        />
+      ) : null}
 
       {!data.plaidConfigured ? (
         <p className="text-[15px] text-[var(--muted)]">Add Plaid keys to connect a bank, or add an account by hand.</p>
