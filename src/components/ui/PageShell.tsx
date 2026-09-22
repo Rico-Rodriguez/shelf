@@ -26,7 +26,16 @@ export function PageSkeleton({
   if (variant === "home") {
     return (
       <div className="page-shell space-y-6" aria-busy="true" aria-live="polite">
-        {hero}
+        <div className="card space-y-4 p-5">
+          <Bone className="h-4 w-28 rounded-md" />
+          <Bone className="h-12 w-44 rounded-lg" />
+          <Bone className="h-28 w-full rounded-xl" />
+          <div className="grid grid-cols-3 gap-3 border-t border-[var(--line)] pt-3">
+            <Bone className="h-8 rounded-md" />
+            <Bone className="h-8 rounded-md" />
+            <Bone className="h-8 rounded-md" />
+          </div>
+        </div>
         {list}
       </div>
     );
@@ -64,11 +73,45 @@ export function PageSkeleton({
   );
 }
 
+export function PageError({
+  title,
+  message,
+  onRetry,
+}: {
+  title?: string;
+  message?: string | null;
+  onRetry?: () => void;
+}) {
+  const detail = message && message !== "Could not load" ? message : "Check the connection and try again.";
+  return (
+    <div className="page-shell">
+      {title ? <h1 className="mb-4">{title}</h1> : null}
+      <div className="empty-state">
+        <p className="empty-title">Couldn’t load this</p>
+        <p className="empty-body">{detail}</p>
+        {onRetry ? (
+          <div className="empty-action">
+            <button className="shelf-btn" type="button" onClick={onRetry}>
+              Try again
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function PageShell({
   children,
+  refreshing = false,
 }: {
   children: React.ReactNode;
   refreshing?: boolean;
 }) {
-  return <div className="page-shell">{children}</div>;
+  return (
+    <div className="page-shell">
+      <div className={`refresh-bar${refreshing ? " is-on" : ""}`} aria-hidden />
+      {children}
+    </div>
+  );
 }

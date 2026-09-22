@@ -14,7 +14,7 @@ import { SwipeRow } from "@/components/SwipeRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
@@ -126,7 +126,7 @@ function Activity() {
     return qs.toString();
   }, [search, accountId, categoryId, reviewed, start, end, tag]);
 
-  const { data: payload, loading, reload } = useQuery<TxPayload>(
+  const { data: payload, loading, refreshing, error, reload } = useQuery<TxPayload>(
     `activity:${queryString}`,
     queryString ? `/api/transactions?${queryString}` : "/api/transactions",
     { keepPrevious: true },
@@ -365,10 +365,12 @@ function Activity() {
   const pendingCount = rows.filter((tx) => tx.pending).length;
 
   if (!payload && loading) return <PageSkeleton variant="activity" />;
+  if (!payload) return <PageError title="Activity" message={error} onRetry={() => void reload()} />;
 
   const filtered = Boolean(q || accountId || categoryId || tag || start || end || reviewed);
 
   return (
+    <PageShell refreshing={refreshing}>
     <div className="space-y-4">
       <PageHeader title="Activity">
         <button className="text-btn" type="button" onClick={() => setShowAdd(true)}>
@@ -388,14 +390,14 @@ function Activity() {
 
       {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending purchases are not counted yet.</p> : null}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {unreviewed > 0 ? (
           <button
-            className={`chip ${focus && inReviewMode ? "accent" : ""}`}
+            className={focus && inReviewMode ? "shelf-btn secondary" : "shelf-btn"}
             type="button"
             onClick={() => replaceQuery(focus && inReviewMode ? { reviewed: null, focus: null } : { reviewed: "false", focus: "1" })}
           >
-            {unreviewed} to review
+            {focus && inReviewMode ? "Close review" : `Review ${unreviewed}`}
           </button>
         ) : null}
         <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
@@ -421,9 +423,11 @@ function Activity() {
             Dates
           </button>
         ) : null}
-        <button className="text-btn" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
-          {selecting ? "Cancel" : "Select"}
-        </button>
+        {selecting ? (
+          <button className="text-btn" type="button" onClick={() => { setSelecting(false); setSelected([]); }}>
+            Cancel
+          </button>
+        ) : null}
         {canAcceptAll ? (
           <button className="text-btn" type="button" onClick={markVisibleDone}>
             Accept {unreviewedRows.length}
@@ -535,6 +539,17 @@ function Activity() {
               </button>
             ) : null}
           </div>
+          <button
+            className="shelf-btn secondary w-full"
+            type="button"
+            onClick={() => {
+              setSelecting(true);
+              setSelected([]);
+              setFiltersOpen(false);
+            }}
+          >
+            Select transactions
+          </button>
         </Sheet>
       ) : null}
 
@@ -580,6 +595,7 @@ function Activity() {
                       <div className="truncate text-[13px] text-[var(--muted)]">
                         {tx.category?.name ?? "Uncategorized"}
                         {tx.account?.name ? ` · ${tx.account.name}` : ""}
+                        {tx.pending ? " · Pending" : ""}
                       </div>
                     </span>
                   </button>
@@ -837,5 +853,6 @@ function Activity() {
         </Sheet>
       ) : null}
     </div>
+    </PageShell>
   );
 }

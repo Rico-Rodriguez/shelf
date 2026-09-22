@@ -6,7 +6,7 @@ import { ConnectBank } from "@/components/ConnectBank";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
@@ -37,7 +37,7 @@ type Payload = {
 };
 
 export default function AccountsPage() {
-  const { data, loading, refreshing, reload } = useQuery<Payload>("accounts", "/api/accounts");
+  const { data, loading, refreshing, error, reload } = useQuery<Payload>("accounts", "/api/accounts");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState("depository");
@@ -89,7 +89,7 @@ export default function AccountsPage() {
   }
 
   if (!data && loading) return <PageSkeleton variant="accounts" />;
-  if (!data) return <PageSkeleton variant="accounts" />;
+  if (!data) return <PageError title="Accounts" message={error} onRetry={() => void reload()} />;
 
   return (
     <PageShell refreshing={refreshing}>

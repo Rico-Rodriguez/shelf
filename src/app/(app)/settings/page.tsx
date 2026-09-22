@@ -39,8 +39,10 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" subtitle="Password, household, and how Shelf looks." />
+      <PageHeader title="Settings" subtitle="Household, appearance, and your password." />
       {status ? <p className="card p-3 text-[15px]">{status}</p> : null}
+
+      <HouseholdPanel onStatus={setStatus} />
 
       <section className="card space-y-3 p-4">
         <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Appearance</h2>
@@ -148,7 +150,6 @@ export default function SettingsPage() {
         <button className="shelf-btn justify-self-start md:col-span-2">Change password</button>
       </form>
 
-      <HouseholdPanel onStatus={setStatus} />
       <section className="card space-y-2 p-4 text-[15px]">
         <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Session</h2>
         <button

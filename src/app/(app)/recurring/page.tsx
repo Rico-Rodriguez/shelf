@@ -6,7 +6,7 @@ import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
@@ -55,7 +55,7 @@ const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: 
 export default function RecurringPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
-  const { data, loading, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
+  const { data, loading, error, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
   const rows = data?.recurrences ?? [];
   const [view, setView] = useState<"list" | "calendar">("list");
   const [bucket, setBucket] = useState<"all" | "bill" | "subscription">("all");
@@ -85,6 +85,7 @@ export default function RecurringPage() {
   const income = projected.filter((row) => row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
 
   if (!data && loading) return <PageSkeleton title="Bills" rows={5} />;
+  if (!data) return <PageError title="Bills" message={error} onRetry={() => void reload()} />;
 
   const days = new Date(cursor.year, cursor.month, 0).getDate();
   const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();

@@ -91,6 +91,7 @@ export function useQuery<T>(key: string | null, path: string | null, options?: {
   const [data, setDataState] = useState<T | null>(cached);
   const [loading, setLoading] = useState(!cached && Boolean(key));
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const pathRef = useRef(path);
   pathRef.current = path;
   const dataRef = useRef(data);
@@ -118,14 +119,22 @@ export function useQuery<T>(key: string | null, path: string | null, options?: {
       const id = ++requestRef.current;
       const soft = opts?.soft || store.has(requestKey) || (keepRef.current && dataRef.current != null);
       if (soft) setRefreshing(true);
-      else setLoading(true);
+      else {
+        setLoading(true);
+        setError(null);
+      }
       try {
         const next = await api<T>(requestPath);
         if (id !== requestRef.current) return;
         writeQuery(requestKey, next);
         setDataState(next);
-      } catch {
-        // Keep the last payload on screen when a refresh fails.
+        setError(null);
+      } catch (err) {
+        if (id !== requestRef.current) return;
+        const message = err instanceof Error ? err.message : "Could not load";
+        if (message === "locked") return;
+        const hasData = store.has(requestKey) || dataRef.current != null;
+        if (!hasData) setError(message || "Could not load");
       } finally {
         if (id !== requestRef.current) return;
         setLoading(false);
@@ -162,5 +171,5 @@ export function useQuery<T>(key: string | null, path: string | null, options?: {
     };
   }, [key, load]);
 
-  return { data, loading, refreshing, reload: () => load({ soft: true }), setData };
+  return { data, loading, refreshing, error, reload: () => load({ soft: true }), setData };
 }

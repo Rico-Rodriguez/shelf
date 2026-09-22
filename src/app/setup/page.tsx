@@ -42,9 +42,9 @@ export default function SetupPage() {
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-5">
         <div>
           <p className="text-[15px] font-semibold text-[var(--ink)]">Shelf</p>
-          <h1 className="mt-2 text-[34px] font-bold tracking-tight">Set a lock</h1>
+          <h1 className="mt-2 text-[34px] font-bold tracking-tight">Choose a password</h1>
           <p className="mt-1 text-[15px] text-[var(--muted)]">
-            Twelve or more characters. This password seals your balances and transactions.
+            Twelve or more characters. This is what opens Shelf on this device.
           </p>
         </div>
         <input

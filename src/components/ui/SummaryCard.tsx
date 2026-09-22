@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
@@ -200,6 +200,22 @@ function Chart({
   interactive: boolean;
   onPick: (index: number | null) => void;
 }) {
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const node = chartRef.current;
+    if (!node) return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+      setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [chartRef]);
+
   const values = points.map((point) => point.cents);
   if (reference) values.push(reference.cents);
   const min = Math.min(...values);
@@ -209,15 +225,17 @@ function Chart({
   const lo = min - pad;
   const hi = max + pad;
   const span = hi - lo || 1;
-  const height = 36;
-  const inset = 4;
+  const width = box.w || 320;
+  const height = box.h || 112;
 
   function xOf(i: number) {
-    if (points.length <= 1) return 50;
-    return 2 + (i / (points.length - 1)) * 96;
+    const inset = 10;
+    if (points.length <= 1) return width / 2;
+    return inset + (i / (points.length - 1)) * (width - inset * 2);
   }
 
   function yOf(cents: number) {
+    const inset = 14;
     return inset + ((hi - cents) / span) * (height - inset * 2);
   }
 
@@ -257,7 +275,7 @@ function Chart({
       onPointerUp={interactive ? () => onPick(null) : undefined}
       onPointerCancel={interactive ? () => onPick(null) : undefined}
     >
-      <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" role="img" aria-label={chartLabel ?? "Trend"}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={chartLabel ?? "Trend"}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="currentColor" stopOpacity="0.34" />
@@ -268,20 +286,19 @@ function Chart({
         {refY != null ? (
           <line
             x1="0"
-            x2="100"
+            x2={width}
             y1={refY}
             y2={refY}
             stroke="var(--tertiary)"
             strokeOpacity="0.9"
             strokeWidth="1"
-            strokeDasharray="1.5 1.4"
-            vectorEffect="non-scaling-stroke"
+            strokeDasharray="4 4"
           />
         ) : null}
-        <path d={line} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
-      {active != null ? <span className="summary-scrub" style={{ left: `${coords[active].x}%` }} /> : null}
-      {dot ? <span className="summary-dot" style={{ left: `${dot.x}%`, top: `${(dot.y / height) * 100}%` }} /> : null}
+      {active != null ? <span className="summary-scrub" style={{ left: `${(coords[active].x / width) * 100}%` }} /> : null}
+      {dot ? <span className="summary-dot" style={{ left: `${(dot.x / width) * 100}%`, top: `${(dot.y / height) * 100}%` }} /> : null}
       {reference && refY != null ? (
         <span className="summary-ref" style={{ top: `${(refY / height) * 100}%` }}>
           {reference.label}
