@@ -27,7 +27,7 @@ export async function unsuppressMerchant(name: string) {
 }
 
 function medianInterval(dates: string[]): number | null {
-  if (dates.length < 3) return null;
+  if (dates.length < 2) return null;
   const sorted = [...dates].sort();
   const gaps: number[] = [];
   for (let i = 1; i < sorted.length; i += 1) {
@@ -89,14 +89,14 @@ async function collectDrafts(dek: Buffer, includeBlocked = false): Promise<Recur
   const drafts: RecurrenceDraft[] = [];
 
   for (const [merchant, list] of groups) {
-    if (list.length < 3) continue;
+    if (list.length < 2) continue;
     const amounts = list.map((t) => Math.abs(t.amountCents)).sort((a, b) => a - b);
     const mid = amounts[Math.floor(amounts.length / 2)];
     const similar = list.filter((t) => {
       const a = Math.abs(t.amountCents);
       return Math.abs(a - mid) / Math.max(mid, 1) <= 0.15;
     });
-    if (similar.length < 3) continue;
+    if (similar.length < 2) continue;
     const dates = similar.map((t) => t.date);
     const gap = medianInterval(dates);
     if (gap == null) continue;

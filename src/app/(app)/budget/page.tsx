@@ -9,6 +9,7 @@ import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { Field } from "@/components/ui/Field";
+import { Segment } from "@/components/ui/Segment";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
@@ -199,7 +200,7 @@ export default function BudgetPage() {
 
         {budget.expensePlannedCents <= 0 ? (
           <button className="shelf-btn" type="button" onClick={() => void suggest()}>
-            Use your usual spending
+            Fill from a usual month
           </button>
         ) : null}
 
@@ -299,30 +300,42 @@ export default function BudgetPage() {
                   void suggest();
                 }}
               >
-                <span className="font-medium">Use your usual spending</span>
+                <span className="min-w-0">
+                  <span className="block font-medium">Fill from a usual month</span>
+                  <span className="block text-[13px] font-normal text-[var(--muted)]">Replace each plan with what you typically spend.</span>
+                </span>
               </button>
               <button
                 type="button"
-                className="data-row w-full text-left font-medium"
+                className="data-row w-full text-left"
                 onClick={() => {
                   setPlanOpen(false);
                   setMoving(true);
                 }}
               >
-                Move money
+                <span className="min-w-0">
+                  <span className="block font-medium">Move money</span>
+                  <span className="block text-[13px] font-normal text-[var(--muted)]">Take from one category and add it to another.</span>
+                </span>
               </button>
               <button
                 type="button"
-                className="data-row w-full text-left font-medium"
+                className="data-row w-full text-left"
                 onClick={() => {
                   setPlanOpen(false);
                   void openAdd();
                 }}
               >
-                Add category
+                <span className="min-w-0">
+                  <span className="block font-medium">Add a category</span>
+                  <span className="block text-[13px] font-normal text-[var(--muted)]">Give a kind of spending its own plan.</span>
+                </span>
               </button>
-              <button type="button" className="data-row w-full text-left font-medium" onClick={() => void openLastMonth()}>
-                Last month
+              <button type="button" className="data-row w-full text-left" onClick={() => void openLastMonth()}>
+                <span className="min-w-0">
+                  <span className="block font-medium">Last month</span>
+                  <span className="block text-[13px] font-normal text-[var(--muted)]">See what was left over and carried in.</span>
+                </span>
               </button>
             </div>
           </Sheet>
@@ -534,12 +547,17 @@ function BudgetSummary({ budget }: { budget: Budget }) {
 
   return (
     <SummaryCard
-      label={unplanned ? "Spent this month" : "Left to spend"}
+      label={unplanned ? "Spent this month" : "Left in the plan"}
       cents={unplanned ? budget.expenseSpentCents : left}
       signed={!unplanned && left < 0}
       status={unplanned ? { label: "No plan yet", tone: "neutral" } : status}
       points={points}
-      chartLabel={unplanned ? "Spending this month" : "Left to spend through the month"}
+      chartLabel={unplanned ? "Spending this month" : "Left in the plan through the month"}
+      note={
+        unplanned
+          ? "A plan is money you set aside. It is not a charge."
+          : "This is what is left of the plan. Safe to spend, on Home, also subtracts day-to-day spending."
+      }
     />
   );
 }
@@ -570,13 +588,27 @@ function CategoryRow({
           </span>
           {paced ? (
             <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">
-              {over ? (
+              {row.spentCents === 0 ? (
+                <>
+                  Nothing posted
+                  {row.usualCents != null && row.usualCents > 0 && row.availableCents > row.usualCents * 1.5 ? (
+                    <>
+                      {" · "}above a usual <MoneyText cents={row.usualCents} />
+                    </>
+                  ) : (
+                    <>
+                      {" · "}
+                      <MoneyText cents={row.availableCents} /> set aside
+                    </>
+                  )}
+                </>
+              ) : over ? (
                 <>
                   <MoneyText cents={Math.abs(row.remainingCents)} /> over a <MoneyText cents={row.availableCents} /> plan
                 </>
               ) : (
                 <>
-                  <MoneyText cents={row.availableCents} /> plan
+                  <MoneyText cents={row.availableCents} /> set aside
                 </>
               )}
               {row.rolloverInCents > 0 ? (
@@ -623,7 +655,7 @@ function CategorySheet({
 }) {
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [txs, setTxs] = useState<MonthTx[] | null>(null);
-  const [inFlex, setInFlex] = useState(false);
+  const [role, setRole] = useState(editor.row.category.flexBucket === "flex" ? "flex" : "aside");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const categoryId = editor.row.category.id;
 
@@ -670,8 +702,9 @@ function CategorySheet({
     if (editor.rollover !== row.category.rollover) {
       jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
     }
-    if (inFlex) {
-      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: "flex" }) }));
+    const wasFlex = row.category.flexBucket === "flex";
+    if ((role === "flex") !== wasFlex) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: role === "flex" ? "flex" : "fixed" }) }));
     }
     void onCommit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, onClose);
   }
@@ -679,15 +712,31 @@ function CategorySheet({
   return (
     <Sheet title={editor.name || "Category"} onClose={onClose}>
       <form className="space-y-4" onSubmit={save}>
-        <Field label="Plan" hint="What you set aside. This is not a charge.">
+        <Field label="Plan" hint="Money you set aside for this. It is not a charge that posted.">
           <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => onChange({ ...editor, planned: event.target.value })} />
         </Field>
         <div>
-          <div className="field-label">This month</div>
+          <div className="field-label mb-2">How this counts</div>
+          <Segment
+            value={role}
+            options={[
+              { value: "aside", label: "Set aside" },
+              { value: "flex", label: "Day to day" },
+            ]}
+            onChange={setRole}
+          />
+          <p className="mt-2 text-[13px] leading-snug text-[var(--muted)]">
+            Set aside comes out of safe to spend now. Day to day only comes out when you spend it.
+          </p>
+        </div>
+        <div>
+          <div className="field-label">Charges this month</div>
           {txs == null ? (
             <p className="mt-2 text-[15px] text-[var(--muted)]">Loading…</p>
           ) : txs.length === 0 ? (
-            <p className="mt-2 text-[15px] text-[var(--muted)]">No purchases in this category this month.</p>
+            <p className="mt-2 text-[15px] leading-snug text-[var(--muted)]">
+              No charge landed here this month. The plan is still set aside, which is why safe to spend is lower. Lower the plan if the number is wrong.
+            </p>
           ) : (
             <div className="card mt-2">
               {txs.map((tx) => (
@@ -709,12 +758,8 @@ function CategorySheet({
           <input className="shelf-input" value={editor.name} onChange={(event) => onChange({ ...editor, name: event.target.value })} />
         </Field>
         <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
-          Rollover
+          Keep leftover for next month
           <span className={`switch ${editor.rollover ? "on" : ""}`} />
-        </button>
-        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={inFlex} onClick={() => setInFlex((value) => !value)}>
-          Count this in safe to spend
-          <span className={`switch ${inFlex ? "on" : ""}`} />
         </button>
         <button className="shelf-btn w-full">Save</button>
         <button
