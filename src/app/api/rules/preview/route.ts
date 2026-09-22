@@ -17,6 +17,8 @@ export async function POST(request: Request) {
       matchAmountMax?: number | null;
       matchAccountId?: string | null;
       matchCategoryId?: string | null;
+      unreviewedOnly?: boolean;
+      excludeId?: string;
     };
     const rule = {
       enabled: true,
@@ -30,7 +32,12 @@ export async function POST(request: Request) {
     const db = await getDb();
     const matches = (await db.select().from(transactions))
       .map((row) => openTx(row, dek))
-      .filter((tx) => ruleMatches(rule, tx));
+      .filter((tx) => {
+        if (tx.hidden) return false;
+        if (body.excludeId && tx.id === body.excludeId) return false;
+        if (body.unreviewedOnly && tx.reviewed) return false;
+        return ruleMatches(rule, tx);
+      });
     return NextResponse.json({
       count: matches.length,
       samples: matches.slice(0, 5).map((tx) => ({ id: tx.id, name: tx.name, amountCents: tx.amountCents, date: tx.date })),

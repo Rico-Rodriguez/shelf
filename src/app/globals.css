@@ -444,6 +444,21 @@ a:focus-visible {
     box-shadow: var(--shadow-xs);
   }
 
+  .review-meter {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--fill);
+  }
+
+  .review-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 220ms ease;
+  }
+
   .shelf-btn {
     display: inline-flex;
     align-items: center;

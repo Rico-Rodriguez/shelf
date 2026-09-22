@@ -135,3 +135,16 @@ export function priceDrift(expectedCents: number, actualCents: number) {
 export function merchantKey(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
+
+/** Stable merchant stem for rules, so store numbers and card suffixes still match. */
+export function merchantMatchKey(name: string) {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[#*]+\s*[a-z0-9]+/g, " ")
+    .replace(/\b\d{3,}\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length >= 3) return cleaned;
+  return merchantKey(name);
+}

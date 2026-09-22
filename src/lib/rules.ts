@@ -1,8 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { rules, tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
 import { nid } from "./ids";
 import { openRule, openTx, sealedSplitWrite, sealTxPatch } from "./secrets";
+
+export type AppliedReview = { id: string; categoryId: string | null };
 
 export type RuleRow = typeof rules.$inferSelect;
 export type TxPatch = {
@@ -119,6 +121,28 @@ async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow, dek:
       // ignore malformed split json
     }
   }
+}
+
+export async function applyRuleToUnreviewed(db: AppDb, rule: RuleRow, dek: Buffer) {
+  const openedRule = openRule(rule, dek);
+  if (!openedRule.actionCategoryId) return { applied: 0, ids: [] as string[], previous: [] as AppliedReview[] };
+  const txs = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
+  const previous: AppliedReview[] = [];
+  for (const tx of txs) {
+    const opened = openTx(tx, dek);
+    if (!ruleMatches(openedRule, opened)) continue;
+    const patch = sealTxPatch(applyRuleToFields(openedRule, {}), dek);
+    await db
+      .update(transactions)
+      .set({ ...patch, reviewed: true, updatedAt: new Date() })
+      .where(eq(transactions.id, tx.id));
+    await applyRuleSideEffects(db, tx.id, openedRule, dek);
+    previous.push({ id: tx.id, categoryId: tx.categoryId });
+  }
+  return { applied: previous.length, ids: previous.map((row) => row.id), previous };
 }
 
 export async function applyRuleToExisting(db: AppDb, rule: RuleRow, dek: Buffer) {

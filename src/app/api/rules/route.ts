@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { rules } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
+import { applyRuleToUnreviewed } from "@/lib/rules";
 import { openRule, sealedRuleWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
@@ -22,28 +24,32 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const dek = await requireWriter();
-    const body = (await request.json()) as typeof rules.$inferInsert;
+    const body = (await request.json()) as typeof rules.$inferInsert & { applyUnreviewed?: boolean };
+    const { applyUnreviewed, ...ruleBody } = body;
     const db = await getDb();
     const id = nid();
     const sealed = sealedRuleWrite(
       {
-        name: body.name || "Untitled rule",
-        matchMerchant: body.matchMerchant,
-        matchDescription: body.matchDescription,
-        actionRename: body.actionRename,
-        actionTagNames: body.actionTagNames,
-        actionSplitJson: body.actionSplitJson,
-        matchAmountMin: body.matchAmountMin,
-        matchAmountMax: body.matchAmountMax,
+        name: ruleBody.name || "Untitled rule",
+        matchMerchant: ruleBody.matchMerchant,
+        matchDescription: ruleBody.matchDescription,
+        actionRename: ruleBody.actionRename,
+        actionTagNames: ruleBody.actionTagNames,
+        actionSplitJson: ruleBody.actionSplitJson,
+        matchAmountMin: ruleBody.matchAmountMin,
+        matchAmountMax: ruleBody.matchAmountMax,
       },
       dek,
     );
     await db.insert(rules).values({
-      ...body,
+      ...ruleBody,
       ...sealed,
       id,
     });
-    return NextResponse.json({ id });
+    if (!applyUnreviewed) return NextResponse.json({ id, applied: 0, ids: [], previous: [] });
+    const [created] = await db.select().from(rules).where(eq(rules.id, id));
+    const applied = created ? await applyRuleToUnreviewed(db, created, dek) : { applied: 0, ids: [], previous: [] };
+    return NextResponse.json({ id, ...applied });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
     throw err;

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
@@ -15,6 +15,14 @@ import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
+import { merchantMatchKey } from "@/lib/plan";
+
+type RuleApply = {
+  id: string;
+  applied: number;
+  ids: string[];
+  previous: { id: string; categoryId: string | null }[];
+};
 
 type Tx = {
   id: string;
@@ -78,6 +86,9 @@ function Activity() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
+  const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
+  const requestId = useRef(0);
+  const cleared = useRef(new Set<string>());
 
   useEffect(() => {
     setQ(urlQ);
@@ -90,6 +101,7 @@ function Activity() {
   }, [q]);
 
   const load = useCallback(() => {
+    const id = ++requestId.current;
     const qs = new URLSearchParams();
     if (search) qs.set("q", search);
     if (accountId) qs.set("accountId", accountId);
@@ -99,8 +111,17 @@ function Activity() {
     if (end) qs.set("end", end);
     if (tag) qs.set("tag", tag);
     void api<{ transactions: Tx[]; unreviewed: number }>(`/api/transactions?${qs}`).then((r) => {
-      setRows(r.transactions);
-      setUnreviewed(r.unreviewed);
+      if (id !== requestId.current) return;
+      const returned = new Set(r.transactions.map((tx) => tx.id));
+      for (const tx of r.transactions) {
+        if (tx.reviewed) cleared.current.delete(tx.id);
+      }
+      for (const clearedId of [...cleared.current]) {
+        if (!returned.has(clearedId)) cleared.current.delete(clearedId);
+      }
+      const ghosts = r.transactions.filter((tx) => cleared.current.has(tx.id) && !tx.reviewed).length;
+      setRows(r.transactions.filter((tx) => !(cleared.current.has(tx.id) && !tx.reviewed)));
+      setUnreviewed(Math.max(0, r.unreviewed - ghosts));
     });
   }, [search, accountId, categoryId, reviewed, start, end, tag]);
 
@@ -145,6 +166,42 @@ function Activity() {
   const unreviewedRows = rows.filter((tx) => !tx.reviewed);
   const canAcceptAll = unreviewedRows.length > 0 && unreviewedRows.every((tx) => tx.categoryId);
 
+  useEffect(() => {
+    if (!(focus && inReviewMode)) {
+      setReviewBaseline(null);
+      return;
+    }
+    setReviewBaseline((current) => (current == null && unreviewed > 0 ? unreviewed : current));
+  }, [focus, inReviewMode, unreviewed]);
+
+  function dropFromQueue(ids: string[]) {
+    if (!ids.length) return;
+    for (const id of ids) cleared.current.add(id);
+    const gone = new Set(ids);
+    setRows((current) => {
+      if (reviewed === "false") return current.filter((row) => !gone.has(row.id));
+      return current.map((row) => (gone.has(row.id) ? { ...row, reviewed: true } : row));
+    });
+    setUnreviewed((count) => Math.max(0, count - ids.length));
+  }
+
+  function restoreCleared(ids: string[]) {
+    for (const id of ids) cleared.current.delete(id);
+  }
+
+  async function createMerchantRule(name: string, categoryId: string, rename?: string) {
+    return api<RuleApply>("/api/rules", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        matchMerchant: merchantMatchKey(name),
+        actionCategoryId: categoryId,
+        actionRename: rename,
+        applyUnreviewed: true,
+      }),
+    });
+  }
+
   async function markDone(id: string) {
     const previous = rows.find((tx) => tx.id === id);
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
@@ -185,27 +242,33 @@ function Activity() {
           .map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
       }),
     });
+    if (!edit.reviewed) dropFromQueue([edit.id]);
+    let applied: RuleApply | null = null;
     if (always && edit.categoryId) {
-      await api("/api/rules", {
-        method: "POST",
-        body: JSON.stringify({
-          name: edit.merchantName || edit.name,
-          matchMerchant: edit.merchantName || edit.name,
-          actionCategoryId: edit.categoryId,
-          actionRename: edit.name,
-        }),
-      });
+      const original = rows.find((row) => row.id === edit.id);
+      applied = await createMerchantRule(edit.merchantName || edit.name, edit.categoryId, original && edit.name !== original.name ? edit.name : undefined);
+      dropFromQueue(applied.ids.filter((id) => id !== edit.id));
     }
-    offerUndo("Saved", async () => {
-      await api(`/api/transactions/${edit.id}`, {
+    const saved = edit;
+    const others = applied?.applied ?? 0;
+    offerUndo(others > 0 ? `Categorized ${others + (saved.reviewed ? 0 : 1)}` : "Saved", async () => {
+      restoreCleared([saved.id, ...(applied?.ids ?? [])]);
+      await api(`/api/transactions/${saved.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          name: edit.name,
-          categoryId: edit.categoryId,
-          reviewed: edit.reviewed,
-          hidden: edit.hidden,
+          name: saved.name,
+          categoryId: saved.categoryId,
+          reviewed: saved.reviewed,
+          hidden: saved.hidden,
         }),
       });
+      if (applied?.previous.length) {
+        await api("/api/transactions/review-all", {
+          method: "POST",
+          body: JSON.stringify({ restore: applied.previous }),
+        });
+      }
+      if (applied?.id) await api(`/api/rules/${applied.id}`, { method: "DELETE" });
       load();
     });
     setAlways(false);
@@ -311,36 +374,56 @@ function Activity() {
         ) : null}
       </div>
 
-      {focus && inReviewMode ? (
+      {focus && inReviewMode && unreviewedRows.length ? (
         <ReviewDeck
           key={unreviewedRows[0]?.id ?? "clear"}
           rows={unreviewedRows}
+          remaining={unreviewed}
+          total={reviewBaseline ?? unreviewed}
           groups={groups}
           onSkip={(tx) => {
-            setRows((current) => current.filter((row) => row.id !== tx.id));
+            setRows((current) => {
+              const index = current.findIndex((row) => row.id === tx.id);
+              if (index < 0 || current.length < 2) return current;
+              const next = current.slice();
+              const [skipped] = next.splice(index, 1);
+              next.push(skipped);
+              return next;
+            });
           }}
           onConfirm={async (tx, categoryId, makeRule) => {
-            await api(`/api/transactions/${tx.id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ categoryId, reviewed: true }),
-            });
-            if (makeRule && categoryId) {
-              await api("/api/rules", {
-                method: "POST",
-                body: JSON.stringify({
-                  name: tx.merchantName || tx.name,
-                  matchMerchant: tx.merchantName || tx.name,
-                  actionCategoryId: categoryId,
-                }),
+            const id = ++requestId.current;
+            dropFromQueue([tx.id]);
+            let applied: RuleApply | null = null;
+            try {
+              await api(`/api/transactions/${tx.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ categoryId, reviewed: true }),
               });
+              if (makeRule && categoryId) {
+                applied = await createMerchantRule(tx.merchantName || tx.name, categoryId);
+                dropFromQueue(applied.ids.filter((rowId) => rowId !== tx.id));
+              }
+              const extra = applied?.applied ?? 0;
+              offerUndo(extra > 0 ? `Categorized ${extra + 1}` : "Reviewed", async () => {
+                restoreCleared([tx.id, ...(applied?.ids ?? [])]);
+                await api("/api/transactions/review-all", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    restore: [{ id: tx.id, categoryId: tx.categoryId }, ...(applied?.previous ?? [])],
+                  }),
+                });
+                if (applied?.id) await api(`/api/rules/${applied.id}`, { method: "DELETE" });
+                load();
+              });
+            } finally {
+              if (id === requestId.current) load();
             }
-            offerUndo("Reviewed", async () => {
-              await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ reviewed: false, categoryId: tx.categoryId }) });
-              load();
-            });
-            load();
           }}
         />
+      ) : null}
+      {focus && inReviewMode && !unreviewedRows.length && unreviewed > 0 ? (
+        <p className="text-[13px] text-[var(--muted)]">Loading the next purchases…</p>
       ) : null}
 
       {filtersOpen ? (
@@ -390,7 +473,7 @@ function Activity() {
         </Sheet>
       ) : null}
 
-      {grouped.length === 0 ? (
+      {grouped.length === 0 && !(inReviewMode && unreviewed > 0) ? (
         <EmptyState
           title={inReviewMode ? "Inbox clear" : "No matches"}
           action={
@@ -605,12 +688,15 @@ function Activity() {
 
             </>
           ) : null}
-          <button type="button" className="data-row w-full justify-between" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
-            Always categorize this merchant this way
-            <span className={`switch ${always ? "on" : ""}`} />
+          <button type="button" className="data-row w-full items-start justify-between gap-3 text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
+            <span>
+              <span className="block">Always categorize this merchant this way</span>
+              <span className="mt-1 block text-[13px] font-normal text-[var(--muted)]">Also clears other purchases from this merchant that are still waiting.</span>
+            </span>
+            <span className={`switch mt-1 ${always ? "on" : ""}`} />
           </button>
           <button className="shelf-btn w-full" type="button" onClick={saveEdit}>
-            {edit.reviewed ? "Save" : "Save"}
+            Save
           </button>
         </Sheet>
       ) : null}

@@ -129,7 +129,7 @@ export async function GET(request: Request) {
     const [{ n }] = await db
       .select({ n: sql<number>`count(*)` })
       .from(transactions)
-      .where(eq(transactions.reviewed, false));
+      .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
 
     return NextResponse.json({ transactions: data, unreviewed: Number(n) });
   } catch (err) {

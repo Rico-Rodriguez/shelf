@@ -99,7 +99,7 @@ export default function HomePage() {
         {dash.unreviewed.count > 0 ? (
           <section>
             <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-[13px] font-medium text-[var(--muted)]">To review</h2>
+              <h2 className="text-[13px] font-medium text-[var(--muted)]">{dash.unreviewed.count} to review</h2>
               <Link href={activityHref({ reviewed: "false", focus: "1" })} className="text-btn">
                 Review
               </Link>
