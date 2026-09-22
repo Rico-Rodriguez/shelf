@@ -10,6 +10,7 @@ import { rankCategories } from "@/lib/category-memory";
 import { dayLabel } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { merchantMatchKey } from "@/lib/plan";
+import { haptic } from "@/lib/haptic";
 
 type Tx = {
   id: string;
@@ -148,6 +149,7 @@ export function ReviewDeck({
       return;
     }
     burstLock.current = true;
+    haptic("ok");
     setBurst(true);
     window.setTimeout(run, 420);
   };
@@ -179,7 +181,7 @@ export function ReviewDeck({
   }
 
   return (
-    <section className={`review-card shelf-panel space-y-4 p-5 ${leaving ? "is-leaving" : ""} ${burst ? "is-confirmed" : ""}`}>
+    <section className={`review-card shelf-panel space-y-3 p-4 ${leaving ? "is-leaving" : ""} ${burst ? "is-confirmed" : ""}`}>
       {burst ? (
         <div className="confirm-burst" role="status" aria-label="Saved">
           <ConfirmMark />

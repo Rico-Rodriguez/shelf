@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { animate } from "motion";
+import { haptic } from "@/lib/haptic";
 
 const BUTTON = 76;
+const SPRING = { type: "spring" as const, stiffness: 520, damping: 36 };
 
 export type SwipeAction = {
   label: string;
   tone: "ink" | "danger" | "accent";
   onClick: () => void;
 };
+
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 export function SwipeRow({
   children,
@@ -21,12 +28,8 @@ export function SwipeRow({
 }) {
   const width = Math.max(BUTTON, actions.length * BUTTON);
   const rowRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
   const offsetRef = useRef(0);
-
-  useEffect(() => {
-    offsetRef.current = offset;
-  }, [offset]);
+  const openRef = useRef(false);
 
   useEffect(() => {
     const row = rowRef.current;
@@ -35,6 +38,15 @@ export function SwipeRow({
     let startY = 0;
     let startOffset = 0;
     let axis: "undecided" | "x" | "y" = "undecided";
+
+    function setX(x: number, spring: boolean) {
+      offsetRef.current = x;
+      if (spring && !reducedMotion()) {
+        void animate(row!, { transform: `translate3d(${x}px, 0, 0)` }, SPRING);
+      } else {
+        row!.style.transform = `translate3d(${x}px, 0, 0)`;
+      }
+    }
 
     function onStart(event: TouchEvent) {
       const touch = event.touches[0];
@@ -58,15 +70,16 @@ export function SwipeRow({
       if (event.cancelable) event.preventDefault();
       const raw = startOffset + dx;
       const next = raw > 0 ? raw * 0.22 : raw < -width ? -width + (raw + width) * 0.22 : raw;
-      offsetRef.current = next;
-      setOffset(next);
+      setX(next, false);
     }
 
     function onEnd() {
       if (axis !== "x") return;
       const next = offsetRef.current < -width / 2 ? -width : 0;
-      offsetRef.current = next;
-      setOffset(next);
+      const wasOpen = openRef.current;
+      openRef.current = next !== 0;
+      setX(next, true);
+      if (next !== 0 && !wasOpen) haptic("light");
     }
 
     row.addEventListener("touchstart", onStart, { passive: true });
@@ -98,16 +111,17 @@ export function SwipeRow({
       <div
         ref={rowRef}
         className="relative bg-[var(--paper)]"
-        style={{
-          transform: `translate3d(${offset}px, 0, 0)`,
-          transition: offset === 0 || offset === -width ? "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
-        }}
+        style={{ transform: "translate3d(0, 0, 0)" }}
         onClickCapture={(event) => {
-          if (offset === 0) return;
+          if (offsetRef.current === 0) return;
           event.preventDefault();
           event.stopPropagation();
           offsetRef.current = 0;
-          setOffset(0);
+          openRef.current = false;
+          const node = rowRef.current;
+          if (!node) return;
+          if (reducedMotion()) node.style.transform = "translate3d(0, 0, 0)";
+          else void animate(node, { transform: "translate3d(0px, 0, 0)" }, SPRING);
         }}
       >
         {children}

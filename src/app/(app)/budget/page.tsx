@@ -14,7 +14,7 @@ import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { addMonths, dayLabel, inDaysPhrase, monthName, monthRange, todayISO } from "@/lib/dates";
+import { addMonths, dayLabel, monthName, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
@@ -78,10 +78,6 @@ export default function BudgetPage() {
   const { flash, run } = useConfirmFlash();
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, refreshing, error, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
-  const { data: bills } = useQuery<{ recurrences: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean; isActive: boolean }[] }>(
-    "bills",
-    "/api/recurring",
-  );
 
   useEffect(() => {
     if (data) setIncome((data.plannedIncomeCents / 100).toFixed(0));
@@ -141,7 +137,9 @@ export default function BudgetPage() {
   }
 
   async function suggest() {
-    await api("/api/budget", { method: "POST", body: JSON.stringify({ year: budget.year, month: budget.month, apply: true }) });
+    await run(async () => {
+      await api("/api/budget", { method: "POST", body: JSON.stringify({ year: budget.year, month: budget.month, apply: true }) });
+    });
     invalidateQueries("budget:");
     reload();
   }
@@ -278,32 +276,6 @@ export default function BudgetPage() {
             </button>
           </section>
         ) : null}
-
-        {(() => {
-          const today = todayISO();
-          const upcoming = (bills?.recurrences ?? []).filter((row) => row.isActive && !row.isIncome && row.nextDate >= today).slice(0, 5);
-          if (!upcoming.length) return null;
-          return (
-            <section>
-              <div className="mb-2 flex items-baseline justify-between">
-                <h2 className="ios-section mb-0">Bills</h2>
-                <Link href="/recurring" className="text-btn">
-                  See all
-                </Link>
-              </div>
-              <div className="card">
-                {upcoming.map((bill) => (
-                  <Link key={bill.id} href="/recurring" className="data-row justify-between gap-3">
-                    <span className="truncate">{bill.merchantName}</span>
-                    <span className="shrink-0 text-[var(--muted)]">
-                      {inDaysPhrase(bill.nextDate)} · <MoneyText cents={bill.amountCents} />
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          );
-        })()}
 
         {planOpen ? (
           <Sheet title="Edit budget" onClose={() => setPlanOpen(false)}>

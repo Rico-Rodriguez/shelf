@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConnectBank } from "@/components/ConnectBank";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -10,7 +11,7 @@ import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { classifyAccount } from "@/lib/money";
-import { invalidateQueries, useQuery } from "@/lib/use-query";
+import { invalidateQueries, useQuery, warmQuery } from "@/lib/use-query";
 
 type Account = {
   id: string;
@@ -43,6 +44,7 @@ export default function AccountsPage() {
   const [type, setType] = useState("depository");
   const [balance, setBalance] = useState("");
   const [kind, setKind] = useState("cash");
+  const { flash, run } = useConfirmFlash();
 
   const visible = useMemo(() => data?.accounts.filter((account) => !account.isHidden) ?? [], [data]);
   const assets = visible.filter((account) => classifyAccount(account.type) === "asset");
@@ -65,14 +67,16 @@ export default function AccountsPage() {
 
   async function addManual(e: FormEvent) {
     e.preventDefault();
-    await api("/api/accounts", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        type: kind === "property" || kind === "vehicle" ? "other" : type,
-        currentBalance: Number(balance || 0),
-        manualKind: kind,
-      }),
+    await run(async () => {
+      await api("/api/accounts", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          type: kind === "property" || kind === "vehicle" ? "other" : type,
+          currentBalance: Number(balance || 0),
+          manualKind: kind,
+        }),
+      });
     });
     setName("");
     setBalance("");
@@ -94,6 +98,7 @@ export default function AccountsPage() {
   return (
     <PageShell refreshing={refreshing}>
     <div className="screen">
+      {flash}
       <PageHeader title="Accounts">
         <button className="shelf-btn" type="button" onClick={() => setOpen(true)}>
           Add
@@ -152,7 +157,12 @@ export default function AccountsPage() {
             </h2>
             <div className="card">
               {group.rows.map((account) => (
-                <Link key={account.id} href={`/accounts/${account.id}`} className="data-row justify-between gap-3">
+                <Link
+                  key={account.id}
+                  href={`/accounts/${account.id}`}
+                  className="data-row justify-between gap-3"
+                  onPointerEnter={() => warmQuery(`account:${account.id}`, `/api/accounts/${account.id}`)}
+                >
                   <div className="min-w-0">
                     <div className="truncate text-[17px] font-medium">{account.name}</div>
                     {accountLine(account) ? <div className="truncate text-[13px] text-[var(--muted)]">{accountLine(account)}</div> : null}
