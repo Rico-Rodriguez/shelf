@@ -98,9 +98,7 @@ export default function LoginPage() {
             <p className="brand-mark text-[28px]">Shelf</p>
             <h1 className="mt-2 text-[34px] font-bold tracking-tight">Welcome back</h1>
             <p className="mt-1 text-[15px] text-[var(--muted)]">
-              {email
-                ? `Signed in as ${email}. Bank tokens and notes stay sealed on this Shelf.`
-                : "Your password unlocks a private vault. Bank tokens never sit in plain text."}
+              {email ? `Continue as ${email}.` : "Enter your password to open Shelf."}
             </p>
           </div>
           <label className="field">

@@ -47,6 +47,7 @@ export default function InsightsPage() {
   if (!data) return <PageError title="Insights" message={error} onRetry={() => void reload()} />;
 
   const range = monthRange(data.year, data.month);
+  const spendTotal = data.byCategory.reduce((sum, row) => sum + row.cents, 0) || 1;
   const max = Math.max(...data.byCategory.map((row) => row.cents), 1);
   const shown = scrub?.cents ?? latest?.cents ?? data.netWorth.netWorthCents;
   const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
@@ -94,18 +95,25 @@ export default function InsightsPage() {
           </p>
         ) : null}
         <div className="card">
-          {data.byCategory.map((category) => (
+          {data.byCategory.map((category) => {
+            const pct = (category.cents / spendTotal) * 100;
+            const pctLabel = pct < 1 ? "<1%" : `${Math.round(pct)}%`;
+            return (
             <Link
               key={category.id || category.name}
               href={activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
-              className="block border-b border-[var(--line)] px-4 py-3 last:border-0"
+              className="spend-row"
             >
               <span className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="block truncate">{category.name}</span>
-                  {versusShort(category.cents, category.avgCents || null) ? (
-                    <span className="mt-0.5 block text-[13px] text-[var(--muted)]">{versusShort(category.cents, category.avgCents || null)}</span>
-                  ) : null}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
+                  <span className="min-w-0">
+                    <span className="block truncate">{category.name}</span>
+                    {versusShort(category.cents, category.avgCents || null) ? (
+                      <span className="mt-0.5 block text-[13px] text-[var(--muted)]">{versusShort(category.cents, category.avgCents || null)}</span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[13px] text-[var(--tertiary)]">{pctLabel}</span>
                 </span>
                 <MoneyText className="shrink-0" cents={category.cents} />
               </span>
@@ -116,7 +124,8 @@ export default function InsightsPage() {
                 />
               </span>
             </Link>
-          ))}
+            );
+          })}
           {data.byCategory.length === 0 ? <p className="data-row text-[var(--muted)]">Nothing this month.</p> : null}
         </div>
       </section>

@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { Icon } from "@/components/Icon";
 import { ReviewDeck } from "@/components/ReviewDeck";
 import { offerUndo } from "@/components/UndoHost";
 import { MerchantMark } from "@/components/MerchantMark";
@@ -380,17 +381,20 @@ function Activity() {
 
       {!filtered && dash ? <SummaryCard compact label="Spent this month" cents={dash.cashFlow.spendingCents} /> : null}
 
-      <input
-        className="shelf-input ios-search"
-        placeholder="Search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search transactions"
-      />
+      <div className="search-field">
+        <Icon name="search" size={16} />
+        <input
+          className="shelf-input ios-search"
+          placeholder="Search merchants or notes"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Search transactions"
+        />
+      </div>
 
       {pendingCount > 0 ? <p className="text-[13px] text-[var(--tertiary)]">Pending purchases are not counted yet.</p> : null}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="activity-tools">
         {unreviewed > 0 ? (
           <button
             className={focus && inReviewMode ? "shelf-btn secondary" : "shelf-btn"}
@@ -400,39 +404,39 @@ function Activity() {
             {focus && inReviewMode ? "Close review" : `Review ${unreviewed}`}
           </button>
         ) : null}
-        <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
-          Filter
-        </button>
-        {accountName ? (
-          <button className="chip" type="button" onClick={() => replaceQuery({ accountId: null })}>
-            {accountName}
+        <div className="activity-tools-side">
+          {accountName ? (
+            <button className="chip" type="button" onClick={() => replaceQuery({ accountId: null })}>
+              {accountName}
+            </button>
+          ) : null}
+          {categoryId ? (
+            <button className="chip" type="button" onClick={() => replaceQuery({ categoryId: null })}>
+              {categoryName || "Category"}
+            </button>
+          ) : null}
+          {tag ? (
+            <button className="chip" type="button" onClick={() => replaceQuery({ tag: null })}>
+              {tag}
+            </button>
+          ) : null}
+          {month ? (
+            <button className="chip" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
+              Dates
+            </button>
+          ) : null}
+          <button className="text-btn" type="button" onClick={() => setFiltersOpen(true)}>
+            Filter
           </button>
-        ) : null}
-        {categoryId ? (
-          <button className="chip" type="button" onClick={() => replaceQuery({ categoryId: null })}>
-            {categoryName || "Category"}
+          <button className="text-btn" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
+            {selecting ? "Cancel" : "Select"}
           </button>
-        ) : null}
-        {tag ? (
-          <button className="chip" type="button" onClick={() => replaceQuery({ tag: null })}>
-            {tag}
-          </button>
-        ) : null}
-        {month ? (
-          <button className="chip" type="button" onClick={() => replaceQuery({ start: null, end: null })}>
-            Dates
-          </button>
-        ) : null}
-        {selecting ? (
-          <button className="text-btn" type="button" onClick={() => { setSelecting(false); setSelected([]); }}>
-            Cancel
-          </button>
-        ) : null}
-        {canAcceptAll ? (
-          <button className="text-btn" type="button" onClick={markVisibleDone}>
-            Accept {unreviewedRows.length}
-          </button>
-        ) : null}
+          {canAcceptAll ? (
+            <button className="text-btn" type="button" onClick={markVisibleDone}>
+              Accept {unreviewedRows.length}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {swipeHint && !selecting && grouped.length > 0 ? (
@@ -570,7 +574,7 @@ function Activity() {
 
       {grouped.map(([date, items]) => (
         <section key={date}>
-          <h2 className="ios-section">{dayLabel(date)}</h2>
+          <h2 className="ios-section day-head">{dayLabel(date)}</h2>
           <div className="card">
             {items.map((tx) => {
               const row = (

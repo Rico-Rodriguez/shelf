@@ -118,6 +118,15 @@ function glyph(name: string, filled: boolean) {
           <circle cx="12" cy="8" r="0.9" fill="currentColor" />
         </>
       );
+    case "search":
+      return (
+        <>
+          <circle {...stroke} cx="11" cy="11" r="6" />
+          <path {...stroke} d="m20 20-3.5-3.5" />
+        </>
+      );
+    case "spark":
+      return <path {...stroke} d="M4 16.5 9 11l3.2 3L20 6.5" />;
     case "bell":
       return (
         <>
