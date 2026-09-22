@@ -120,10 +120,12 @@ export default function HomePage() {
         ) : null}
 
         {dash.unreviewed.count > 0 ? (
-          <Link href={activityHref({ reviewed: "false", focus: "1" })} className="card data-row justify-between gap-3">
-            <span className="font-medium">{dash.unreviewed.count} to review</span>
-            <span className="text-btn">Review</span>
-          </Link>
+          <div className="card">
+            <Link href={activityHref({ reviewed: "false", focus: "1" })} className="data-row justify-between gap-3">
+              <span className="font-medium">{dash.unreviewed.count} to review</span>
+              <span className="text-btn">Review</span>
+            </Link>
+          </div>
         ) : null}
 
         {recent.length > 0 ? (
