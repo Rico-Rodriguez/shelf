@@ -152,15 +152,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const active = isActive(path, item.href);
             return (
               <Link key={item.href} href={item.href} prefetch className={`ios-tab ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
-                <span className="ios-tab-glyph">
-                  <Icon name={item.icon} size={22} />
+                <span className="ios-tab-glyph" aria-hidden>
+                  <Icon name={item.icon} size={24} />
                 </span>
                 {item.label}
               </Link>
             );
           })}
-          <button type="button" className={`ios-tab ${moreActive ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
-            <span className="ios-tab-glyph">
+          <button
+            type="button"
+            className={`ios-tab ${moreActive && !PRIMARY.some((item) => isActive(path, item.href)) ? "active" : ""}`}
+            onClick={() => setMoreOpen(true)}
+            aria-label="More"
+          >
+            <span className="ios-tab-glyph" aria-hidden>
               <Icon name="more" size={22} />
             </span>
             More

@@ -48,9 +48,10 @@ function glyph(name: string) {
     case "more":
       return (
         <>
-          <circle cx="6" cy="12" r="1.4" fill="currentColor" />
-          <circle cx="12" cy="12" r="1.4" fill="currentColor" />
-          <circle cx="18" cy="12" r="1.4" fill="currentColor" />
+          <rect {...stroke} x="4" y="4" width="6.5" height="6.5" rx="1.4" />
+          <rect {...stroke} x="13.5" y="4" width="6.5" height="6.5" rx="1.4" />
+          <rect {...stroke} x="4" y="13.5" width="6.5" height="6.5" rx="1.4" />
+          <rect {...stroke} x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4" />
         </>
       );
     case "calendar":
