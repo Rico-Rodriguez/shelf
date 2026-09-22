@@ -167,6 +167,14 @@ export async function GET() {
       })
       .filter((row) => row.cents > 0)
       .sort((a, b) => b.cents - a.cents);
+    const variableUsual =
+      trail.total == null
+        ? null
+        : Math.round(
+            Object.entries(trail.byCategory)
+              .filter(([id]) => !fixedIds.has(id))
+              .reduce((sum, [, cents]) => sum + cents, 0),
+          );
 
     return NextResponse.json({
       layout,
@@ -186,9 +194,9 @@ export async function GET() {
         pendingCents,
       },
       usual: {
-        spentCents: spentTotal,
-        usualCents: trail.total,
-        deltaCents: trail.total == null ? null : spentTotal - trail.total,
+        spentCents: variableSpent,
+        usualCents: variableUsual,
+        deltaCents: variableUsual == null ? null : variableSpent - variableUsual,
       },
       safeSeries,
       spending,

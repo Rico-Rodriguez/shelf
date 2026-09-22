@@ -89,14 +89,18 @@ export async function GET(request: Request) {
     const prev = addMonths(year, month, -1);
     const prevRange = monthRange(prev.year, prev.month);
     const lastMap = spendBetween(prevRange.start, prevRange.end);
-    const avgMap: Record<string, number> = {};
+    const sampleMaps: Record<string, number>[] = [];
     for (const delta of [-1, -2, -3]) {
       const cursor = addMonths(year, month, delta);
       const range = monthRange(cursor.year, cursor.month);
-      for (const [key, cents] of Object.entries(spendBetween(range.start, range.end))) {
-        avgMap[key] = (avgMap[key] ?? 0) + cents;
-      }
+      const map = spendBetween(range.start, range.end);
+      if (Object.values(map).some((cents) => cents > 0)) sampleMaps.push(map);
     }
+    const avgMap: Record<string, number> = {};
+    for (const map of sampleMaps) {
+      for (const [key, cents] of Object.entries(map)) avgMap[key] = (avgMap[key] ?? 0) + cents;
+    }
+    const samples = sampleMaps.length;
     const budgetMonth = await getOrCreateBudgetMonth(year, month, dek);
     const plannedItems = (await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, budgetMonth.id))).map((row) =>
       openBudgetItem(row, dek),
@@ -128,7 +132,7 @@ export async function GET(request: Request) {
         return {
           ...row,
           lastCents: lastMap[key] ?? 0,
-          avgCents: Math.round((avgMap[key] ?? 0) / 3),
+          avgCents: samples ? Math.round((avgMap[key] ?? 0) / samples) : 0,
           plannedCents: plannedByCat[row.id] ?? 0,
         };
       });
@@ -138,7 +142,7 @@ export async function GET(request: Request) {
       month,
       incomeCents: income,
       spendingCents: Object.values(catSpend).reduce((s, r) => s + r.cents, 0),
-      usualSpentCents: usualSum > 0 ? Math.round(usualSum / 3) : null,
+      usualSpentCents: samples ? Math.round(usualSum / samples) : null,
       pendingCents,
       byMerchant: [...byMerchant.entries()]
         .map(([name, cents]) => ({ name, cents }))

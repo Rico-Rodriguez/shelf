@@ -3,9 +3,10 @@ import { formatMoney } from "./money";
 export function versusPhrase(deltaCents: number | null, noun = "Spending"): string | null {
   if (deltaCents == null) return null;
   const abs = formatMoney(Math.abs(deltaCents));
-  if (Math.abs(deltaCents) < 100) return `${noun} is in line with your usual month.`;
-  if (deltaCents > 0) return `${noun} is ${abs} above your usual month.`;
-  return `${noun} is ${abs} under your usual month.`;
+  const verb = noun.endsWith("s") ? "are" : "is";
+  if (Math.abs(deltaCents) < 100) return `${noun} ${verb} in line with your usual month.`;
+  if (deltaCents > 0) return `${noun} ${verb} ${abs} above your usual month.`;
+  return `${noun} ${verb} ${abs} under your usual month.`;
 }
 
 export function versusStatus(deltaCents: number | null, noun = "usual"): { label: string; tone: "good" | "bad" | "neutral" } | null {

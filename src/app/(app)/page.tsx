@@ -52,7 +52,7 @@ export default function HomePage() {
   const next = dash.recurring.find((row) => row.nextDate >= today);
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
   const series = dash.safeSeries ?? [];
-  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null, "All spending");
+  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null, "Day to day");
   const status = next
     ? {
         label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `Next · ${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
