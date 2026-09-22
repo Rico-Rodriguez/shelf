@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
@@ -217,7 +218,7 @@ export default function RecurringPage() {
                   </div>
                 </div>
                 <span className="flex shrink-0 items-center gap-3">
-                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} signed />
+                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} flow />
                   <button className="text-[15px] font-semibold text-[var(--ink)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
                     Skip
                   </button>
@@ -264,15 +265,18 @@ export default function RecurringPage() {
           {listed.map((row) => (
             <li key={row.id}>
               <button type="button" className="data-row w-full justify-between gap-3 text-left" onClick={() => openEdit(row)}>
-                <div className="min-w-0">
+                <MerchantMark name={row.merchantName} />
+                <div className="min-w-0 flex-1">
                   <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
-                  <div className="text-[13px] text-[var(--muted)]">
-                    {(row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"} · {row.cadence} · <MoneyText cents={annualizedCents(row.amountCents, row.cadence)} />/yr · next {row.nextDate}
-                    {row.isActive ? "" : " · paused"}
+                  <div className="truncate text-[13px] text-[var(--muted)]">
+                    {row.isIncome ? "Income" : (row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"}
+                    {" · "}
+                    {row.cadence.charAt(0).toUpperCase() + row.cadence.slice(1)}
+                    {row.isActive ? ` · ${row.isIncome ? "Payday" : "Due"} ${inDaysPhrase(row.nextDate)}` : " · Paused"}
                     {row.priceDeltaCents ? ` · price ${row.priceDeltaCents > 0 ? "up" : "down"}` : ""}
                   </div>
                 </div>
-                <MoneyText cents={row.isIncome ? -row.amountCents : row.amountCents} signed />
+                <MoneyText className="shrink-0" cents={row.isIncome ? -row.amountCents : row.amountCents} flow />
               </button>
             </li>
           ))}

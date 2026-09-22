@@ -62,6 +62,7 @@ export default function BudgetPage() {
   const [moveForm, setMoveForm] = useState({ from: "", to: "", amount: "" });
   const [editor, setEditor] = useState<Editor>(null);
   const [planOpen, setPlanOpen] = useState(false);
+  const [showUnused, setShowUnused] = useState(false);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
@@ -102,6 +103,13 @@ export default function BudgetPage() {
   if (!data) return <PageError title="Budget" message={error} onRetry={() => void reload()} />;
 
   const budget = data;
+  const quietRow = (row: Row) => row.spentCents <= 0 && row.availableCents <= 0 && row.rolloverInCents <= 0;
+  const hiddenCount = groups.reduce((sum, group) => sum + group.rows.filter(quietRow).length, 0);
+  const visibleGroups = showUnused
+    ? groups
+    : groups
+        .map((group) => ({ ...group, rows: group.rows.filter((row) => !quietRow(row)) }))
+        .filter((group) => group.rows.length > 0);
   const flexPlan = budget.flexPoolCents > 0 ? budget.flexPoolCents : flexRows.reduce((sum, row) => sum + row.availableCents, 0);
   const flexSpent = flexRows.reduce((sum, row) => sum + row.spentCents, 0);
   const flexUsual = flexRows.some((row) => row.usualCents != null)
@@ -177,7 +185,7 @@ export default function BudgetPage() {
 
         <BudgetSummary budget={budget} />
 
-        {groups.map((group) => {
+        {visibleGroups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
           const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
           const isClosed = closed[group.id] ?? false;
@@ -225,9 +233,15 @@ export default function BudgetPage() {
           );
         })}
 
+        {hiddenCount > 0 ? (
+          <button type="button" className="text-btn" onClick={() => setShowUnused((value) => !value)}>
+            {showUnused ? "Hide unused categories" : `Show ${hiddenCount} unused ${hiddenCount === 1 ? "category" : "categories"}`}
+          </button>
+        ) : null}
+
         {flexRows.length > 0 ? (
           <section>
-            <h2 className="ios-section">Safe to spend</h2>
+            <h2 className="ios-section">Day to day</h2>
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
                 <span className="font-medium">{flexPlan > 0 ? "Remaining" : "Spent"}</span>

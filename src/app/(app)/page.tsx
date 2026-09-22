@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
@@ -51,7 +52,7 @@ export default function HomePage() {
   const next = dash.recurring.find((row) => row.nextDate >= today);
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
   const series = dash.safeSeries ?? [];
-  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null);
+  const usualLine = versusPhrase(dash.usual?.deltaCents ?? null, "All spending");
   const status = next
     ? {
         label: next.isIncome ? `Payday ${inDaysPhrase(next.nextDate)}` : `Next · ${next.merchantName} ${inDaysPhrase(next.nextDate)}`,
@@ -61,6 +62,11 @@ export default function HomePage() {
   const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const spendTotal = categories.reduce((sum, row) => sum + row.cents, 0) || 1;
+  const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
+  const spendRows =
+    restCents > 0
+      ? [...categories.slice(0, 5), { id: "rest", name: "Everything else", cents: restCents, color: "#8B939E" }]
+      : categories;
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
 
   async function loadSample() {
@@ -99,7 +105,7 @@ export default function HomePage() {
                     <MoneyText cents={(dash.safeToSpend?.committedCents ?? 0) + goalsCents} />
                   </span>
                   <span>
-                    <span className="safe-kicker">Spent</span>
+                    <span className="safe-kicker">Day to day</span>
                     <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
                   </span>
                 </span>
@@ -149,81 +155,89 @@ export default function HomePage() {
               </Link>
             ) : null}
 
-            {bills.length > 0 || suggestions > 0 ? (
-              <section>
-                <div className="mb-2 flex items-baseline justify-between">
-                  <h2 className="ios-section mb-0">Coming up</h2>
-                  <Link href="/recurring" className="text-btn">
-                    Bills
-                  </Link>
-                </div>
-                <div className="card">
-                  {bills.map((bill) => (
-                    <Link key={bill.id} href="/recurring" className="data-row justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{bill.merchantName}</span>
-                        <span className="block text-[12px] text-[var(--tertiary)]">{inDaysPhrase(bill.nextDate)}</span>
+            {bills.length > 0 || suggestions > 0 || categories.length > 0 ? (
+              <div className="home-split">
+                {bills.length > 0 || suggestions > 0 ? (
+                  <section>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <h2 className="ios-section mb-0">Coming up</h2>
+                      <Link href="/recurring" className="text-btn">
+                        Bills
+                      </Link>
+                    </div>
+                    <div className="card">
+                      {bills.map((bill) => (
+                        <Link key={bill.id} href="/recurring" className="data-row justify-between gap-3">
+                          <MerchantMark name={bill.merchantName} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">{bill.merchantName}</span>
+                            <span className="block text-[12px] text-[var(--tertiary)]">{inDaysPhrase(bill.nextDate)}</span>
+                          </span>
+                          <MoneyText className="shrink-0" cents={bill.amountCents} />
+                        </Link>
+                      ))}
+                      {suggestions > 0 ? (
+                        <Link href="/recurring" className="data-row justify-between gap-3">
+                          <span>{suggestions === 1 ? "1 charge looks like a bill" : `${suggestions} charges look like bills`}</span>
+                          <span className="text-btn">Check</span>
+                        </Link>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : null}
+
+                {categories.length > 0 ? (
+                  <section>
+                    <div className="mb-2 flex items-baseline justify-between gap-3">
+                      <h2 className="ios-section mb-0">Where it went</h2>
+                      <span className="flex items-baseline gap-3">
+                        <MoneyText className="text-[15px] font-semibold" cents={dash.cashFlow.spendingCents} />
+                        <Link href="/insights" className="text-btn">
+                          Insights
+                        </Link>
                       </span>
-                      <MoneyText className="shrink-0" cents={bill.amountCents} />
+                    </div>
+                    <div className="card">
+                      {spendRows.map((category) => {
+                        const pct = (category.cents / spendTotal) * 100;
+                        const pctLabel = pct < 1 ? "<1%" : `${Math.round(pct)}%`;
+                        return (
+                          <Link
+                            key={category.id || category.name}
+                            href={category.id === "rest" ? "/insights" : activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
+                            className="spend-row"
+                          >
+                            <span className="flex items-baseline justify-between gap-3">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
+                                <span className="truncate">{category.name}</span>
+                                <span className="shrink-0 text-[13px] text-[var(--tertiary)]">{pctLabel}</span>
+                              </span>
+                              <MoneyText className="shrink-0" cents={category.cents} />
+                            </span>
+                            <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
+                              <span
+                                className="spend-bar"
+                                style={{ width: `${Math.max(pct, 2)}%`, background: shelfColor(category.color) }}
+                              />
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : dash.cashFlow.spendingCents > 0 ? (
+                  <div className="card">
+                    <Link href={activityHref({ start: range.start, end: range.end })} className="data-row justify-between gap-3">
+                      <span>Spent this month</span>
+                      <MoneyText className="shrink-0" cents={dash.cashFlow.spendingCents} />
                     </Link>
-                  ))}
-                  {suggestions > 0 ? (
-                    <Link href="/recurring" className="data-row justify-between gap-3">
-                      <span>{suggestions === 1 ? "1 charge looks like a bill" : `${suggestions} charges look like bills`}</span>
-                      <span className="text-btn">Check</span>
-                    </Link>
-                  ) : null}
-                </div>
-              </section>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}
-
-        {categories.length > 0 ? (
-          <section>
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="ios-section mb-0">Where it went</h2>
-              <Link href="/insights" className="text-btn">
-                Insights
-              </Link>
-            </div>
-            <div className="card">
-              {categories.map((category) => {
-                const pct = (category.cents / spendTotal) * 100;
-                const pctLabel = pct < 1 ? "<1%" : `${Math.round(pct)}%`;
-                return (
-                  <Link
-                    key={category.id || category.name}
-                    href={activityHref({ categoryId: category.id || undefined, start: range.start, end: range.end })}
-                    className="spend-row"
-                  >
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
-                        <span className="truncate">{category.name}</span>
-                        <span className="shrink-0 text-[13px] text-[var(--tertiary)]">{pctLabel}</span>
-                      </span>
-                      <MoneyText className="shrink-0" cents={category.cents} />
-                    </span>
-                    <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
-                      <span
-                        className="spend-bar"
-                        style={{ width: `${Math.max(pct, 2)}%`, background: shelfColor(category.color) }}
-                      />
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        ) : dash.cashFlow.spendingCents > 0 ? (
-          <div className="card">
-            <Link href={activityHref({ start: range.start, end: range.end })} className="data-row justify-between gap-3">
-              <span>Spent this month</span>
-              <MoneyText className="shrink-0" cents={dash.cashFlow.spendingCents} />
-            </Link>
-          </div>
-        ) : null}
       </div>
     </PageShell>
   );

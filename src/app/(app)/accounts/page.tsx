@@ -56,7 +56,7 @@ export default function AccountsPage() {
     for (const account of visible) {
       const item = account.plaidItemId ? data.items.find((row) => row.id === account.plaidItemId) : null;
       const key = item?.id ?? "manual";
-      const bucket = map.get(key) ?? { key, name: item?.institutionName || (account.isManual ? "Manual" : "Bank"), rows: [] };
+      const bucket = map.get(key) ?? { key, name: item?.institutionName || (account.isManual ? "Added by you" : "Bank"), rows: [] };
       bucket.rows.push(account);
       map.set(key, bucket);
     }
@@ -154,12 +154,7 @@ export default function AccountsPage() {
                 <Link key={account.id} href={`/accounts/${account.id}`} className="data-row justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-[17px] font-medium">{account.name}</div>
-                    <div className="truncate text-[13px] text-[var(--muted)]">
-                      {account.subtype || account.type}
-                      {account.mask ? ` · ${account.mask}` : ""}
-                      {account.isManual ? " · manual" : ""}
-                      {creditUse(account)}
-                    </div>
+                    <div className="truncate text-[13px] text-[var(--muted)]">{accountLine(account)}</div>
                   </div>
                   <MoneyText
                     cents={classifyAccount(account.type) === "liability" ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents}
@@ -216,11 +211,18 @@ export default function AccountsPage() {
   );
 }
 
+function accountLine(account: { type: string; subtype: string | null; mask: string | null; currentBalanceCents: number; availableBalanceCents?: number | null }) {
+  const kind = account.subtype || account.type;
+  const label = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "";
+  const mask = account.mask ? `···${account.mask}` : "";
+  return [label, mask, creditUse(account)].filter(Boolean).join(" · ");
+}
+
 function creditUse(account: { type: string; currentBalanceCents: number; availableBalanceCents?: number | null }) {
   if (account.type !== "credit" || account.availableBalanceCents == null) return "";
   const balance = Math.abs(account.currentBalanceCents);
   const limit = balance + account.availableBalanceCents;
   if (limit <= 0) return "";
   const used = Math.round((balance / limit) * 100);
-  return ` · ${used}% of limit used`;
+  return `${used}% of limit used`;
 }

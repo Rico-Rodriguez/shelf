@@ -166,8 +166,7 @@ export async function GET() {
         return { id, name: category?.name ?? "Other", cents, color: shelfColor(group?.color) };
       })
       .filter((row) => row.cents > 0)
-      .sort((a, b) => b.cents - a.cents)
-      .slice(0, 5);
+      .sort((a, b) => b.cents - a.cents);
 
     return NextResponse.json({
       layout,

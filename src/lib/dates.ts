@@ -65,6 +65,12 @@ export function shortDate(iso: string) {
   return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+export function mediumDate(iso: string) {
+  const date = new Date(`${iso}T12:00:00`);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function dayLabel(iso: string, today = todayISO()): string {
   if (iso === today) return "Today";
   if (iso === addDays(today, -1)) return "Yesterday";

@@ -400,6 +400,10 @@ a:focus-visible {
 
   .summary-card.is-hero {
     padding-top: 18px;
+    background:
+      radial-gradient(120% 80% at 100% -20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 54%),
+      var(--paper);
+    box-shadow: 0 18px 40px color-mix(in srgb, var(--ink) 5%, transparent);
   }
 
   .summary-card.is-hero .hero-number {
@@ -408,7 +412,24 @@ a:focus-visible {
   }
 
   .summary-card.is-hero .summary-chart {
-    height: 132px;
+    height: 148px;
+  }
+
+  .summary-line {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: summary-draw 720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .summary-area {
+    opacity: 0;
+    animation: fade-in 420ms ease 180ms forwards;
+  }
+
+  @keyframes summary-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
   }
 
   .summary-card.is-compact .hero-number {
@@ -501,6 +522,10 @@ a:focus-visible {
   @media (min-width: 768px) {
     .summary-chart {
       height: 144px;
+    }
+
+    .summary-card.is-hero .summary-chart {
+      height: 176px;
     }
   }
 
@@ -762,6 +787,25 @@ a:focus-visible {
 
   .swipe-actions .accent {
     background: var(--accent);
+  }
+
+  .swipe-hint {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--tertiary);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  @media (min-width: 768px) {
+    .swipe-hint {
+      display: none;
+    }
   }
 
   .swipe-row.has-peek::after {
@@ -1118,6 +1162,22 @@ a:focus-visible {
 
   .route-fade {
     animation: fade-in 120ms ease;
+  }
+
+  .home-split {
+    display: grid;
+    gap: 24px;
+  }
+
+  @media (min-width: 960px) {
+    .home-split {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      align-items: start;
+    }
+
+    .home-split > :only-child {
+      grid-column: 1 / -1;
+    }
   }
 
   .safe-facts {
@@ -1643,6 +1703,19 @@ a:focus-visible {
     font-weight: 650;
   }
 
+  @media (hover: hover) {
+    .ios-nav:hover:not(.active) {
+      background: var(--fill);
+      color: var(--ink);
+    }
+
+    a.data-row:hover,
+    button.data-row:hover,
+    a.spend-row:hover {
+      background: color-mix(in srgb, var(--fill) 72%, transparent);
+    }
+  }
+
   .mobile-bar {
     z-index: 20;
     display: grid;
@@ -1908,9 +1981,19 @@ main h1 + p,
   .ios-sheet.is-shown,
   .ios-sheet-backdrop,
   .ios-sheet-backdrop.is-shown,
-  .tx-row-exit {
+  .tx-row-exit,
+  .summary-line,
+  .summary-area {
     animation: none;
     transition: none;
+  }
+
+  .summary-line {
+    stroke-dashoffset: 0;
+  }
+
+  .summary-area {
+    opacity: 1;
   }
 
   .ios-sheet,

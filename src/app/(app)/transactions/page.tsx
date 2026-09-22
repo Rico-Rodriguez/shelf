@@ -440,8 +440,8 @@ function Activity() {
       </div>
 
       {swipeHint && !selecting && grouped.length > 0 ? (
-        <button type="button" className="text-left text-[13px] text-[var(--muted)]" onClick={dismissSwipeHint}>
-          Swipe a row right to review, or left to hide.
+        <button type="button" className="swipe-hint" onClick={dismissSwipeHint}>
+          Swipe left to review or hide.
         </button>
       ) : null}
 

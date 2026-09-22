@@ -119,7 +119,7 @@ export default function InsightsPage() {
               </span>
               <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--fill)]">
                 <span
-                  className="block h-full rounded-full"
+                  className="spend-bar"
                   style={{ width: `${Math.min(100, (category.cents / max) * 100)}%`, background: shelfColor(category.color) }}
                 />
               </span>

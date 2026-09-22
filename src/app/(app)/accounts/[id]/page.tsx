@@ -127,7 +127,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
         title={acct.name}
         subtitle={
           <>
-            {item?.institutionName || (acct.isManual ? "Manual account" : "Account")}
+            {item?.institutionName || (acct.isManual ? "Added by you" : "Account")}
             {item && item.status !== "ok" ? ` · ${item.errorCode || item.status}` : item ? " · Connected" : ""}
           </>
         }
