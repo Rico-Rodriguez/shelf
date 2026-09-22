@@ -217,7 +217,7 @@ export default function RecurringPage() {
                   </div>
                 </div>
                 <span className="flex shrink-0 items-center gap-3">
-                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} signed />
+                  <MoneyText cents={draft.isIncome ? -draft.amountCents : draft.amountCents} flow />
                   <button className="text-[15px] font-semibold text-[var(--ink)]" type="button" onClick={() => setSuggestions(suggestions.filter((row) => row.merchantName !== draft.merchantName))}>
                     Skip
                   </button>
@@ -267,12 +267,12 @@ export default function RecurringPage() {
                 <div className="min-w-0">
                   <div className={`truncate font-medium ${row.isActive ? "" : "text-[var(--muted)]"}`}>{row.merchantName}</div>
                   <div className="text-[13px] text-[var(--muted)]">
-                    {(row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"} · {row.cadence} · <MoneyText cents={annualizedCents(row.amountCents, row.cadence)} />/yr · next {row.nextDate}
+                    {row.isIncome ? "Income" : (row.kind ?? "bill") === "subscription" ? "Subscription" : "Bill"} · {row.cadence} · <MoneyText cents={annualizedCents(row.amountCents, row.cadence)} />/yr · next {row.nextDate}
                     {row.isActive ? "" : " · paused"}
                     {row.priceDeltaCents ? ` · price ${row.priceDeltaCents > 0 ? "up" : "down"}` : ""}
                   </div>
                 </div>
-                <MoneyText cents={row.isIncome ? -row.amountCents : row.amountCents} signed />
+                <MoneyText cents={row.isIncome ? -row.amountCents : row.amountCents} flow />
               </button>
             </li>
           ))}
