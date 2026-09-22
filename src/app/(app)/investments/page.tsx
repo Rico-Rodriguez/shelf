@@ -1,12 +1,5 @@
-"use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
 
 export default function InvestmentsRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/accounts");
-  }, [router]);
-  return null;
+  redirect("/accounts");
 }

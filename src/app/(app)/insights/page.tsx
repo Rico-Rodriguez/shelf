@@ -12,7 +12,7 @@ import { monthRange, shortDate, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { formatMoney } from "@/lib/money";
 import { useQuery } from "@/lib/use-query";
-import { versusPhrase, versusShort } from "@/lib/voice";
+import { versusShort } from "@/lib/voice";
 
 type Report = {
   year: number;
@@ -56,7 +56,7 @@ export default function InsightsPage() {
       : moved > 0
         ? { label: `Up ${formatMoney(moved)}`, tone: "good" as const }
         : { label: `Down ${formatMoney(-moved)}`, tone: "bad" as const };
-  const spendingNote = versusPhrase(data.usualSpentCents == null ? null : data.spendingCents - data.usualSpentCents);
+  const spendingNote = versusShort(data.spendingCents, data.usualSpentCents ?? null);
 
   return (
     <div className="space-y-6">
@@ -78,28 +78,21 @@ export default function InsightsPage() {
         points={points}
         chartLabel="Net worth"
         onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
-        footer={
-          <>
-            Spent <MoneyText cents={data.spendingCents} /> this month
-          </>
-        }
-        detail={
-          spendingNote || data.pendingCents ? (
-            <>
-              {spendingNote}
-              {data.pendingCents ? (
-                <>
-                  {spendingNote ? " " : null}
-                  Pending <MoneyText cents={data.pendingCents} /> is not included.
-                </>
-              ) : null}
-            </>
-          ) : null
-        }
       />
 
       <section>
-        <h2 className="ios-section">Spending</h2>
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <h2 className="ios-section mb-0">Spending</h2>
+          <span className="text-[13px] text-[var(--muted)]">
+            <MoneyText cents={data.spendingCents} />
+            {spendingNote ? ` · ${spendingNote}` : ""}
+          </span>
+        </div>
+        {data.pendingCents ? (
+          <p className="mb-2 text-[13px] text-[var(--muted)]">
+            Pending <MoneyText cents={data.pendingCents} /> is not included.
+          </p>
+        ) : null}
         <div className="card">
           {data.byCategory.map((category) => (
             <Link

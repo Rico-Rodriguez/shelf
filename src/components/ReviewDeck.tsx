@@ -189,7 +189,7 @@ export function ReviewDeck({
           {here ? <div className="text-[13px] text-[var(--tertiary)]">{here}</div> : null}
         </div>
       </div>
-      <MoneyText hero cents={-visible.amountCents} signed />
+      <MoneyText hero cents={visible.amountCents} flow />
       <div className="flex flex-wrap gap-2">
         {quick.map((category, index) => (
           <button

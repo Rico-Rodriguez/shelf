@@ -5,6 +5,7 @@ import { api } from "./client";
 
 type Entry<T> = { data: T; at: number };
 
+const STORAGE_KEY = "shelf-queries";
 const store = new Map<string, Entry<unknown>>();
 const listeners = new Map<string, Set<() => void>>();
 
@@ -12,12 +13,50 @@ function notify(key: string) {
   listeners.get(key)?.forEach((fn) => fn());
 }
 
+function hydrateStore() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, Entry<unknown>>;
+    for (const [key, entry] of Object.entries(parsed)) {
+      if (entry && typeof entry === "object" && "data" in entry) store.set(key, entry);
+    }
+  } catch {
+    /* ignore unreadable cache */
+  }
+}
+
+function persistStore() {
+  if (typeof window === "undefined") return;
+  const write = () => {
+    const obj: Record<string, Entry<unknown>> = {};
+    for (const [key, entry] of store) obj[key] = entry;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  };
+  try {
+    write();
+  } catch {
+    for (const key of [...store.keys()]) {
+      if (key.startsWith("activity:")) store.delete(key);
+    }
+    try {
+      write();
+    } catch {
+      /* ignore quota */
+    }
+  }
+}
+
+hydrateStore();
+
 export function peekQuery<T>(key: string): T | null {
   return (store.get(key)?.data as T | undefined) ?? null;
 }
 
 export function writeQuery<T>(key: string, data: T) {
   store.set(key, { data, at: Date.now() });
+  persistStore();
   notify(key);
 }
 
@@ -33,6 +72,7 @@ export function warmQuery(key: string, path: string) {
 export function invalidateQueries(prefix?: string) {
   if (!prefix) {
     store.clear();
+    persistStore();
     listeners.forEach((set) => set.forEach((fn) => fn()));
     return;
   }
@@ -42,6 +82,7 @@ export function invalidateQueries(prefix?: string) {
       notify(key);
     }
   }
+  persistStore();
 }
 
 export function useQuery<T>(key: string | null, path: string | null, options?: { keepPrevious?: boolean }) {

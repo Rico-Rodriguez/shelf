@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { accounts, budgetItems, categories, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
+import { accounts, budgetItems, categories, categoryGroups, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spendByDay, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
 import { addDays, todayISO, yearMonth } from "@/lib/dates";
@@ -12,6 +12,7 @@ import { openAccount, openBudgetItem, openGoal, openHolding, openRecurrence, ope
 import { goalPace } from "@/lib/goal-pace";
 import { classifyAccount } from "@/lib/networth";
 import { inferRecurringKind, monthlyNeed, netWorthDelta, projectBalances } from "@/lib/plan";
+import { shelfColor } from "@/lib/palette";
 import { previewRecurring } from "@/lib/recurring";
 
 export const dynamic = "force-dynamic";
@@ -157,6 +158,17 @@ export async function GET() {
     safeSeries[safeSeries.length - 1].cents = todayCents;
     if (safeSeries.length < 2) safeSeries.push({ date: today, cents: todayCents });
 
+    const groupRows = await db.select().from(categoryGroups);
+    const spending = Object.entries(spent)
+      .map(([id, cents]) => {
+        const category = cats.find((row) => row.id === id);
+        const group = groupRows.find((row) => row.id === category?.groupId);
+        return { id, name: category?.name ?? "Other", cents, color: shelfColor(group?.color) };
+      })
+      .filter((row) => row.cents > 0)
+      .sort((a, b) => b.cents - a.cents)
+      .slice(0, 5);
+
     return NextResponse.json({
       layout,
       netWorth: nw,
@@ -180,6 +192,7 @@ export async function GET() {
         deltaCents: trail.total == null ? null : spentTotal - trail.total,
       },
       safeSeries,
+      spending,
       forecast: projectBalances(cash, activeRecurring, 30).filter((_, index) => index % 3 === 0 || index === 29),
       suggestedSubscriptions,
       goals: goalViews.slice(0, 4),

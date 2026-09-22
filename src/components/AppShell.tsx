@@ -10,43 +10,12 @@ import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
 import { UndoHost } from "./UndoHost";
 import { Drawer } from "./ui/Drawer";
-import { readPageTitle } from "./ui/PageHeader";
-
-const GROUPS = [
-  {
-    label: "Overview",
-    items: [
-      { href: "/", label: "Home", icon: "home" },
-      { href: "/accounts", label: "Accounts", icon: "wallet" },
-      { href: "/transactions", label: "Activity", icon: "list" },
-    ],
-  },
-  {
-    label: "Plan",
-    items: [
-      { href: "/budget", label: "Budget", icon: "chart" },
-      { href: "/recurring", label: "Bills", icon: "calendar" },
-      { href: "/goals", label: "Goals", icon: "flag" },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [{ href: "/insights", label: "Insights", icon: "flow" }],
-  },
-];
 
 const PRIMARY = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/transactions", label: "Activity", icon: "list" },
-  { href: "/budget", label: "Budget", icon: "chart" },
+  { href: "/budget", label: "Plan", icon: "chart" },
   { href: "/accounts", label: "Accounts", icon: "wallet" },
-];
-
-const OVERFLOW = [
-  { href: "/recurring", label: "Bills", icon: "calendar" },
-  { href: "/goals", label: "Goals", icon: "flag" },
-  { href: "/insights", label: "Insights", icon: "flow" },
-  { href: "/settings", label: "Settings", icon: "gear" },
 ];
 
 const PREFETCH = ["/", "/transactions", "/budget", "/accounts", "/insights", "/recurring", "/goals", "/settings"];
@@ -60,17 +29,12 @@ function isActive(path: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const [moreOpen, setMoreOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [sync, setSync] = useState<"idle" | "syncing" | "synced" | "error">("idle");
   const [reviewCount, setReviewCount] = useState(0);
-  const [pageTitle, setPageTitle] = useState("");
-  const [titleOn, setTitleOn] = useState(false);
-  const [arrive, setArrive] = useState(false);
   const scrollerRef = useRef<HTMLElement>(null);
-  const moreActive = OVERFLOW.some((item) => isActive(path, item.href));
 
   const loadNotes = useCallback(() => {
     void api<{ notifications: Note[]; unread: number }>("/api/notifications")
@@ -90,16 +54,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .then((res) => setReviewCount(res.unreviewed))
       .catch(() => undefined);
   }, [path]);
-
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem("shelf-arrived")) return;
-      setArrive(true);
-      sessionStorage.setItem("shelf-arrived", "1");
-    } catch {
-      setArrive(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -140,28 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const scroller = scrollerRef.current;
     const desktop = window.matchMedia("(min-width: 768px)").matches;
     if (!desktop) scroller?.scrollTo(0, 0);
-    setMoreOpen(false);
-    setTitleOn(false);
   }, [path]);
-
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    setPageTitle(readPageTitle());
-    const onTitle = (event: Event) => setPageTitle((event as CustomEvent<string>).detail || "");
-    const onScroll = () => {
-      const desktop = window.matchMedia("(min-width: 768px)").matches;
-      const y = desktop ? window.scrollY : (scroller?.scrollTop ?? 0);
-      setTitleOn(y > 56);
-    };
-    window.addEventListener("shelf-title", onTitle);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    scroller?.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("shelf-title", onTitle);
-      window.removeEventListener("scroll", onScroll);
-      scroller?.removeEventListener("scroll", onScroll);
-    };
-  }, []);
 
   const syncLabel = sync === "syncing" ? "Syncing" : sync === "error" ? "Sync failed" : sync === "synced" ? "Up to date" : "";
 
@@ -185,25 +118,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {unread ? <span className="absolute -right-1 -top-1 size-2 rounded-full bg-[var(--danger)]" /> : null}
           </button>
         </div>
-        <nav className="flex flex-col gap-5">
-          {GROUPS.map((group) => (
-            <div key={group.label}>
-              <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--tertiary)]">{group.label}</div>
-              <div className="flex flex-col gap-0.5">
-                {group.items.map((item) => {
-                  const active = isActive(path, item.href);
-                  return (
-                    <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
-                      <Icon name={item.icon} size={16} />
-                      <span className="flex-1">{item.label}</span>
-                      {item.href === "/transactions" && reviewCount > 0 ? <span className="nav-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <Link href="/settings" prefetch aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav ${isActive(path, "/settings") ? "active" : ""}`}>
+        <nav className="flex flex-1 flex-col gap-0.5">
+          {PRIMARY.map((item) => {
+            const active = isActive(path, item.href);
+            return (
+              <Link key={item.href} href={item.href} prefetch aria-current={active ? "page" : undefined} className={`ios-nav ${active ? "active" : ""}`}>
+                <Icon name={item.icon} size={16} />
+                <span className="flex-1">{item.label}</span>
+                {item.href === "/transactions" && reviewCount > 0 ? <span className="nav-count">{reviewCount > 99 ? "99+" : reviewCount}</span> : null}
+              </Link>
+            );
+          })}
+          <Link href="/settings" prefetch aria-current={isActive(path, "/settings") ? "page" : undefined} className={`ios-nav mt-auto ${isActive(path, "/settings") ? "active" : ""}`}>
             <Icon name="gear" size={16} />
             Settings
           </Link>
@@ -211,15 +137,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:h-auto md:min-h-dvh md:overflow-visible">
-        <div className="z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)]/92 px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] backdrop-blur md:hidden">
-          <span className="text-[15px] font-semibold tracking-[-0.03em]">{syncLabel || "Shelf"}</span>
-          <span className={`nav-title ${titleOn && pageTitle ? "is-shown" : ""}`}>{pageTitle}</span>
-          <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
-            <Icon name="bell" size={20} />
-            {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
-          </button>
+        <div className="z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)] px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:hidden">
+          <span className="text-[13px] text-[var(--muted)]">{syncLabel || "\u00A0"}</span>
+          <span className="flex items-center">
+            <Link href="/settings" prefetch className="flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Settings">
+              <Icon name="gear" size={20} />
+            </Link>
+            <button type="button" className="relative flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
+              <Icon name="bell" size={20} />
+              {unread ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[var(--danger)]" /> : null}
+            </button>
+          </span>
         </div>
-        <main ref={scrollerRef} className={`app-main${arrive ? " app-arrive" : ""}`}>
+        <main ref={scrollerRef} className="app-main">
           {children}
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
@@ -242,32 +172,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
-          <button
-            type="button"
-            className={`ios-tab ${moreActive && !PRIMARY.some((item) => isActive(path, item.href)) ? "active" : ""}`}
-            onClick={() => setMoreOpen(true)}
-            aria-label="More"
-          >
-            <span className="ios-tab-glyph" aria-hidden>
-              <Icon name="more" size={22} />
-            </span>
-            More
-          </button>
         </nav>
       </div>
-
-      {moreOpen ? (
-        <Drawer title="More" onClose={() => setMoreOpen(false)}>
-          <div className="card">
-            {OVERFLOW.map((item) => (
-              <Link key={item.href} href={item.href} prefetch className="data-row" onClick={() => setMoreOpen(false)}>
-                <Icon name={item.icon} size={18} />
-                <span className="flex-1">{item.label}</span>
-              </Link>
-            ))}
-          </div>
-        </Drawer>
-      ) : null}
 
       <CommandPalette />
       <UndoHost />

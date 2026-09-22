@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { writeQuery } from "@/lib/use-query";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { peekQuery, writeQuery } from "@/lib/use-query";
 import { AppShell } from "./AppShell";
 import { SyncPoller } from "./SyncPoller";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [plaid, setPlaid] = useState(false);
+
+  useLayoutEffect(() => {
+    const cached = peekQuery<{ plaidConfigured?: boolean; itemCount?: number }>("dashboard");
+    if (!cached) return;
+    setPlaid(Boolean(cached.plaidConfigured && (cached.itemCount ?? 0) > 0));
+    setReady(true);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -34,9 +41,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       void Promise.allSettled([
         fetch("/api/accounts").then(async (r) => (r.ok ? writeQuery("accounts", await r.json()) : null)),
         fetch("/api/budget").then(async (r) => (r.ok ? writeQuery("budget:current", await r.json()) : null)),
-        fetch("/api/cash-flow?grain=month&months=12").then(async (r) =>
-          r.ok ? writeQuery("cash-flow:grain=month&months=12", await r.json()) : null,
-        ),
       ]);
       setReady(true);
     })();
