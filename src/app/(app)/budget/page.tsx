@@ -186,7 +186,7 @@ export default function BudgetPage() {
 
         {budget.expensePlannedCents <= 0 ? (
           <button className="shelf-btn" type="button" onClick={() => void suggest()}>
-            Fill from a usual month
+            Use your usual spending
           </button>
         ) : null}
 
@@ -265,7 +265,7 @@ export default function BudgetPage() {
                 }}
               >
                 <span className="min-w-0">
-                  <span className="block font-medium">Fill from a usual month</span>
+                  <span className="block font-medium">Use your usual spending</span>
                   <span className="block text-[13px] font-normal text-[var(--muted)]">Replace each plan with what you typically spend.</span>
                 </span>
               </button>
@@ -500,8 +500,6 @@ function CategoryRow({
 }) {
   const paced = row.availableCents > 0;
   const over = paced && row.remainingCents < 0;
-  const usual =
-    row.usualCents != null && row.usualCents > 0 && Math.abs(row.availableCents - row.usualCents) / row.usualCents < 0.05;
   return (
     <button type="button" className="budget-row" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
@@ -512,27 +510,17 @@ function CategoryRow({
           </span>
           {paced ? (
             <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">
-              {row.spentCents === 0 ? (
-                usual ? (
-                  "No charges this month. This is your usual month, kept as the plan."
-                ) : (
-                  "No charges this month. This plan was carried from an earlier month."
-                )
-              ) : over ? (
+              <MoneyText cents={row.spentCents} /> of <MoneyText cents={row.availableCents} />
+              {row.rolloverInCents > 0 ? (
                 <>
-                  <MoneyText cents={Math.abs(row.remainingCents)} /> over a <MoneyText cents={row.availableCents} /> plan
+                  {" · "}
+                  <MoneyText cents={row.rolloverInCents} /> carried in
                 </>
-              ) : (
-                <>
-                  <MoneyText cents={row.availableCents} /> plan
-                </>
-              )}
+              ) : null}
             </span>
-          ) : (
-            <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">Charged this month</span>
-          )}
+          ) : null}
         </span>
-        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={row.spentCents} />
+        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={paced ? row.remainingCents : row.spentCents} />
       </span>
       {paced ? (
         <span className="my-2.5 block">
@@ -566,6 +554,7 @@ function CategorySheet({
 }) {
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [txs, setTxs] = useState<MonthTx[] | null>(null);
+  const [inSafe, setInSafe] = useState(editor.row.category.flexBucket === "flex");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const categoryId = editor.row.category.id;
 
@@ -609,23 +598,28 @@ function CategorySheet({
     if (editor.name.trim() && editor.name.trim() !== row.category.name) {
       jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, name: editor.name.trim() }) }));
     }
+    if (editor.rollover !== row.category.rollover) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
+    }
+    const wasFlex = row.category.flexBucket === "flex";
+    if (inSafe !== wasFlex) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: inSafe ? "flex" : "fixed" }) }));
+    }
     void onCommit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, onClose);
   }
 
   return (
     <Sheet title={editor.name || "Category"} onClose={onClose}>
       <form className="space-y-4" onSubmit={save}>
-        <Field label="Plan" hint={`Carried amount for ${shortDate(start)}–${shortDate(end)}. This is not a charge.`}>
+        <Field label="Plan">
           <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => onChange({ ...editor, planned: event.target.value })} />
         </Field>
         <div>
-          <div className="field-label">Charges from {shortDate(start)} through {shortDate(end)}</div>
+          <div className="field-label">This month</div>
           {txs == null ? (
             <p className="mt-2 text-[15px] text-[var(--muted)]">Loading…</p>
           ) : txs.length === 0 ? (
-            <p className="mt-2 text-[15px] leading-snug text-[var(--muted)]">
-              Nothing posted in this category between those dates. The plan was carried from an earlier month. Lower it if you do not want it. If the payment is under another category, move it here.
-            </p>
+            <p className="mt-2 text-[15px] text-[var(--muted)]">Nothing in this category yet.</p>
           ) : (
             <div className="card mt-2">
               {txs.map((tx) => (
@@ -646,6 +640,14 @@ function CategorySheet({
         <Field label="Name">
           <input className="shelf-input" value={editor.name} onChange={(event) => onChange({ ...editor, name: event.target.value })} />
         </Field>
+        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
+          Rollover
+          <span className={`switch ${editor.rollover ? "on" : ""}`} />
+        </button>
+        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={inSafe} onClick={() => setInSafe((value) => !value)}>
+          Count in safe to spend
+          <span className={`switch ${inSafe ? "on" : ""}`} />
+        </button>
         <button className="shelf-btn w-full">Save</button>
         <button
           className="text-btn"
