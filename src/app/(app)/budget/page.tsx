@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { CategoryPicker, type CatGroup } from "@/components/CategoryPicker";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
+import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
-import { addMonths, monthName, monthRange } from "@/lib/dates";
+import { addMonths, dayLabel, monthName, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
@@ -49,11 +51,18 @@ type Budget = {
   flex: { fixed: Row[]; non_monthly: Row[]; flex: Row[] };
 };
 
-type Editor =
-  | { kind: "row"; row: Row; planned: string; name: string; rollover: boolean }
-  | { kind: "flex"; amount: string }
-  | { kind: "add"; groupId: string; name: string }
-  | null;
+type RowEditor = { kind: "row"; row: Row; planned: string; name: string; rollover: boolean };
+
+type Editor = RowEditor | { kind: "flex"; amount: string } | { kind: "add"; groupId: string; name: string } | null;
+
+type MonthTx = {
+  id: string;
+  name: string;
+  merchantName: string | null;
+  amountCents: number;
+  date: string;
+  categoryId: string | null;
+};
 
 export default function BudgetPage() {
   const [cursor, setCursor] = useState<{ year?: number; month?: number }>({});
@@ -244,7 +253,7 @@ export default function BudgetPage() {
 
         {hiddenCount > 0 ? (
           <button type="button" className="text-btn" onClick={() => setShowUnused((value) => !value)}>
-            {showUnused ? "Hide unused categories" : `Show ${hiddenCount} unused ${hiddenCount === 1 ? "category" : "categories"}`}
+            {showUnused ? "Hide other categories" : `Show ${hiddenCount} other ${hiddenCount === 1 ? "category" : "categories"}`}
           </button>
         ) : null}
 
@@ -254,7 +263,10 @@ export default function BudgetPage() {
             <button type="button" className="card w-full px-4 py-3.5 text-left" onClick={() => setEditor({ kind: "flex", amount: (flexPlan / 100).toFixed(0) })}>
               <span className="flex items-start justify-between gap-3">
                 <span className="font-medium">{flexPlan > 0 ? "Remaining" : "Spent"}</span>
-                <MoneyText cents={flexPlan > 0 ? flexPlan - flexSpent : flexSpent} signed={flexPlan > 0} />
+                <MoneyText
+                  className={flexPlan > 0 && flexPlan - flexSpent < 0 ? "text-[var(--danger)]" : ""}
+                  cents={flexPlan > 0 ? flexPlan - flexSpent : flexSpent}
+                />
               </span>
               {flexPlan > 0 ? (
                 <span className="mt-2.5 block">
@@ -312,12 +324,6 @@ export default function BudgetPage() {
               <button type="button" className="data-row w-full text-left font-medium" onClick={() => void openLastMonth()}>
                 Last month
               </button>
-              <Link href="/goals" className="data-row" onClick={() => setPlanOpen(false)}>
-                Goals
-              </Link>
-              <Link href="/recurring" className="data-row" onClick={() => setPlanOpen(false)}>
-                Bills
-              </Link>
             </div>
           </Sheet>
         ) : null}
@@ -376,77 +382,23 @@ export default function BudgetPage() {
         ) : null}
 
         {editor?.kind === "row" ? (
-          <Sheet title={editor.name || "Category"} onClose={() => setEditor(null)}>
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const row = editor.row;
-                const planned = dollarsToCents(editor.planned || 0);
-                const jobs: Promise<unknown>[] = [];
-                if (planned !== row.plannedCents) {
-                  jobs.push(
-                    api("/api/budget", {
-                      method: "PUT",
-                      body: JSON.stringify({ year: budget.year, month: budget.month, items: [{ categoryId: row.category.id, plannedCents: planned }] }),
-                    }),
-                  );
-                }
-                if (editor.name.trim() && editor.name.trim() !== row.category.name) {
-                  jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, name: editor.name.trim() }) }));
-                }
-                if (editor.rollover !== row.category.rollover) {
-                  jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
-                }
-                void commit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, () => setEditor(null));
-              }}
-            >
-              <label className="field">
-                <span className="field-label">Name</span>
-                <input className="shelf-input" value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} />
-              </label>
-              <label className="field">
-                <span className="field-label">Planned</span>
-                <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => setEditor({ ...editor, planned: event.target.value })} />
-              </label>
-              <button type="button" className="data-row w-full justify-between" aria-pressed={editor.rollover} onClick={() => setEditor({ ...editor, rollover: !editor.rollover })}>
-                Rollover
-                <span className={`switch ${editor.rollover ? "on" : ""}`} />
-              </button>
-              <button className="shelf-btn w-full">Save</button>
-              <div className="flex flex-wrap gap-x-4">
-                <Link href={activityHref({ categoryId: editor.row.category.id, start: range.start, end: range.end })} className="text-btn">
-                  Activity
-                </Link>
-                <button
-                  className="text-btn"
-                  type="button"
-                  onClick={() => {
-                    void api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: editor.row.category.id, flexBucket: "flex" }) }).then(() => {
-                      setEditor(null);
-                      invalidateQueries("budget:");
-                      reload();
-                    });
-                  }}
-                >
-                  Count this in safe to spend
-                </button>
-                <button
-                  className="text-btn"
-                  type="button"
-                  onClick={() => {
-                    void api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: editor.row.category.id, entity: "category" }) }).then(() => {
-                      setEditor(null);
-                      invalidateQueries("budget:");
-                      reload();
-                    });
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </form>
-          </Sheet>
+          <CategorySheet
+            key={editor.row.category.id}
+            editor={editor}
+            year={budget.year}
+            month={budget.month}
+            start={range.start}
+            end={range.end}
+            onChange={setEditor}
+            onClose={() => setEditor(null)}
+            onCommit={commit}
+            onMoved={() => {
+              invalidateQueries("budget:");
+              invalidateQueries("activity:");
+              invalidateQueries("dashboard");
+              reload();
+            }}
+          />
         ) : null}
 
         {editor?.kind === "flex" ? (
@@ -606,36 +558,175 @@ function CategoryRow({
   onOpen: () => void;
 }) {
   const paced = row.availableCents > 0;
+  const over = paced && row.remainingCents < 0;
   const pace = budgetPace(row.spentCents, row.availableCents, year, month);
   const paceNote = pace.tone === "over" ? "Over" : pace.tone === "hot" ? "Running hot" : "";
   return (
     <button type="button" className="budget-row" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="spend-dot" style={{ background: color }} />
-          <span className="min-w-0 truncate font-medium">{row.category.name}</span>
+        <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="spend-dot" style={{ background: color }} />
+            <span className="min-w-0 truncate font-medium">{row.category.name}</span>
+          </span>
+          {paced ? (
+            <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">
+              <MoneyText cents={row.spentCents} /> of <MoneyText cents={row.availableCents} />
+              {row.rolloverInCents > 0 ? (
+                <>
+                  {" · "}
+                  <MoneyText cents={row.rolloverInCents} /> carried in
+                </>
+              ) : null}
+              {paceNote ? <span className="text-[var(--danger)]"> · {paceNote}</span> : null}
+            </span>
+          ) : null}
         </span>
-        {paced ? (
-          <MoneyText className="shrink-0" cents={row.remainingCents} signed />
-        ) : (
-          <MoneyText className="shrink-0" cents={row.spentCents} />
-        )}
+        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={paced ? row.remainingCents : row.spentCents} />
       </span>
       {paced ? (
         <span className="my-2.5 block">
           <ProgressBar value={row.spentCents} max={row.availableCents} color={color} />
         </span>
       ) : null}
-      {row.rolloverInCents > 0 || paceNote ? (
-        <span className={`flex flex-wrap gap-x-3 text-[13px] text-[var(--muted)] ${paced ? "" : "mt-1"}`}>
-          {row.rolloverInCents > 0 ? (
-            <span>
-              +<MoneyText cents={row.rolloverInCents} /> carried in
-            </span>
-          ) : null}
-          {paceNote ? <span className="text-[var(--danger)]">{paceNote}</span> : null}
-        </span>
-      ) : null}
     </button>
+  );
+}
+
+function CategorySheet({
+  editor,
+  year,
+  month,
+  start,
+  end,
+  onChange,
+  onClose,
+  onCommit,
+  onMoved,
+}: {
+  editor: RowEditor;
+  year: number;
+  month: number;
+  start: string;
+  end: string;
+  onChange: (next: RowEditor) => void;
+  onClose: () => void;
+  onCommit: (work: (() => Promise<void>) | null, close: () => void) => Promise<void>;
+  onMoved: () => void;
+}) {
+  const [groups, setGroups] = useState<CatGroup[]>([]);
+  const [txs, setTxs] = useState<MonthTx[] | null>(null);
+  const [inFlex, setInFlex] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const categoryId = editor.row.category.id;
+
+  useEffect(() => {
+    let live = true;
+    void api<{ groups: CatGroup[] }>("/api/categories").then((res) => {
+      if (live) setGroups(res.groups);
+    });
+    void api<{ transactions: MonthTx[] }>(`/api/transactions?categoryId=${categoryId}&start=${start}&end=${end}`).then((res) => {
+      if (live) setTxs(res.transactions);
+    });
+    return () => {
+      live = false;
+    };
+  }, [categoryId, start, end]);
+
+  async function reassign(tx: MonthTx, nextId: string) {
+    const next = nextId || null;
+    if (next === (tx.categoryId ?? null)) return;
+    await api(`/api/transactions/${tx.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ categoryId: next, reviewed: true }),
+    });
+    setTxs((current) => (current ?? []).filter((row) => row.id !== tx.id));
+    onMoved();
+  }
+
+  function save(event: FormEvent) {
+    event.preventDefault();
+    const row = editor.row;
+    const planned = dollarsToCents(editor.planned || 0);
+    const jobs: Promise<unknown>[] = [];
+    if (planned !== row.plannedCents) {
+      jobs.push(
+        api("/api/budget", {
+          method: "PUT",
+          body: JSON.stringify({ year, month, items: [{ categoryId: row.category.id, plannedCents: planned }] }),
+        }),
+      );
+    }
+    if (editor.name.trim() && editor.name.trim() !== row.category.name) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, name: editor.name.trim() }) }));
+    }
+    if (editor.rollover !== row.category.rollover) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
+    }
+    if (inFlex) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: "flex" }) }));
+    }
+    void onCommit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, onClose);
+  }
+
+  return (
+    <Sheet title={editor.name || "Category"} onClose={onClose}>
+      <form className="space-y-4" onSubmit={save}>
+        <Field label="Plan">
+          <input className="shelf-input" inputMode="decimal" value={editor.planned} onChange={(event) => onChange({ ...editor, planned: event.target.value })} />
+        </Field>
+        <div>
+          <div className="field-label">This month</div>
+          {txs == null ? (
+            <p className="mt-2 text-[15px] text-[var(--muted)]">Loading…</p>
+          ) : txs.length === 0 ? (
+            <p className="mt-2 text-[15px] text-[var(--muted)]">Nothing in this category yet.</p>
+          ) : (
+            <div className="card mt-2">
+              {txs.map((tx) => (
+                <div key={tx.id} className="data-row flex-col items-stretch gap-2">
+                  <span className="flex w-full items-baseline justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{tx.merchantName || tx.name}</span>
+                      <span className="text-[13px] text-[var(--muted)]">{dayLabel(tx.date)}</span>
+                    </span>
+                    <MoneyText className="shrink-0" cents={tx.amountCents} flow />
+                  </span>
+                  <CategoryPicker groups={groups} value={tx.categoryId ?? categoryId} onChange={(id) => void reassign(tx, id)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <Field label="Name">
+          <input className="shelf-input" value={editor.name} onChange={(event) => onChange({ ...editor, name: event.target.value })} />
+        </Field>
+        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
+          Rollover
+          <span className={`switch ${editor.rollover ? "on" : ""}`} />
+        </button>
+        <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={inFlex} onClick={() => setInFlex((value) => !value)}>
+          Count this in safe to spend
+          <span className={`switch ${inFlex ? "on" : ""}`} />
+        </button>
+        <button className="shelf-btn w-full">Save</button>
+        <button
+          className="text-btn"
+          type="button"
+          onClick={() => {
+            if (!confirmDelete) {
+              setConfirmDelete(true);
+              return;
+            }
+            void onCommit(
+              () => api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: categoryId, entity: "category" }) }).then(() => undefined),
+              onClose,
+            );
+          }}
+        >
+          {confirmDelete ? "Delete this category?" : "Delete"}
+        </button>
+      </form>
+    </Sheet>
   );
 }

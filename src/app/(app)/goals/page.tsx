@@ -4,11 +4,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { Segment } from "@/components/ui/Segment";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
-import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { CategoryPicker, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
 import { mediumDate } from "@/lib/dates";
 import { goalPace } from "@/lib/goal-pace";
@@ -38,6 +40,7 @@ export default function GoalsPage() {
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { flash, run } = useConfirmFlash();
   const goals = data?.goals ?? [];
   const accounts = data?.accounts ?? [];
@@ -47,11 +50,13 @@ export default function GoalsPage() {
   }, []);
 
   function openNew() {
+    setConfirmDelete(false);
     setForm(empty);
     setEditing("new");
   }
 
   function openEdit(goal: Goal) {
+    setConfirmDelete(false);
     setForm({
       name: goal.name,
       kind: goal.kind,
@@ -92,7 +97,9 @@ export default function GoalsPage() {
   }
 
   async function remove(goal: Goal) {
-    await api("/api/goals", { method: "DELETE", body: JSON.stringify({ id: goal.id }) });
+    await run(async () => {
+      await api("/api/goals", { method: "DELETE", body: JSON.stringify({ id: goal.id }) });
+    });
     setEditing(null);
     reload();
   }
@@ -158,19 +165,26 @@ export default function GoalsPage() {
       {editing ? (
         <Sheet title={editing === "new" ? "New goal" : "Edit goal"} onClose={() => setEditing(null)}>
           <form className="space-y-3" onSubmit={save}>
-            <input className="shelf-input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <select className="shelf-input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as "save_up" | "pay_down" })} aria-label="Kind">
-              <option value="save_up">Save up</option>
-              <option value="pay_down">Pay down</option>
-            </select>
-            <input className="shelf-input" inputMode="decimal" placeholder="Target" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
-            <input className="shelf-input" type="date" aria-label="Target date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
-            <label className="field">
-              <span className="field-label">Budget category</span>
-              <CategorySelect groups={groups} value={form.categoryId} onChange={(id) => setForm({ ...form, categoryId: id })} emptyLabel="No category" />
-            </label>
+            <Segment
+              value={form.kind}
+              options={[
+                { value: "save_up", label: "Save up" },
+                { value: "pay_down", label: "Pay down" },
+              ]}
+              onChange={(kind) => setForm({ ...form, kind: kind as "save_up" | "pay_down" })}
+            />
+            <Field label="Target">
+              <input className="shelf-input" inputMode="decimal" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+            </Field>
+            <Field label="Name">
+              <input className="shelf-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </Field>
+            <Field label="Target date">
+              <input className="shelf-input" type="date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
+            </Field>
             <div>
-              <div className="mb-1 text-[13px] text-[var(--muted)]">Linked accounts</div>
+              <div className="field-label">Linked accounts</div>
+              <p className="field-hint mb-2">Progress comes from these balances.</p>
               <div className="card">
                 {accounts.map((account) => {
                   const on = form.accountIds.includes(account.id);
@@ -184,11 +198,26 @@ export default function GoalsPage() {
                 {accounts.length === 0 ? <div className="data-row text-[var(--muted)]">Add an account first.</div> : null}
               </div>
             </div>
+            <div>
+              <div className="field-label">Category</div>
+              <p className="field-hint mb-2">Optional.</p>
+              <CategoryPicker groups={groups} value={form.categoryId} onChange={(id) => setForm({ ...form, categoryId: id })} />
+            </div>
             <button className="shelf-btn w-full">Save</button>
           </form>
           {editing !== "new" ? (
-            <button className="shelf-btn danger w-full" type="button" onClick={() => remove(editing)}>
-              Delete
+            <button
+              className="text-btn"
+              type="button"
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                void remove(editing);
+              }}
+            >
+              {confirmDelete ? "Delete this goal?" : "Delete"}
             </button>
           ) : null}
         </Sheet>

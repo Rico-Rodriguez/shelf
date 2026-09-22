@@ -3,14 +3,15 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { DismissRow } from "@/components/DismissRow";
-import { Icon } from "@/components/Icon";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { Sheet } from "@/components/Sheet";
 import { offerUndo } from "@/components/UndoHost";
+import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { Segment } from "@/components/ui/Segment";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
@@ -64,7 +65,9 @@ export default function RecurringPage() {
   const { data, loading, error, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
   const rows = data?.recurrences ?? [];
   const [view, setView] = useState<"list" | "calendar">("list");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [leavingId, setLeavingId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Rec | "new" | null>(null);
@@ -104,9 +107,14 @@ export default function RecurringPage() {
   const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
 
   async function detect() {
-    const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
-    setSuggestions(res.suggestions.filter((draft) => !draft.isIncome));
-    setMenuOpen(true);
+    setFindOpen(true);
+    setFinding(true);
+    try {
+      const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
+      setSuggestions(res.suggestions.filter((draft) => !draft.isIncome));
+    } finally {
+      setFinding(false);
+    }
   }
 
   async function confirm(drafts: Draft[]) {
@@ -117,7 +125,7 @@ export default function RecurringPage() {
     }
     await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: outgoing }) });
     setSuggestions([]);
-    setMenuOpen(false);
+    setFindOpen(false);
     reload();
   }
 
@@ -127,12 +135,13 @@ export default function RecurringPage() {
   }
 
   function openNew() {
+    setConfirmDelete(false);
     setForm(emptyForm);
     setEditing("new");
-    setMenuOpen(false);
   }
 
   function openEdit(row: Rec) {
+    setConfirmDelete(false);
     setForm({
       merchantName: row.merchantName,
       amount: (row.amountCents / 100).toFixed(2),
@@ -218,13 +227,21 @@ export default function RecurringPage() {
     <div className="screen">
       {flash}
       <PageHeader title="Bills">
-        <button className="icon-btn" type="button" aria-label="Bill options" onClick={() => setMenuOpen(true)}>
-          <Icon name="more" size={18} />
+        <button className="text-btn" type="button" onClick={() => void detect()}>
+          Find bills
         </button>
         <button className="shelf-btn" type="button" onClick={openNew}>
           Add
         </button>
       </PageHeader>
+      <Segment
+        value={view}
+        options={[
+          { value: "list", label: "List" },
+          { value: "calendar", label: "Calendar" },
+        ]}
+        onChange={(next) => setView(next === "calendar" ? "calendar" : "list")}
+      />
       <BillsSummary year={focus.year} month={focus.month} monthlyBills={monthlyBills} outflow={outflow} projected={projected} />
 
       {view === "calendar" ? (
@@ -277,26 +294,12 @@ export default function RecurringPage() {
         </section>
       )}
 
-      {menuOpen ? (
-        <Sheet title="Bills" onClose={() => setMenuOpen(false)}>
-          <div className="card">
-            <button className="data-row w-full text-left font-medium" type="button" onClick={() => void detect()}>
-              Find bills
-            </button>
-            <button
-              className="data-row w-full text-left font-medium"
-              type="button"
-              onClick={() => {
-                setView(view === "list" ? "calendar" : "list");
-                setMenuOpen(false);
-              }}
-            >
-              {view === "list" ? "Show calendar" : "Show list"}
-            </button>
-          </div>
+      {findOpen ? (
+        <Sheet title="Find bills" onClose={() => setFindOpen(false)}>
+          {finding ? <p className="text-[15px] text-[var(--muted)]">Looking through activity…</p> : null}
+          {!finding && found.length === 0 ? <p className="text-[15px] text-[var(--muted)]">No new bills turned up.</p> : null}
           {found.length ? (
             <>
-              <h2 className="ios-section">Detected</h2>
               <div className="card">
                 {found.map((draft) => (
                   <div key={draft.merchantName} className="data-row justify-between gap-3">
@@ -326,45 +329,63 @@ export default function RecurringPage() {
       {editing ? (
         <Sheet title={editing === "new" ? "New bill" : form.merchantName || "Bill"} onClose={() => setEditing(null)}>
           <form className="space-y-3" onSubmit={save}>
-            <input className="shelf-input" placeholder="Name" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
-            <input className="shelf-input" inputMode="decimal" placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-            <select className="shelf-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })} aria-label="Cadence">
-              {CADENCES.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <input className="shelf-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required aria-label="Next date" />
-            <label className="field">
-              <span className="field-label">Category</span>
+            <Field label="Name">
+              <input className="shelf-input" value={form.merchantName} onChange={(e) => setForm({ ...form, merchantName: e.target.value })} required />
+            </Field>
+            <Field label="Amount">
+              <input className="shelf-input" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+            </Field>
+            <Field label="How often">
+              <select className="shelf-input" value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>
+                {CADENCES.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Next date">
+              <input className="shelf-input" type="date" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} required />
+            </Field>
+            <Field label="Category">
               <CategorySelect groups={groups} value={form.categoryId} onChange={(id) => setForm({ ...form, categoryId: id })} emptyLabel="No category" />
-            </label>
-            <label className="field">
-              <span className="field-label">Account</span>
+            </Field>
+            <Field label="Account">
               <select className="shelf-input" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
                 <option value="">Any account</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>{account.name}</option>
                 ))}
               </select>
-            </label>
-            <button type="button" className="data-row w-full justify-between rounded-[16px] text-[17px]" aria-pressed={form.kind === "subscription"} onClick={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })}>
+            </Field>
+            <button type="button" className="data-row w-full justify-between rounded-[16px]" aria-pressed={form.kind === "subscription"} onClick={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })}>
               Subscription
               <span className={`switch ${form.kind === "subscription" ? "on" : ""}`} />
             </button>
             <button className="shelf-btn w-full">Save</button>
           </form>
           {editing !== "new" ? (
-            <div className="flex gap-2">
-              <button className="shelf-btn ghost flex-1" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); reload(); })}>
-                Skip cycle
-              </button>
-              <button className="shelf-btn ghost flex-1" type="button" onClick={() => pause(editing)}>
-                {editing.isActive ? "Pause" : "Resume"}
-              </button>
-              <button className="shelf-btn danger flex-1" type="button" onClick={() => remove(editing)}>
-                Delete
+            <div className="space-y-3">
+              <div className="card">
+                <button className="data-row w-full text-left font-medium" type="button" onClick={() => api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); reload(); })}>
+                  Skip this cycle
+                </button>
+                <button className="data-row w-full text-left font-medium" type="button" onClick={() => pause(editing)}>
+                  {editing.isActive ? "Pause" : "Resume"}
+                </button>
+              </div>
+              <button
+                className="text-btn"
+                type="button"
+                onClick={() => {
+                  if (!confirmDelete) {
+                    setConfirmDelete(true);
+                    return;
+                  }
+                  void remove(editing);
+                }}
+              >
+                {confirmDelete ? "Delete this bill?" : "Delete"}
               </button>
             </div>
           ) : null}

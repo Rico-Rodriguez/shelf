@@ -19,9 +19,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { useQuery } from "@/lib/use-query";
-import { dayLabel, monthRange, yearMonth } from "@/lib/dates";
+import { dayLabel, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { rememberCategory } from "@/lib/category-memory";
 import { merchantMatchKey } from "@/lib/plan";
 
@@ -100,6 +101,7 @@ function Activity() {
   const [always, setAlways] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [addMore, setAddMore] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "", income: false });
   const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
   const [frequentCategoryIds, setFrequentCategoryIds] = useState<string[]>([]);
@@ -343,17 +345,25 @@ function Activity() {
     });
   }
 
+  function openAdd() {
+    setAddMore(false);
+    setManual({ accountId: "", name: "", amount: "", date: todayISO(), categoryId: "", income: false });
+    setShowAdd(true);
+  }
+
   async function addManual(e: FormEvent) {
     e.preventDefault();
-    await api("/api/transactions", {
-      method: "POST",
-      body: JSON.stringify({
-        accountId: manual.accountId,
-        name: manual.name,
-        amount: manual.income ? -Math.abs(Number(manual.amount)) : Math.abs(Number(manual.amount)),
-        date: manual.date || undefined,
-        categoryId: manual.categoryId || undefined,
-      }),
+    await run(async () => {
+      await api("/api/transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          accountId: manual.accountId,
+          name: manual.name,
+          amount: manual.income ? -Math.abs(Number(manual.amount)) : Math.abs(Number(manual.amount)),
+          date: manual.date || undefined,
+          categoryId: manual.categoryId || undefined,
+        }),
+      });
     });
     setManual({ accountId: "", name: "", amount: "", date: "", categoryId: "", income: false });
     setShowAdd(false);
@@ -450,7 +460,7 @@ function Activity() {
     <div className="screen">
       {flash}
       <PageHeader title="Activity">
-        <button className="shelf-btn" type="button" onClick={() => setShowAdd(true)}>
+        <button className="shelf-btn" type="button" onClick={openAdd}>
           Add
         </button>
       </PageHeader>
@@ -655,14 +665,14 @@ function Activity() {
       {edit ? (
         <Sheet title={edit.merchantName || edit.name} onClose={() => setEdit(null)}>
           <div>
-            <p className="text-[13px] text-[var(--muted)]">
+            <div className="text-[32px] font-semibold tracking-[-0.03em]">
+              <MoneyText cents={edit.amountCents} flow />
+            </div>
+            <p className="mt-1 text-[13px] text-[var(--muted)]">
               {dayLabel(edit.date)}
               {edit.account?.name ? ` · ${edit.account.name}` : ""}
               {edit.pending ? " · Pending" : ""}
             </p>
-            <div className="mt-1 text-[32px] font-semibold tracking-[-0.03em]">
-              <MoneyText cents={edit.amountCents} flow />
-            </div>
             {edit.originalDescription && edit.originalDescription !== edit.name ? (
               <p className="mt-1 text-[13px] text-[var(--muted)]">{edit.originalDescription}</p>
             ) : null}
@@ -671,120 +681,117 @@ function Activity() {
             </Link>
           </div>
 
-          <Field label="Name">
-            <input className="shelf-input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-          </Field>
           <Field label="Category">
             <CategoryPicker groups={groups} value={edit.categoryId ?? ""} onChange={(id) => setEdit({ ...edit, categoryId: id || null })} />
           </Field>
+          <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
+            <span>Always categorize this merchant this way</span>
+            <span className={`switch ${always ? "on" : ""}`} />
+          </button>
           <button type="button" className="text-btn" onClick={() => setShowMore((value) => !value)}>
             {showMore ? "Less" : "More"}
           </button>
           {showMore ? (
             <>
-          <Field label="Goal">
-            <select className="shelf-input" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
-              <option value="">No goal</option>
-              {goals.map((goal) => (
-                <option key={goal.id} value={goal.id}>
-                  {goal.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Linked transfer">
-            <select
-              className="shelf-input"
-              value={edit.transferPairId ?? ""}
-              onChange={(e) => setEdit({ ...edit, transferPairId: e.target.value || null, isTransfer: Boolean(e.target.value) || edit.isTransfer })}
-            >
-              <option value="">No linked transfer</option>
-              {pairs.map((pair) => (
-                <option key={pair.id} value={pair.id}>
-                  {pair.date} · {pair.name}
-                  {pair.account ? ` · ${pair.account}` : ""}
-                </option>
-              ))}
-              {edit.transferPairId && !pairs.some((pair) => pair.id === edit.transferPairId) ? <option value={edit.transferPairId}>Linked transfer</option> : null}
-            </select>
-          </Field>
-          <Field label="Note">
-            <textarea className="shelf-input" rows={2} value={edit.notes ?? ""} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
-          </Field>
-          <Field label="Tags">
-            <input className="shelf-input" value={edit.tagText} onChange={(e) => setEdit({ ...edit, tagText: e.target.value })} />
-          </Field>
-
-          <div className="space-y-3">
-            <div className="field-label">Splits</div>
-            {edit.splitDrafts.map((part, index) => (
-              <div key={index} className="flex gap-2">
-                <CategorySelect
-                  groups={groups}
-                  value={part.categoryId}
-                  onChange={(id) => {
-                    const splitDrafts = edit.splitDrafts.slice();
-                    splitDrafts[index] = { ...part, categoryId: id };
-                    setEdit({ ...edit, splitDrafts });
-                  }}
-                  emptyLabel="Category"
-                />
-                <input
-                  className="shelf-input max-w-28"
-                  inputMode="decimal"
-                  aria-label="Split amount"
-                  value={part.amount}
-                  onChange={(e) => {
-                    const splitDrafts = edit.splitDrafts.slice();
-                    splitDrafts[index] = { ...part, amount: e.target.value };
-                    setEdit({ ...edit, splitDrafts });
-                  }}
-                />
+              <Field label="Name">
+                <input className="shelf-input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+              </Field>
+              <Field label="Goal">
+                <select className="shelf-input" value={edit.goalId ?? ""} onChange={(e) => setEdit({ ...edit, goalId: e.target.value || null })}>
+                  <option value="">No goal</option>
+                  {goals.map((goal) => (
+                    <option key={goal.id} value={goal.id}>
+                      {goal.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Linked transfer">
+                <select
+                  className="shelf-input"
+                  value={edit.transferPairId ?? ""}
+                  onChange={(e) => setEdit({ ...edit, transferPairId: e.target.value || null, isTransfer: Boolean(e.target.value) || edit.isTransfer })}
+                >
+                  <option value="">No linked transfer</option>
+                  {pairs.map((pair) => (
+                    <option key={pair.id} value={pair.id}>
+                      {pair.date} · {pair.name}
+                      {pair.account ? ` · ${pair.account}` : ""}
+                    </option>
+                  ))}
+                  {edit.transferPairId && !pairs.some((pair) => pair.id === edit.transferPairId) ? <option value={edit.transferPairId}>Linked transfer</option> : null}
+                </select>
+              </Field>
+              <Field label="Note">
+                <textarea className="shelf-input" rows={2} value={edit.notes ?? ""} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+              </Field>
+              <Field label="Tags">
+                <input className="shelf-input" value={edit.tagText} onChange={(e) => setEdit({ ...edit, tagText: e.target.value })} />
+              </Field>
+              <div className="space-y-3">
+                <div className="field-label">Splits</div>
+                {edit.splitDrafts.map((part, index) => (
+                  <div key={index} className="flex gap-2">
+                    <CategorySelect
+                      groups={groups}
+                      value={part.categoryId}
+                      onChange={(id) => {
+                        const splitDrafts = edit.splitDrafts.slice();
+                        splitDrafts[index] = { ...part, categoryId: id };
+                        setEdit({ ...edit, splitDrafts });
+                      }}
+                      emptyLabel="Category"
+                    />
+                    <input
+                      className="shelf-input max-w-28"
+                      inputMode="decimal"
+                      aria-label="Split amount"
+                      value={part.amount}
+                      onChange={(e) => {
+                        const splitDrafts = edit.splitDrafts.slice();
+                        splitDrafts[index] = { ...part, amount: e.target.value };
+                        setEdit({ ...edit, splitDrafts });
+                      }}
+                    />
+                    <button
+                      className="shelf-btn ghost"
+                      type="button"
+                      onClick={() => setEdit({ ...edit, splitDrafts: edit.splitDrafts.filter((_, i) => i !== index) })}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
                 <button
                   className="shelf-btn ghost"
                   type="button"
-                  onClick={() => setEdit({ ...edit, splitDrafts: edit.splitDrafts.filter((_, i) => i !== index) })}
+                  onClick={() => setEdit({ ...edit, splitDrafts: [...edit.splitDrafts, { categoryId: "", amount: "" }] })}
                 >
-                  Remove
+                  Add split
                 </button>
               </div>
-            ))}
-            <button
-              className="shelf-btn ghost"
-              type="button"
-              onClick={() => setEdit({ ...edit, splitDrafts: [...edit.splitDrafts, { categoryId: "", amount: "" }] })}
-            >
-              Add split
-            </button>
-          </div>
-
-          <div className="card">
-            <button
-              type="button"
-              className="data-row w-full justify-between"
-              aria-pressed={edit.hidden}
-              onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}
-            >
-              Hide from budget
-              <span className={`switch ${edit.hidden ? "on" : ""}`} />
-            </button>
-            <button
-              type="button"
-              className="data-row w-full justify-between"
-              aria-pressed={edit.isTransfer}
-              onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}
-            >
-              Count as transfer
-              <span className={`switch ${edit.isTransfer ? "on" : ""}`} />
-            </button>
-          </div>
-
+              <div className="card">
+                <button
+                  type="button"
+                  className="data-row w-full justify-between"
+                  aria-pressed={edit.hidden}
+                  onClick={() => setEdit({ ...edit, hidden: !edit.hidden })}
+                >
+                  Hide from budget
+                  <span className={`switch ${edit.hidden ? "on" : ""}`} />
+                </button>
+                <button
+                  type="button"
+                  className="data-row w-full justify-between"
+                  aria-pressed={edit.isTransfer}
+                  onClick={() => setEdit({ ...edit, isTransfer: !edit.isTransfer })}
+                >
+                  Count as transfer
+                  <span className={`switch ${edit.isTransfer ? "on" : ""}`} />
+                </button>
+              </div>
             </>
           ) : null}
-          <button type="button" className="data-row w-full justify-between gap-3 text-left" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
-            <span>Always categorize this merchant this way</span>
-            <span className={`switch ${always ? "on" : ""}`} />
-          </button>
           <button className="shelf-btn w-full" type="button" onClick={saveEdit}>
             Save
           </button>
@@ -823,6 +830,33 @@ function Activity() {
             onClick={(e) => e.stopPropagation()}
           >
             <FieldStack>
+              <Field label="Amount">
+                <input
+                  className="shelf-input"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={manual.amount}
+                  onChange={(e) => setManual({ ...manual, amount: e.target.value })}
+                  required
+                />
+              </Field>
+              <Segment
+                value={manual.income ? "in" : "out"}
+                options={[
+                  { value: "out", label: "Spending" },
+                  { value: "in", label: "Income" },
+                ]}
+                onChange={(value) => setManual({ ...manual, income: value === "in" })}
+              />
+              <Field label="Name">
+                <input
+                  className="shelf-input"
+                  placeholder="Coffee, paycheck…"
+                  value={manual.name}
+                  onChange={(e) => setManual({ ...manual, name: e.target.value })}
+                  required
+                />
+              </Field>
               <Field label="Account">
                 <select
                   className="shelf-input"
@@ -838,40 +872,17 @@ function Activity() {
                   ))}
                 </select>
               </Field>
-              <Field label="Name">
-                <input
-                  className="shelf-input"
-                  placeholder="Coffee, paycheck…"
-                  value={manual.name}
-                  onChange={(e) => setManual({ ...manual, name: e.target.value })}
-                  required
-                />
-              </Field>
-              <Field label="Amount">
-                <input
-                  className="shelf-input"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={manual.amount}
-                  onChange={(e) => setManual({ ...manual, amount: e.target.value })}
-                  required
-                />
-              </Field>
-              <button
-                type="button"
-                className="data-row w-full justify-between rounded-[16px]"
-                aria-pressed={manual.income}
-                onClick={() => setManual({ ...manual, income: !manual.income })}
-              >
-                Income
-                <span className={`switch ${manual.income ? "on" : ""}`} />
-              </button>
-              <Field label="Date">
-                <input className="shelf-input" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
-              </Field>
               <Field label="Category">
-                <CategorySelect groups={groups} value={manual.categoryId} onChange={(id) => setManual({ ...manual, categoryId: id })} emptyLabel="Choose category" />
+                <CategoryPicker groups={groups} value={manual.categoryId} onChange={(id) => setManual({ ...manual, categoryId: id })} />
               </Field>
+              <button type="button" className="text-btn" onClick={() => setAddMore((value) => !value)}>
+                {addMore ? "Less" : "More"}
+              </button>
+              {addMore ? (
+                <Field label="Date">
+                  <input className="shelf-input" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
+                </Field>
+              ) : null}
               <button className="shelf-btn w-full">Add transaction</button>
             </FieldStack>
           </form>
