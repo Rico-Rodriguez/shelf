@@ -51,7 +51,7 @@ export function ConnectBank({ onLinked, itemId, label }: { onLinked?: () => void
   const { open, ready } = usePlaidLink({ token, onSuccess });
 
   return (
-    <div className="space-y-2">
+    <div className="inline-flex flex-col items-start gap-2">
       {!token ? (
         <button type="button" className="shelf-btn" onClick={start} disabled={busy}>
           {busy ? "Opening…" : label || "Connect a bank"}

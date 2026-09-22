@@ -144,9 +144,9 @@ export default function HomePage() {
           </p>
         ) : null}
 
-        <Link href="/insights" className="card data-row justify-between">
-          <span>Net worth</span>
-          <MoneyText cents={dash.netWorth.netWorthCents} />
+        <Link href="/insights" className="card data-row justify-between gap-4">
+          <span className="min-w-0">Net worth</span>
+          <MoneyText className="shrink-0" cents={dash.netWorth.netWorthCents} />
         </Link>
       </div>
     </PageShell>
