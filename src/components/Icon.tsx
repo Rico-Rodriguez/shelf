@@ -134,6 +134,8 @@ function glyph(name: string, filled: boolean) {
           <path {...stroke} d="m20 20-3.5-3.5" />
         </>
       );
+    case "filter":
+      return <path {...stroke} d="M4 6h16M7 12h10M10 18h4" />;
     case "spark":
       return <path {...stroke} d="M4 16.5 9 11l3.2 3L20 6.5" />;
     case "bell":

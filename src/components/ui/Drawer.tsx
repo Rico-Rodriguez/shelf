@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { animate } from "motion";
 
-const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+const SPRING = { type: "spring" as const, stiffness: 420, damping: 38 };
 
 function translateY(node: HTMLElement) {
   const value = getComputedStyle(node).transform;
@@ -54,24 +55,30 @@ export function Drawer({
     html.style.overflow = "hidden";
 
     const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setShown(true));
+      requestAnimationFrame(() => {
+        setShown(true);
+        if (desktopSheet() || reducedMotion()) return;
+        void animate(sheet, { transform: "translate3d(0, 0px, 0)" }, SPRING);
+      });
     });
 
-    let closeTimer = 0;
     let closing = false;
 
-    function setMotion(offset: number, animate: boolean, duration = 320) {
-      sheet!.style.transition = animate ? `transform ${duration}ms ${EASE}` : "none";
-      sheet!.style.transform = `translate3d(0, ${Math.max(0, offset)}px, 0)`;
-      if (!desktopSheet()) {
-        const height = sheet!.getBoundingClientRect().height || 1;
-        const fade = Math.min(1, Math.max(0, offset) / height);
-        backdrop!.style.transition = animate ? `opacity ${Math.min(duration, 220)}ms ease` : "none";
+    function setMotion(offset: number, animated: boolean) {
+      if (desktopSheet()) return;
+      const y = Math.max(0, offset);
+      const height = sheet!.getBoundingClientRect().height || 1;
+      const fade = Math.min(1, y / height);
+      if (!animated || reducedMotion()) {
+        sheet!.style.transform = `translate3d(0, ${y}px, 0)`;
         backdrop!.style.opacity = String(1 - fade);
+        return;
       }
+      void animate(sheet!, { transform: `translate3d(0, ${y}px, 0)` }, SPRING);
+      void animate(backdrop!, { opacity: 1 - fade }, { duration: 0.22 });
     }
 
-    function requestClose(velocity = 1) {
+    function requestClose() {
       if (closing) return;
       closing = true;
       if (desktopSheet() || reducedMotion()) {
@@ -79,14 +86,12 @@ export function Drawer({
         return;
       }
       const height = sheet!.getBoundingClientRect().height || 480;
-      const current = Math.max(0, translateY(sheet!));
-      const remaining = Math.max(1, height - current);
-      const duration = Math.round(Math.min(320, Math.max(170, remaining / Math.max(velocity, 0.9))));
-      setMotion(height + 48, true, duration);
-      closeTimer = window.setTimeout(() => onCloseRef.current(), duration + 40);
+      const motion = animate(sheet!, { transform: `translate3d(0, ${height + 48}px, 0)` }, SPRING);
+      void animate(backdrop!, { opacity: 0 }, { duration: 0.2 });
+      void motion.finished.then(() => onCloseRef.current());
     }
 
-    requestCloseRef.current = requestClose;
+    requestCloseRef.current = () => requestClose();
 
     let tracking = false;
     let mode: "undecided" | "sheet" | "content" = "undecided";
@@ -197,8 +202,8 @@ export function Drawer({
       const pulledBack = endVelocity < -0.35;
       const flung = endVelocity > 0.55 && endOffset > 24;
       const far = endOffset > Math.min(180, height * 0.3);
-      if (!pulledBack && (flung || far)) requestClose(Math.max(endVelocity, 0));
-      else setMotion(0, true, 320);
+      if (!pulledBack && (flung || far)) requestClose();
+      else setMotion(0, true);
     }
 
     function onTouchStart(event: TouchEvent) {
@@ -241,7 +246,7 @@ export function Drawer({
     }
 
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") requestClose(1.2);
+      if (event.key === "Escape") requestClose();
     }
 
     sheet.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -261,7 +266,6 @@ export function Drawer({
       document.body.style.overflow = previousBody;
       html.style.overflow = previousHtml;
       cancelAnimationFrame(frame);
-      window.clearTimeout(closeTimer);
       window.removeEventListener("keydown", onKey);
       sheet.removeEventListener("touchstart", onTouchStart);
       scroller.removeEventListener("touchstart", onTouchStart);

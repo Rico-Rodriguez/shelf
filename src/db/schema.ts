@@ -216,6 +216,11 @@ export const recurrences = pgTable("recurrences", {
   secretEnc: text("secret_enc"),
 });
 
+export const suppressedMerchants = pgTable("suppressed_merchants", {
+  merchantKey: text("merchant_key").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const goals = pgTable("goals", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

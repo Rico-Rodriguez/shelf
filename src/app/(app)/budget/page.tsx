@@ -173,7 +173,7 @@ export default function BudgetPage() {
 
   return (
     <PageShell refreshing={refreshing}>
-      <div className="space-y-4">
+      <div className="screen">
         {flash}
         <PageHeader title="Budget">
           <MonthNav

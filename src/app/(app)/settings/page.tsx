@@ -39,7 +39,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="screen">
       <PageHeader title="Settings" />
       {status ? <p className="card px-4 py-3 text-[15px]">{status}</p> : null}
 
@@ -113,7 +113,7 @@ export default function SettingsPage() {
             ))}
           </select>
           <input
-            className="text-[14px]"
+            className="shelf-input text-[14px]"
             type="file"
             accept=".csv,text/csv"
             aria-label="CSV file. Positive amounts are money out."

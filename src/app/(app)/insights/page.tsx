@@ -60,7 +60,7 @@ export default function InsightsPage() {
   const spendingNote = versusShort(data.spendingCents, data.usualSpentCents ?? null);
 
   return (
-    <div className="space-y-6">
+    <div className="screen">
       <PageHeader title="Insights">
         <MonthNav
           year={data.year}

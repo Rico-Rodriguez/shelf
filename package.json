@@ -16,6 +16,7 @@
     "drizzle-orm": "^0.45.2",
     "iron-session": "^9.0.1",
     "jose": "^6.2.12",
+    "motion": "^13.4.1",
     "next": "15.5.25",
     "plaid": "^47.0.0",
     "postgres": "^3.4.9",

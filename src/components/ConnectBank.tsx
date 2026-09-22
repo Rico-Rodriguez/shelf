@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { usePlaidLink, type PlaidLinkOnSuccess } from "react-plaid-link";
 import { api } from "@/lib/client";
 
-export function ConnectBank({ onLinked, itemId, label }: { onLinked?: () => void; itemId?: string; label?: string }) {
+export function ConnectBank({ onLinked, itemId, label, className = "shelf-btn" }: { onLinked?: () => void; itemId?: string; label?: string; className?: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,11 +53,11 @@ export function ConnectBank({ onLinked, itemId, label }: { onLinked?: () => void
   return (
     <div className="inline-flex flex-col items-start gap-2">
       {!token ? (
-        <button type="button" className="shelf-btn" onClick={start} disabled={busy}>
+        <button type="button" className={className} onClick={start} disabled={busy}>
           {busy ? "Opening…" : label || "Connect a bank"}
         </button>
       ) : (
-        <button type="button" className="shelf-btn" onClick={() => open()} disabled={!ready}>
+        <button type="button" className={className} onClick={() => open()} disabled={!ready}>
           Continue with Plaid
         </button>
       )}

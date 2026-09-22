@@ -222,7 +222,7 @@ function Rules() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="screen">
       <Link href="/settings" className="ios-back">
         <span className="inline-flex rotate-180" aria-hidden>
           <Icon name="chevron" size={18} />

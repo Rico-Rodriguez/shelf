@@ -93,21 +93,11 @@ export default function AccountsPage() {
 
   return (
     <PageShell refreshing={refreshing}>
-    <div className="space-y-5">
+    <div className="screen">
       <PageHeader title="Accounts">
-        <div className="flex flex-wrap gap-2">
-          {data.plaidConfigured ? (
-            <>
-              <ConnectBank onLinked={reload} />
-              <button className="shelf-btn secondary" type="button" onClick={sync}>
-                Refresh
-              </button>
-            </>
-          ) : null}
-          <button className="shelf-btn" type="button" onClick={() => setOpen(true)}>
-            Add
-          </button>
-        </div>
+        <button className="shelf-btn" type="button" onClick={() => setOpen(true)}>
+          Add
+        </button>
       </PageHeader>
 
       {visible.length > 0 ? (
@@ -137,6 +127,17 @@ export default function AccountsPage() {
       ) : null}
 
       {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">Add a bank or a balance to see it here.</p> : null}
+
+      {data.plaidConfigured ? (
+        <div className="card">
+          <div className="data-row justify-between gap-3">
+            <ConnectBank className="text-btn" onLinked={reload} />
+            <button className="text-btn" type="button" onClick={() => void sync()}>
+              Refresh
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {institutions.map((group) => {
         const total = group.rows.reduce((sum, account) => {

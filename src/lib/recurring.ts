@@ -1,13 +1,29 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { recurrences, transactions } from "@/db/schema";
+import { recurrences, suppressedMerchants, transactions } from "@/db/schema";
 import { addDays, todayISO } from "./dates";
 import { nid } from "./ids";
-import { inferRecurringKind } from "./plan";
+import { inferRecurringKind, merchantKey } from "./plan";
 import { openRecurrence, openTx, sealedRecurrenceWrite } from "./secrets";
 
-function normalizeMerchant(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+async function blockedMerchants(): Promise<Set<string>> {
+  const db = await getDb();
+  const rows = await db.select({ merchantKey: suppressedMerchants.merchantKey }).from(suppressedMerchants);
+  return new Set(rows.map((row) => row.merchantKey));
+}
+
+export async function suppressMerchant(name: string) {
+  const key = merchantKey(name);
+  if (!key) return;
+  const db = await getDb();
+  await db.insert(suppressedMerchants).values({ merchantKey: key }).onConflictDoNothing();
+}
+
+export async function unsuppressMerchant(name: string) {
+  const key = merchantKey(name);
+  if (!key) return;
+  const db = await getDb();
+  await db.delete(suppressedMerchants).where(eq(suppressedMerchants.merchantKey, key));
 }
 
 function medianInterval(dates: string[]): number | null {
@@ -61,7 +77,7 @@ async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
   const groups = new Map<string, typeof txs>();
   for (const tx of txs) {
     if (tx.hidden || tx.pending) continue;
-    const key = normalizeMerchant(tx.merchantName || tx.name);
+    const key = merchantKey(tx.merchantName || tx.name);
     if (!key) continue;
     const list = groups.get(key) ?? [];
     list.push(tx);
@@ -69,6 +85,7 @@ async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
   }
 
   const existing = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
+  const blocked = await blockedMerchants();
   const drafts: RecurrenceDraft[] = [];
 
   for (const [merchant, list] of groups) {
@@ -86,8 +103,8 @@ async function collectDrafts(dek: Buffer): Promise<RecurrenceDraft[]> {
     const cadence = cadenceFromGap(gap);
     if (!cadence) continue;
     const last = dates.sort().at(-1)!;
-    const already = existing.find((r) => normalizeMerchant(r.merchantName) === merchant);
-    if (already) continue;
+    const already = existing.find((r) => merchantKey(r.merchantName) === merchant);
+    if (already || blocked.has(merchant)) continue;
     const sample = similar[0];
     drafts.push({
       merchantName: sample.merchantName || sample.name,
@@ -110,12 +127,13 @@ export async function previewRecurring(dek: Buffer) {
 export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
   const db = await getDb();
   const existing = new Set(
-    (await db.select().from(recurrences)).map((row) => normalizeMerchant(openRecurrence(row, dek).merchantName)),
+    (await db.select().from(recurrences)).map((row) => merchantKey(openRecurrence(row, dek).merchantName)),
   );
+  const blocked = await blockedMerchants();
   let created = 0;
   for (const draft of drafts) {
-    const merchant = normalizeMerchant(draft.merchantName);
-    if (!merchant || existing.has(merchant)) continue;
+    const merchant = merchantKey(draft.merchantName);
+    if (!merchant || existing.has(merchant) || blocked.has(merchant)) continue;
     await db.insert(recurrences).values({
       id: nid(),
       ...sealedRecurrenceWrite({ merchantName: draft.merchantName, amountCents: draft.amountCents }, dek),

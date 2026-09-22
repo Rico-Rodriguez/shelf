@@ -116,7 +116,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
   }
 
   return (
-    <div className="space-y-4">
+    <div className="screen">
       <Link href="/accounts" className="ios-back">
         <span className="inline-flex rotate-180" aria-hidden>
           <Icon name="chevron" size={18} />
