@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { Icon } from "./Icon";
 import { Drawer } from "./ui/Drawer";
+import { readPageTitle } from "./ui/PageHeader";
 
 const GROUPS = [
   {
@@ -92,6 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [path]);
 
   useEffect(() => {
+    setPageTitle(readPageTitle());
     const onTitle = (event: Event) => setPageTitle((event as CustomEvent<string>).detail || "");
     const onScroll = () => setTitleOn(window.scrollY > 48);
     window.addEventListener("shelf-title", onTitle);

@@ -2,6 +2,17 @@
 
 import { useEffect } from "react";
 
+let currentTitle = "";
+
+export function readPageTitle() {
+  return currentTitle;
+}
+
+function publishTitle(title: string) {
+  currentTitle = title;
+  window.dispatchEvent(new CustomEvent("shelf-title", { detail: title }));
+}
+
 export function PageHeader({
   title,
   subtitle,
@@ -12,10 +23,8 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("shelf-title", { detail: title }));
-    return () => {
-      window.dispatchEvent(new CustomEvent("shelf-title", { detail: "" }));
-    };
+    publishTitle(title);
+    return () => publishTitle("");
   }, [title]);
 
   return (

@@ -312,9 +312,6 @@ export default function BudgetPage() {
               "Nothing rolled over."
             )}
           </p>
-          <button className="shelf-btn w-full" type="button" onClick={dismissReady}>
-            Done
-          </button>
         </Drawer>
       ) : null}
     </PageShell>
