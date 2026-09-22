@@ -207,7 +207,8 @@ function HouseholdPanel({ onStatus }: { onStatus: (message: string) => void }) {
         {data.members.map((member) => (
           <div key={member.userId} className="data-row justify-between gap-3">
             <span className="min-w-0 truncate font-medium">
-              {member.name} <span className="font-normal capitalize text-[var(--muted)]">{member.role}</span>
+              {member.name}
+              {data.members.length > 1 ? <span className="font-normal capitalize text-[var(--muted)]"> {member.role}</span> : null}
             </span>
             {data.role === "owner" && member.role !== "owner" ? (
               <button className="text-[15px] font-medium text-[var(--danger)]" type="button" onClick={() => api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(load)}>

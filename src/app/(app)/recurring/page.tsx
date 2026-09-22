@@ -180,17 +180,11 @@ export default function RecurringPage() {
         projected={projected}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
         <MonthNav year={cursor.year} month={cursor.month} onChange={(year, month) => setCursor({ year, month })} />
-        <Segment
-          className="w-full max-w-xs"
-          value={view}
-          onChange={(value) => setView(value as "calendar" | "list")}
-          options={[
-            { value: "list", label: "List" },
-            { value: "calendar", label: "Calendar" },
-          ]}
-        />
+        <button className="text-btn ml-auto shrink-0" type="button" onClick={() => setView(view === "list" ? "calendar" : "list")}>
+          {view === "list" ? "Calendar" : "List"}
+        </button>
       </div>
       <Segment
         value={bucket}
@@ -371,13 +365,11 @@ function BillsSummary({
       : [];
   const delta = outflow - monthlyBills;
   const status =
-    monthlyBills <= 0
+    monthlyBills <= 0 || Math.abs(delta) < 100
       ? null
-      : Math.abs(delta) < 100
-        ? { label: "A typical month", tone: "neutral" as const }
-        : delta > 0
-          ? { label: `${formatMoney(delta)} above typical`, tone: "warn" as const }
-          : { label: `${formatMoney(-delta)} under typical`, tone: "good" as const };
+      : delta > 0
+        ? { label: `${formatMoney(delta)} above typical`, tone: "warn" as const }
+        : { label: `${formatMoney(-delta)} under typical`, tone: "good" as const };
   const next = [...projected].filter((row) => row.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
 
   return (

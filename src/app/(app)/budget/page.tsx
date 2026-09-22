@@ -182,6 +182,12 @@ export default function BudgetPage() {
 
         <BudgetSummary budget={budget} />
 
+        {budget.expensePlannedCents <= 0 ? (
+          <button className="shelf-btn" type="button" onClick={() => void suggest()}>
+            Use your usual spending
+          </button>
+        ) : null}
+
         {visibleGroups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
           const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
