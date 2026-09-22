@@ -5,13 +5,14 @@ import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { ProgressBar } from "@/components/ProgressBar";
+import { Sheet } from "@/components/Sheet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageShell, PageSkeleton } from "@/components/ui/PageShell";
-import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
 import { activityHref } from "@/lib/activity";
 import { addMonths, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
+import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
@@ -45,6 +46,8 @@ export default function BudgetPage() {
   const [cursor, setCursor] = useState<{ year?: number; month?: number }>({});
   const [income, setIncome] = useState("");
   const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const [moving, setMoving] = useState(false);
+  const [moveForm, setMoveForm] = useState({ from: "", to: "", amount: "" });
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, refreshing, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`);
 
@@ -135,15 +138,6 @@ export default function BudgetPage() {
     reload();
   }
 
-  async function toggleRollover(row: Row) {
-    await api("/api/categories", {
-      method: "PATCH",
-      body: JSON.stringify({ id: row.category.id, rollover: !row.category.rollover }),
-    });
-    invalidateQueries("budget:");
-    reload();
-  }
-
   async function saveFlexTotal(cents: number) {
     await api("/api/budget", {
       method: "PUT",
@@ -179,15 +173,19 @@ export default function BudgetPage() {
         </p>
 
         <div className="flex flex-col gap-2">
-          <Segment
-            className="w-full"
-            value={budget.mode}
-            onChange={(value) => setMode(value as "category" | "flex")}
-            options={[
-              { value: "category", label: "By category" },
-              { value: "flex", label: "Flex pot" },
-            ]}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+            <button className="text-link" type="button" onClick={() => setMode(budget.mode === "flex" ? "category" : "flex")}>
+              {budget.mode === "flex" ? "Budget each category" : "Use one flex pot"}
+            </button>
+            <span className="flex gap-3">
+              <button className="text-link" type="button" onClick={() => setMoving(true)}>
+                Move money
+              </button>
+              <Link href="/settings#categories" className="text-link">
+                Edit categories
+              </Link>
+            </span>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <button className="shelf-btn ghost w-full" type="button" onClick={copyLastMonth}>
               Use last month
@@ -235,10 +233,63 @@ export default function BudgetPage() {
           Actual income <MoneyText cents={budget.actualIncomeCents} />
         </p>
 
+        {moving ? (
+          <Sheet title="Move money" onClose={() => setMoving(false)}>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const cents = dollarsToCents(moveForm.amount || 0);
+                if (!moveForm.from || !moveForm.to || cents <= 0) return;
+                void api("/api/budget", {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    year: budget.year,
+                    month: budget.month,
+                    move: { fromCategoryId: moveForm.from, toCategoryId: moveForm.to, cents },
+                  }),
+                }).then(() => {
+                  setMoving(false);
+                  invalidateQueries("budget:");
+                  reload();
+                });
+              }}
+            >
+              <label className="field">
+                <span className="field-label">From</span>
+                <select className="shelf-input" value={moveForm.from} onChange={(event) => setMoveForm({ ...moveForm, from: event.target.value })} required>
+                  <option value="">Choose</option>
+                  {budget.rows.map((row) => (
+                    <option key={row.category.id} value={row.category.id}>
+                      {row.category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">To</span>
+                <select className="shelf-input" value={moveForm.to} onChange={(event) => setMoveForm({ ...moveForm, to: event.target.value })} required>
+                  <option value="">Choose</option>
+                  {budget.rows.map((row) => (
+                    <option key={row.category.id} value={row.category.id}>
+                      {row.category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">Amount</span>
+                <input className="shelf-input" inputMode="decimal" value={moveForm.amount} onChange={(event) => setMoveForm({ ...moveForm, amount: event.target.value })} required />
+              </label>
+              <button className="shelf-btn w-full">Move</button>
+            </form>
+          </Sheet>
+        ) : null}
+
         {budget.mode === "flex" ? (
           <div className="grid gap-4 md:grid-cols-3">
-            <Bucket title="Fixed" rows={rowsOf(budget.flex.fixed)} range={range} onSave={setPlanned} onRollover={toggleRollover} />
-            <Bucket title="Non-monthly" rows={rowsOf(budget.flex.non_monthly)} range={range} onSave={setPlanned} onRollover={toggleRollover} />
+            <Bucket title="Fixed" rows={rowsOf(budget.flex.fixed)} range={range} year={budget.year} month={budget.month} onSave={setPlanned} />
+            <Bucket title="Occasional" rows={rowsOf(budget.flex.non_monthly)} range={range} year={budget.year} month={budget.month} onSave={setPlanned} />
             <FlexPot pool={budget.flexPoolCents} spent={budget.flexSpentCents} rows={budget.flex.flex} range={range} onSave={saveFlexTotal} />
           </div>
         ) : (
@@ -261,7 +312,7 @@ export default function BudgetPage() {
                 {isClosed ? null : (
                   <div className="card">
                     {group.rows.map((row) => (
-                      <CategoryRow key={row.category.id} row={row} range={range} color={shelfColor(group.color)} onSave={setPlanned} onRollover={toggleRollover} />
+                      <CategoryRow key={row.category.id} row={row} range={range} year={budget.year} month={budget.month} color={shelfColor(group.color)} onSave={setPlanned} />
                     ))}
                   </div>
                 )}
@@ -281,16 +332,19 @@ function rowsOf(rows: Row[]) {
 function CategoryRow({
   row,
   range,
+  year,
+  month,
   color,
   onSave,
-  onRollover,
 }: {
   row: Row;
   range: { start: string; end: string };
+  year: number;
+  month: number;
   color: string;
   onSave: (id: string, cents: number) => void;
-  onRollover: (row: Row) => void;
 }) {
+  const pace = budgetPace(row.spentCents, row.availableCents, year, month);
   return (
     <div className="border-b border-[var(--line)] px-4 py-3.5 last:border-0">
       <div className="flex items-start justify-between gap-3">
@@ -302,30 +356,27 @@ function CategoryRow({
       <div className="my-2.5">
         <ProgressBar value={row.spentCents} max={row.availableCents || 1} color={color} />
       </div>
-      <div className="flex items-end gap-3">
-        <label className="field min-w-0 flex-1">
-          <span className="field-label">Planned</span>
-          <input
-            className="shelf-input compact mt-1"
-            inputMode="decimal"
-            defaultValue={(row.plannedCents / 100).toFixed(0)}
-            key={`${row.category.id}-${row.plannedCents}`}
-            onBlur={(e) => {
-              const next = dollarsToCents(e.target.value || 0);
-              if (next !== row.plannedCents) onSave(row.category.id, next);
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          className="mb-0.5 flex min-h-10 shrink-0 items-center gap-2 pb-0.5 text-[13px] text-[var(--muted)]"
-          aria-pressed={row.category.rollover}
-          onClick={() => onRollover(row)}
-        >
-          Rollover
-          <span className={`switch ${row.category.rollover ? "on" : ""}`} />
-        </button>
+      <div className="mb-2 flex flex-wrap gap-x-3 text-[12px] text-[var(--muted)]">
+        {row.rolloverInCents > 0 ? (
+          <span>
+            +<MoneyText cents={row.rolloverInCents} /> carried in
+          </span>
+        ) : null}
+        {pace.label ? <span className={pace.tone === "over" || pace.tone === "hot" ? "text-[var(--danger)]" : ""}>{pace.label}</span> : null}
       </div>
+      <label className="field min-w-0">
+        <span className="field-label">Planned</span>
+        <input
+          className="shelf-input compact mt-1"
+          inputMode="decimal"
+          defaultValue={(row.plannedCents / 100).toFixed(0)}
+          key={`${row.category.id}-${row.plannedCents}`}
+          onBlur={(e) => {
+            const next = dollarsToCents(e.target.value || 0);
+            if (next !== row.plannedCents) onSave(row.category.id, next);
+          }}
+        />
+      </label>
     </div>
   );
 }
@@ -334,14 +385,16 @@ function Bucket({
   title,
   rows,
   range,
+  year,
+  month,
   onSave,
-  onRollover,
 }: {
   title: string;
   rows: Row[];
   range: { start: string; end: string };
+  year: number;
+  month: number;
   onSave: (id: string, cents: number) => void;
-  onRollover: (row: Row) => void;
 }) {
   const planned = rows.reduce((sum, row) => sum + row.availableCents, 0);
   const spent = rows.reduce((sum, row) => sum + row.spentCents, 0);
@@ -354,7 +407,7 @@ function Bucket({
       <ProgressBar value={spent} max={planned || 1} />
       <div className="mt-3">
         {rows.map((row) => (
-          <CategoryRow key={row.category.id} row={row} range={range} color="var(--positive)" onSave={onSave} onRollover={onRollover} />
+          <CategoryRow key={row.category.id} row={row} range={range} year={year} month={month} color="var(--positive)" onSave={onSave} />
         ))}
       </div>
     </section>

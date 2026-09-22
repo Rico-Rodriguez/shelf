@@ -6,6 +6,7 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CategorySelect, type CatGroup } from "@/components/CategoryPicker";
 import { api } from "@/lib/client";
 import { goalPace } from "@/lib/goal-pace";
 
@@ -18,17 +19,20 @@ type Goal = {
   progressCents: number;
   remainingCents: number;
   accounts: { id: string; name: string }[];
+  monthlyCents?: number | null;
+  categoryId?: string | null;
 };
 
 type Account = { id: string; name: string };
 
-type GoalForm = { name: string; kind: "save_up" | "pay_down"; target: string; targetDate: string; accountIds: string[] };
+type GoalForm = { name: string; kind: "save_up" | "pay_down"; target: string; targetDate: string; accountIds: string[]; categoryId: string };
 
-const empty: GoalForm = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [] };
+const empty: GoalForm = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [], categoryId: "" };
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
 
@@ -37,6 +41,7 @@ export default function GoalsPage() {
       setGoals(r.goals);
       setAccounts(r.accounts);
     });
+    void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups)).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -55,6 +60,7 @@ export default function GoalsPage() {
       target: (goal.targetCents / 100).toFixed(0),
       targetDate: goal.targetDate ?? "",
       accountIds: goal.accounts.map((account) => account.id),
+      categoryId: goal.categoryId ?? "",
     });
     setEditing(goal);
   }
@@ -74,6 +80,7 @@ export default function GoalsPage() {
       target: Number(form.target || 0),
       targetDate: form.targetDate || null,
       accountIds: form.accountIds,
+      categoryId: form.categoryId || null,
     };
     if (editing === "new") {
       await api("/api/goals", { method: "POST", body: JSON.stringify(body) });
@@ -122,6 +129,12 @@ export default function GoalsPage() {
             </div>
             <p className="text-[15px]">
               <MoneyText cents={goal.remainingCents} /> left
+              {goal.monthlyCents ? (
+                <>
+                  {" "}
+                  · <MoneyText cents={goal.monthlyCents} />/mo
+                </>
+              ) : null}
               <span className={`ml-2 pace-${goalPace(goal).tone === "muted" ? "on" : goalPace(goal).tone}`}>{goalPace(goal).label}</span>
             </p>
           </button>
@@ -138,6 +151,10 @@ export default function GoalsPage() {
             </select>
             <input className="shelf-input" inputMode="decimal" placeholder="Target" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
             <input className="shelf-input" type="date" aria-label="Target date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
+            <label className="field">
+              <span className="field-label">Budget category</span>
+              <CategorySelect groups={groups} value={form.categoryId} onChange={(id) => setForm({ ...form, categoryId: id })} emptyLabel="No category" />
+            </label>
             <div>
               <div className="mb-1 text-[13px] text-[var(--muted)]">Linked accounts</div>
               <div className="card">

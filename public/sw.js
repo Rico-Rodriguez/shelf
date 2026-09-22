@@ -15,6 +15,12 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const href = event.notification.data?.href || "/";
+  event.waitUntil(clients.openWindow(href));
+});
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET") return;

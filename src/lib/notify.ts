@@ -1,11 +1,12 @@
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { getDb } from "@/db";
-import { budgetItems, categories, notifications, plaidItems, recurrences, transactions } from "@/db/schema";
+import { accounts, budgetItems, categories, notifications, plaidItems, recurrences, transactions } from "@/db/schema";
 import { getOrCreateBudgetMonth, spentByCategory } from "./budget";
 import { addDays, todayISO, yearMonth } from "./dates";
 import { formatMoney } from "./money";
 import { nid } from "./ids";
-import { openBudgetItem, openRecurrence, openTx } from "./secrets";
+import { merchantKey, priceDrift } from "./plan";
+import { openAccount, openBudgetItem, openRecurrence, openTx } from "./secrets";
 
 type Note = { kind: string; title: string; body: string; href: string; dedupeKey: string };
 
@@ -29,9 +30,8 @@ export async function refreshNotifications(dek: Buffer) {
     await db.delete(notifications).where(and(eq(notifications.kind, "review"), isNull(notifications.readAt)));
   }
 
-  const upcoming = (await db.select().from(recurrences))
-    .map((row) => openRecurrence(row, dek))
-    .filter((row) => row.isActive && !row.isIncome && row.nextDate >= today && row.nextDate <= addDays(today, 3));
+  const allRecurring = (await db.select().from(recurrences)).map((row) => openRecurrence(row, dek));
+  const upcoming = allRecurring.filter((row) => row.isActive && !row.isIncome && row.nextDate >= today && row.nextDate <= addDays(today, 3));
   const upcomingIds = new Set(upcoming.map((row) => `bill:${row.id}:${row.nextDate}`));
   for (const bill of upcoming) {
     notes.push({
@@ -75,6 +75,52 @@ export async function refreshNotifications(dek: Buffer) {
       body: item.errorCode || "The connection needs a refresh.",
       href: "/accounts",
       dedupeKey: `sync:${item.id}:${item.errorCode ?? "error"}`,
+    });
+  }
+
+  const openedTx = (await db.select().from(transactions)).map((row) => openTx(row, dek));
+  const yesterday = addDays(today, -1);
+  for (const tx of openedTx) {
+    if (tx.hidden || tx.isTransfer || tx.pending || tx.amountCents < 25000 || tx.date < yesterday) continue;
+    notes.push({
+      kind: "large",
+      title: tx.merchantName || tx.name,
+      body: `${formatMoney(tx.amountCents)} posted ${tx.date}`,
+      href: "/transactions",
+      dedupeKey: `large:${tx.id}`,
+    });
+  }
+  for (const bill of allRecurring) {
+    if (!bill.isActive || bill.isIncome) continue;
+    const key = merchantKey(bill.merchantName);
+    const last = openedTx
+      .filter((tx) => !tx.pending && merchantKey(tx.merchantName || tx.name) === key)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!last) continue;
+    const drift = priceDrift(bill.amountCents, Math.abs(last.amountCents));
+    if (drift == null) continue;
+    notes.push({
+      kind: "price",
+      title: `${bill.merchantName} changed price`,
+      body: `${formatMoney(Math.abs(drift))} ${drift > 0 ? "higher" : "lower"} than usual`,
+      href: "/recurring",
+      dedupeKey: `price:${bill.id}:${last.date}`,
+    });
+  }
+  const cash = (await db.select().from(accounts))
+    .map((row) => openAccount(row, dek))
+    .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"))
+    .reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
+  const soon = allRecurring
+    .filter((row) => row.isActive && !row.isIncome && row.nextDate >= today && row.nextDate <= addDays(today, 14))
+    .reduce((sum, row) => sum + row.amountCents, 0);
+  if (cash < 10000 || (soon > 0 && cash < soon)) {
+    notes.push({
+      kind: "cash",
+      title: "Cash is running low",
+      body: soon > cash ? `${formatMoney(cash)} on hand, ${formatMoney(soon)} in bills over 14 days` : `${formatMoney(cash)} in cash accounts`,
+      href: "/accounts",
+      dedupeKey: `cash:${today}`,
     });
   }
 

@@ -3,6 +3,8 @@
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CategoryPicker, CategorySelect, type CatGroup } from "@/components/CategoryPicker";
+import { ReviewDeck } from "@/components/ReviewDeck";
+import { offerUndo } from "@/components/UndoHost";
 import { MerchantMark } from "@/components/MerchantMark";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
@@ -10,7 +12,6 @@ import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, FieldStack } from "@/components/ui/Field";
 import { FilterBar } from "@/components/ui/FilterBar";
-import { Hint } from "@/components/ui/Hint";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Segment } from "@/components/ui/Segment";
 import { api } from "@/lib/client";
@@ -72,6 +73,10 @@ function Activity() {
   const [pairs, setPairs] = useState<{ id: string; name: string; date: string; amountCents: number; account: string | null }[]>([]);
   const [edit, setEdit] = useState<EditState | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [always, setAlways] = useState(false);
   const [manual, setManual] = useState({ accountId: "", name: "", amount: "", date: "", categoryId: "" });
 
   useEffect(() => {
@@ -139,9 +144,19 @@ function Activity() {
 
   const visibleUnreviewed = rows.filter((tx) => !tx.reviewed).map((tx) => tx.id);
   const inReviewMode = reviewed === "false";
+  const focus = params.get("focus") === "1";
+  const unreviewedRows = rows.filter((tx) => !tx.reviewed);
+  const canAcceptAll = unreviewedRows.length > 0 && unreviewedRows.every((tx) => tx.categoryId);
 
   async function markDone(id: string) {
+    const previous = rows.find((tx) => tx.id === id);
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
+    if (previous) {
+      offerUndo("Marked reviewed", async () => {
+        await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: false, categoryId: previous.categoryId, hidden: previous.hidden }) });
+        load();
+      });
+    }
     load();
   }
 
@@ -173,6 +188,30 @@ function Activity() {
           .map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
       }),
     });
+    if (always && edit.categoryId) {
+      await api("/api/rules", {
+        method: "POST",
+        body: JSON.stringify({
+          name: edit.merchantName || edit.name,
+          matchMerchant: edit.merchantName || edit.name,
+          actionCategoryId: edit.categoryId,
+          actionRename: edit.name,
+        }),
+      });
+    }
+    offerUndo("Saved", async () => {
+      await api(`/api/transactions/${edit.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: edit.name,
+          categoryId: edit.categoryId,
+          reviewed: edit.reviewed,
+          hidden: edit.hidden,
+        }),
+      });
+      load();
+    });
+    setAlways(false);
     setEdit(null);
     load();
   }
@@ -256,10 +295,36 @@ function Activity() {
         ]}
       />
 
-      {inReviewMode ? (
-        <Hint tone="action" title="What “review” means">
-          Tap a purchase to rename it or fix the category. When it looks right, tap <strong>Done</strong> — or save from the detail sheet. Reviewed items stop counting against your inbox so the budget stays trustworthy.
-        </Hint>
+      {focus && inReviewMode ? (
+        <ReviewDeck
+          key={unreviewedRows[0]?.id ?? "clear"}
+          rows={unreviewedRows}
+          groups={groups}
+          onSkip={(tx) => {
+            setRows((current) => current.filter((row) => row.id !== tx.id));
+          }}
+          onConfirm={async (tx, categoryId, makeRule) => {
+            await api(`/api/transactions/${tx.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ categoryId, reviewed: true }),
+            });
+            if (makeRule && categoryId) {
+              await api("/api/rules", {
+                method: "POST",
+                body: JSON.stringify({
+                  name: tx.merchantName || tx.name,
+                  matchMerchant: tx.merchantName || tx.name,
+                  actionCategoryId: categoryId,
+                }),
+              });
+            }
+            offerUndo("Reviewed", async () => {
+              await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ reviewed: false, categoryId: tx.categoryId }) });
+              load();
+            });
+            load();
+          }}
+        />
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -316,9 +381,12 @@ function Activity() {
             All months
           </button>
         ) : null}
-        {visibleUnreviewed.length ? (
+        <button className="shelf-btn ghost" type="button" onClick={() => { setSelecting((value) => !value); setSelected([]); }}>
+          {selecting ? "Cancel" : "Select"}
+        </button>
+        {canAcceptAll ? (
           <button className="shelf-btn soft" type="button" onClick={markVisibleDone}>
-            Mark {visibleUnreviewed.length} done
+            Accept {unreviewedRows.length} categorized
           </button>
         ) : null}
       </FilterBar>
@@ -338,12 +406,43 @@ function Activity() {
         </EmptyState>
       ) : null}
 
-      {grouped.map(([date, items]) => (
+      {focus && unreviewedRows.length ? null : grouped.map(([date, items]) => (
         <section key={date}>
           <h2 className="ios-section">{dayLabel(date)}</h2>
           <div className="card">
             {items.map((tx) => (
-              <div key={tx.id} className={`data-row ${tx.reviewed ? "placed" : ""}`}>
+              <div
+                key={tx.id}
+                className={`data-row ${tx.reviewed ? "placed" : ""} ${tx.pending ? "is-pending" : ""}`}
+                onTouchStart={(event) => {
+                  const startX = event.changedTouches[0]?.clientX ?? 0;
+                  (event.currentTarget as HTMLElement).dataset.x = String(startX);
+                }}
+                onTouchEnd={(event) => {
+                  const startX = Number((event.currentTarget as HTMLElement).dataset.x || 0);
+                  const dx = (event.changedTouches[0]?.clientX ?? 0) - startX;
+                  if (dx > 80 && !tx.reviewed) void markDone(tx.id);
+                  if (dx < -80) {
+                    void api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) }).then(() => {
+                      offerUndo("Hidden", async () => {
+                        await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
+                        load();
+                      });
+                      load();
+                    });
+                  }
+                }}
+              >
+                {selecting ? (
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${tx.name}`}
+                    checked={selected.includes(tx.id)}
+                    onChange={(event) =>
+                      setSelected((current) => (event.target.checked ? [...current, tx.id] : current.filter((id) => id !== tx.id)))
+                    }
+                  />
+                ) : null}
                 <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openEdit(tx)}>
                   <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
                   <span className="min-w-0">
@@ -504,6 +603,10 @@ function Activity() {
             </button>
           </div>
 
+          <button type="button" className="data-row w-full justify-between" aria-pressed={always} onClick={() => setAlways((value) => !value)}>
+            Always categorize this merchant this way
+            <span className={`switch ${always ? "on" : ""}`} />
+          </button>
           <button className="shelf-btn w-full" type="button" onClick={saveEdit}>
             {edit.reviewed ? "Save changes" : "Save & mark reviewed"}
           </button>
@@ -511,6 +614,31 @@ function Activity() {
             Automate with a rule
           </button>
         </Sheet>
+      ) : null}
+
+      {selecting && selected.length ? (
+        <div className="undo-bar">
+          <CategorySelect groups={groups} value={bulkCategory} onChange={setBulkCategory} emptyLabel="Category" />
+          <button
+            type="button"
+            onClick={() => {
+              void Promise.all(
+                selected.map((id) =>
+                  api(`/api/transactions/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ categoryId: bulkCategory || undefined, reviewed: true }),
+                  }),
+                ),
+              ).then(() => {
+                setSelected([]);
+                setSelecting(false);
+                load();
+              });
+            }}
+          >
+            Apply
+          </button>
+        </div>
       ) : null}
 
       {showAdd ? (

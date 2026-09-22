@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { ConnectBank } from "@/components/ConnectBank";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,6 +16,7 @@ type Account = {
   name: string;
   type: string;
   currentBalanceCents: number;
+  availableBalanceCents?: number | null;
   includeInNetWorth: boolean;
   isHidden: boolean;
   isManual: boolean;
@@ -108,6 +110,16 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
       <div className="text-[34px] font-bold leading-[41px] tracking-[-0.4px]">
         <MoneyText cents={signed} signed={classifyAccount(acct.type) === "liability"} />
       </div>
+      {acct.type === "credit" && acct.availableBalanceCents != null ? (
+        <p className="text-[14px] text-[var(--muted)]">
+          <MoneyText cents={acct.availableBalanceCents} /> available
+          {Math.abs(acct.currentBalanceCents) + acct.availableBalanceCents > 0
+            ? ` · ${Math.round((Math.abs(acct.currentBalanceCents) / (Math.abs(acct.currentBalanceCents) + acct.availableBalanceCents)) * 100)}% of the limit used`
+            : ""}
+          . Card payments are transfers, so they stay out of spending.
+        </p>
+      ) : null}
+      {item && item.status !== "ok" ? <ConnectBank itemId={item.id} label="Reconnect" onLinked={load} /> : null}
 
       <div className="card">
         <button
@@ -150,7 +162,7 @@ export default function AccountDetail({ params }: { params: Promise<{ id: string
             <AreaChart data={snapshots.map((row) => ({ ...row, value: row.balanceCents / 100 }))}>
               <YAxis hide domain={["dataMin", "dataMax"]} />
               <Tooltip formatter={(value) => formatMoney(Math.round(Number(value) * 100))} />
-              <Area dataKey="value" stroke="#1f4d45" fill="rgba(31,77,69,0.12)" strokeWidth={2} />
+              <Area dataKey="value" stroke="#1b7a62" fill="rgba(27,122,98,0.12)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

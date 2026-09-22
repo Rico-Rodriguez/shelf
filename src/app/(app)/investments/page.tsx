@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PageSkeleton } from "@/components/ui/PageShell";
 import { api } from "@/lib/client";
 
-const COLORS = ["#1f4d45", "#1f7a45", "#6f6a62", "#b23b32", "#3d6b62", "#8a9a84"];
+const COLORS = ["#1b7a62", "#2f5d8c", "#8a5a2b", "#6b4f9a", "#b04a3a", "#3d6b5a"];
 
 type Hold = {
   id: string;
@@ -22,6 +22,10 @@ type Payload = {
   holdings: Hold[];
   totalCents: number;
   byType: Record<string, number>;
+  contributionCents?: number;
+  gainCents?: number | null;
+  marketCents?: number | null;
+  series?: { date: string; cents: number }[];
 };
 
 export default function InvestmentsPage() {
@@ -52,8 +56,8 @@ export default function InvestmentsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Investments" subtitle="Holdings from connected accounts, grouped by account." />
-      <div className="shelf-panel grid grid-cols-2 divide-x divide-[var(--line)] p-0">
+      <PageHeader title="Investments" subtitle="Allocation, what you put in, and what the market did after that." />
+      <div className="shelf-panel grid grid-cols-2 divide-x divide-[var(--line)] p-0 md:grid-cols-4">
         <div className="px-4 py-3">
           <div className="text-[13px] text-[var(--muted)]">Total</div>
           <div className="text-[28px] font-bold tracking-tight">
@@ -63,7 +67,19 @@ export default function InvestmentsPage() {
         <div className="px-4 py-3">
           <div className="text-[13px] text-[var(--muted)]">Gain</div>
           <div className="text-[28px] font-bold tracking-tight">
-            {gainRows.length ? <MoneyText cents={gain} signed /> : <span className="text-[17px] font-normal text-[var(--muted)]">No cost basis</span>}
+            {data.gainCents != null ? <MoneyText cents={data.gainCents} signed /> : gainRows.length ? <MoneyText cents={gain} signed /> : <span className="text-[17px] font-normal text-[var(--muted)]">No cost basis</span>}
+          </div>
+        </div>
+        <div className="px-4 py-3">
+          <div className="text-[13px] text-[var(--muted)]">Contributions</div>
+          <div className="text-[22px] font-bold tracking-tight">
+            <MoneyText cents={data.contributionCents ?? 0} />
+          </div>
+        </div>
+        <div className="px-4 py-3">
+          <div className="text-[13px] text-[var(--muted)]">Market</div>
+          <div className="text-[22px] font-bold tracking-tight">
+            {data.marketCents == null ? <span className="text-[17px] font-normal text-[var(--muted)]">—</span> : <MoneyText cents={data.marketCents} signed />}
           </div>
         </div>
       </div>

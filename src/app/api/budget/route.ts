@@ -94,6 +94,7 @@ export async function PUT(request: Request) {
       flexPoolCents?: number;
       mode?: "category" | "flex";
       items?: { categoryId: string; plannedCents: number }[];
+      move?: { fromCategoryId: string; toCategoryId: string; cents: number };
     };
     const db = await getDb();
     const monthRow = await getOrCreateBudgetMonth(body.year, body.month, dek);
@@ -127,6 +128,31 @@ export async function PUT(request: Request) {
             budgetMonthId: monthRow.id,
             categoryId: item.categoryId,
             ...sealedBudgetItemWrite(item.plannedCents, 0, dek),
+          });
+        }
+      }
+    }
+    if (body.move && body.move.cents > 0 && body.move.fromCategoryId !== body.move.toCategoryId) {
+      const existing = await db.select().from(budgetItems);
+      const from = existing.find((item) => item.budgetMonthId === monthRow.id && item.categoryId === body.move!.fromCategoryId);
+      const to = existing.find((item) => item.budgetMonthId === monthRow.id && item.categoryId === body.move!.toCategoryId);
+      if (from) {
+        const openedFrom = openBudgetItem(from, dek);
+        const nextFrom = Math.max(0, openedFrom.plannedCents - body.move.cents);
+        const moved = openedFrom.plannedCents - nextFrom;
+        await db.update(budgetItems).set(sealedBudgetItemWrite(nextFrom, openedFrom.rolloverInCents, dek)).where(eq(budgetItems.id, from.id));
+        if (moved > 0 && to) {
+          const openedTo = openBudgetItem(to, dek);
+          await db
+            .update(budgetItems)
+            .set(sealedBudgetItemWrite(openedTo.plannedCents + moved, openedTo.rolloverInCents, dek))
+            .where(eq(budgetItems.id, to.id));
+        } else if (moved > 0) {
+          await db.insert(budgetItems).values({
+            id: nid(),
+            budgetMonthId: monthRow.id,
+            categoryId: body.move.toCategoryId,
+            ...sealedBudgetItemWrite(moved, 0, dek),
           });
         }
       }

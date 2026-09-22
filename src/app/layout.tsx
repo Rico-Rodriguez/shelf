@@ -45,6 +45,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
       <body className="antialiased">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("shelf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}`,
+          }}
+        />
         <ZoomLock />
         <PwaRegister />
         {children}
