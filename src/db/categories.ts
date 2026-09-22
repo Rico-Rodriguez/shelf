@@ -200,6 +200,9 @@ export async function seedCategoriesIfNeeded(db: AppDb) {
 }
 
 export function mapPlaidCategory(primary?: string | null, detailed?: string | null): string {
+  if (detailed === "LOAN_PAYMENTS_MORTGAGE_PAYMENT" || detailed === "RENT_AND_UTILITIES_RENT") return "cat-rent";
+  if (detailed === "LOAN_PAYMENTS_CAR_PAYMENT") return "cat-auto";
+  if (detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") return "cat-cc-payment";
   if (detailed) {
     for (const group of DEFAULT_GROUPS) {
       for (const cat of group.categories) {
@@ -214,7 +217,7 @@ export function mapPlaidCategory(primary?: string | null, detailed?: string | nu
       }
     }
     if (primary.startsWith("TRANSFER")) return "cat-transfer";
-    if (primary === "LOAN_PAYMENTS") return "cat-cc-payment";
+    if (primary === "LOAN_PAYMENTS") return "cat-uncategorized";
   }
   return "cat-uncategorized";
 }
