@@ -1,7 +1,6 @@
 import { router } from "expo-router";
-import { ReactNode, useId, useState } from "react";
+import { ReactNode, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { flowMoney, money, shiftMonth } from "./format";
@@ -415,16 +414,29 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-function smoothLine(coords: { x: number; y: number }[]) {
-  if (!coords.length) return "";
-  let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+function curvePoint(start: number, controlA: number, controlB: number, end: number, t: number) {
+  const rest = 1 - t;
+  return rest * rest * rest * start + 3 * rest * rest * t * controlA + 3 * rest * t * t * controlB + t * t * t * end;
+}
+
+/** Samples the same cubic the old summary chart used, so the area can be drawn with views. */
+function smoothSamples(coords: { x: number; y: number }[], step: number) {
+  const samples: { x: number; y: number }[] = [];
   for (let i = 0; i < coords.length - 1; i++) {
     const current = coords[i];
     const next = coords[i + 1];
     const mid = (current.x + next.x) / 2;
-    d += ` C${mid.toFixed(2)},${current.y.toFixed(2)} ${mid.toFixed(2)},${next.y.toFixed(2)} ${next.x.toFixed(2)},${next.y.toFixed(2)}`;
+    const count = Math.max(1, Math.round(Math.max(next.x - current.x, step) / step));
+    for (let s = 0; s < count; s++) {
+      const t = s / count;
+      samples.push({
+        x: curvePoint(current.x, mid, mid, next.x, t),
+        y: curvePoint(current.y, current.y, next.y, next.y, t),
+      });
+    }
   }
-  return d;
+  samples.push(coords[coords.length - 1]);
+  return samples;
 }
 
 export function SpendChart({
@@ -434,7 +446,6 @@ export function SpendChart({
   points: { date: string; cents: number }[];
   onScrub?: (point: { date: string; cents: number } | null) => void;
 }) {
-  const gradientId = `spend-${useId().replace(/:/g, "")}`;
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
@@ -462,9 +473,9 @@ export function SpendChart({
   }
 
   const coords = series.map((point, index) => ({ x: xOf(index), y: yOf(point.cents) }));
-  const line = smoothLine(coords);
-  const area = `${line} L${coords[coords.length - 1].x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
+  const samples = smoothSamples(coords, 3);
   const dot = coords[active ?? coords.length - 1];
+  const dotSize = active == null ? 9 : 13;
 
   function pick(x: number) {
     if (!width || !onScrub) return;
@@ -491,17 +502,57 @@ export function SpendChart({
         onScrub?.(null);
       }}
     >
-      <Svg width="100%" height={height} viewBox={`0 0 ${drawWidth} ${height}`}>
-        <Defs>
-          <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={colors.accent} stopOpacity={0.34} />
-            <Stop offset="100%" stopColor={colors.accent} stopOpacity={0.02} />
-          </LinearGradient>
-        </Defs>
-        <Path d={area} fill={`url(#${gradientId})`} />
-        <Path d={line} fill="none" stroke={colors.accent} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-        {dot ? <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 6.5} fill={colors.accent} stroke="#fff" strokeWidth={3} /> : null}
-      </Svg>
+      {samples.map((sample, index) => {
+        const next = samples[index + 1];
+        const columnWidth = Math.max(1, (next?.x ?? sample.x + 3) - sample.x);
+        const fill = Math.max(0, height - sample.y);
+        return (
+          <View key={`fill-${index}`} pointerEvents="none" style={{ position: "absolute", left: sample.x, top: sample.y, width: columnWidth, height: fill }}>
+            <View style={{ flex: 1, backgroundColor: "rgba(27, 122, 98, 0.22)" }} />
+            <View style={{ flex: 1, backgroundColor: "rgba(27, 122, 98, 0.06)" }} />
+          </View>
+        );
+      })}
+      {samples.slice(0, -1).map((sample, index) => {
+        const next = samples[index + 1];
+        const dx = next.x - sample.x;
+        const dy = next.y - sample.y;
+        const length = Math.hypot(dx, dy);
+        if (length < 0.5) return null;
+        return (
+          <View
+            key={`line-${index}`}
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: (sample.x + next.x) / 2 - length / 2,
+              top: (sample.y + next.y) / 2 - 1.25,
+              width: length,
+              height: 2.5,
+              borderRadius: 2,
+              backgroundColor: colors.accent,
+              transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
+            }}
+          />
+        );
+      })}
+      {active != null ? (
+        <View pointerEvents="none" style={{ position: "absolute", left: dot.x, top: 0, bottom: 0, width: 1, backgroundColor: colors.ink, opacity: 0.35 }} />
+      ) : null}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: dot.x - dotSize / 2,
+          top: dot.y - dotSize / 2,
+          width: dotSize,
+          height: dotSize,
+          borderRadius: dotSize / 2,
+          backgroundColor: colors.accent,
+          borderWidth: 3,
+          borderColor: "#fff",
+        }}
+      />
     </View>
   );
 }
