@@ -12,7 +12,7 @@ import { SpendMix } from "@/components/SpendMix";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
-import { dayLabel, inDaysPhrase, monthRange, todayISO, yearMonth } from "@/lib/dates";
+import { dayLabel, inDaysPhrase, monthRange, shortDate, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
@@ -22,7 +22,16 @@ type Dash = {
   unreviewed: { count: number };
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   accountCount: number;
-  transactions: { id: string; name: string }[];
+  transactions: {
+    id: string;
+    name: string;
+    merchantName: string | null;
+    amountCents: number;
+    date: string;
+    pending: boolean;
+    category: { name: string; color: string } | null;
+    accountName: string | null;
+  }[];
   spendSeries?: { date: string; cents: number }[];
   spending?: { id: string; name: string; cents: number; color: string }[];
   usual?: { deltaCents: number | null };
@@ -51,6 +60,8 @@ export default function HomePage() {
       ? [...categories.slice(0, 5), { id: "rest", name: "Everything else", cents: restCents, color: "#8B939E" }]
       : categories;
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
+  const latest = dash.transactions.slice(0, 4);
+  const showCash = dash.cashFlow.incomeCents !== 0 || dash.cashFlow.spendingCents !== 0;
 
   async function loadSample() {
     setSeeding(true);
@@ -77,11 +88,19 @@ export default function HomePage() {
           chartLabel="Spending this month"
           onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
           note={
-            scrub ? null : (
+            scrub || !showCash ? null : (
               <span className="safe-facts">
                 <span>
                   <span className="safe-kicker">Income</span>
-                  <MoneyText cents={dash.cashFlow.incomeCents} />
+                  <MoneyText animate cents={dash.cashFlow.incomeCents} />
+                </span>
+                <span>
+                  <span className="safe-kicker">{dash.cashFlow.savedCents < 0 ? "Over income" : "Saved"}</span>
+                  <MoneyText
+                    animate
+                    cents={Math.abs(dash.cashFlow.savedCents)}
+                    className={dash.cashFlow.savedCents < 0 ? "text-[var(--danger)]" : "text-[var(--positive)]"}
+                  />
                 </span>
               </span>
             )
@@ -110,6 +129,39 @@ export default function HomePage() {
                 <span className="min-w-0 flex-1">To review</span>
                 <Icon name="chevron" size={18} />
               </Link>
+            ) : null}
+
+            {latest.length > 0 ? (
+              <section>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <h2 className="ios-section mb-0">Latest</h2>
+                  <Link href="/transactions" className="text-btn">
+                    Activity
+                  </Link>
+                </div>
+                <div className="card">
+                  {latest.map((tx) => {
+                    const when = dayLabel(tx.date);
+                    const whenShort = when === "Today" || when === "Yesterday" ? when : shortDate(tx.date);
+                    return (
+                      <Link
+                        key={tx.id}
+                        href={activityHref({ q: tx.merchantName || tx.name })}
+                        className="data-row justify-between gap-3"
+                      >
+                        <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{tx.merchantName || tx.name}</span>
+                          <span className="block truncate text-[12px] text-[var(--tertiary)]">
+                            {[whenShort, tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                        <MoneyText className="shrink-0" cents={tx.amountCents} flow />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
             ) : null}
 
             {bills.length > 0 || suggestions > 0 || categories.length > 0 ? (

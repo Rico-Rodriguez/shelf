@@ -40,6 +40,7 @@ export function SummaryCard({
   footerIcon,
   detail,
   note,
+  figureTone,
   compact = false,
   onClick,
   className = "",
@@ -64,6 +65,7 @@ export function SummaryCard({
   detail?: React.ReactNode;
   /** Always-visible one-line explanation under the figure. */
   note?: React.ReactNode;
+  figureTone?: "good" | "bad";
   compact?: boolean;
   onClick?: () => void;
   className?: string;
@@ -77,16 +79,17 @@ export function SummaryCard({
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
   const active = index != null && index >= 0 && index < series.length ? index : null;
 
+  const figureClass = figureTone === "bad" ? "text-[var(--danger)]" : figureTone === "good" ? "text-[var(--positive)]" : "";
   const figure = empty ? (
     <p className="summary-empty">{empty}</p>
   ) : (
     <p className="summary-figure">
       {href ? (
         <Link href={href} className="summary-figure-link">
-          <MoneyText hero animate live={index != null} cents={cents} signed={signed} />
+          <MoneyText hero animate live={index != null} cents={cents} signed={signed} className={figureClass} />
         </Link>
       ) : (
-        <MoneyText hero animate live={index != null} cents={cents} signed={signed} />
+        <MoneyText hero animate live={index != null} cents={cents} signed={signed} className={figureClass} />
       )}
       {suffix ? <span className="summary-unit">{suffix}</span> : null}
     </p>

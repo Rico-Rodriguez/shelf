@@ -297,13 +297,34 @@ export default function BudgetPage() {
 }
 
 function BudgetSummary({ budget }: { budget: Budget }) {
+  const planned = budget.expensePlannedCents;
+  const hasPlan = planned > 0;
+  const left = planned - budget.expenseSpentCents;
+  const over = hasPlan && left < 0;
   return (
     <SummaryCard
-      label="Spent this month"
-      cents={budget.expenseSpentCents}
-      status={budget.expensePlannedCents > 0 ? null : { label: "No plan yet", tone: "neutral" }}
-      points={budget.spendSeries ?? []}
+      className="is-hero"
+      label={hasPlan ? (over ? "Over this month" : "Left this month") : "Spent this month"}
+      cents={hasPlan ? Math.abs(left) : budget.expenseSpentCents}
+      figureTone={hasPlan ? (over ? "bad" : "good") : undefined}
+      status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
+      points={hasPlan ? undefined : (budget.spendSeries ?? [])}
       chartLabel="Spending this month"
+      meter={hasPlan ? { value: budget.expenseSpentCents, max: planned, overIsBad: true } : undefined}
+      note={
+        hasPlan ? (
+          <span className="safe-facts">
+            <span>
+              <span className="safe-kicker">Spent</span>
+              <MoneyText animate cents={budget.expenseSpentCents} />
+            </span>
+            <span>
+              <span className="safe-kicker">Plan</span>
+              <MoneyText animate cents={planned} />
+            </span>
+          </span>
+        ) : null
+      }
     />
   );
 }
@@ -319,6 +340,7 @@ function CategoryRow({
 }) {
   const paced = row.availableCents > 0;
   const over = paced && row.remainingCents < 0;
+  const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
   return (
     <button type="button" className="budget-row" onClick={onOpen}>
       <span className="flex items-start justify-between gap-3">
@@ -333,7 +355,10 @@ function CategoryRow({
             </span>
           ) : null}
         </span>
-        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={row.spentCents} />
+        <span className="shrink-0 text-right">
+          {paced ? <span className="safe-kicker block">{over ? "Over" : "Left"}</span> : null}
+          <MoneyText animate className={over ? "text-[var(--danger)]" : ""} cents={figure} />
+        </span>
       </span>
       {paced ? (
         <span className="my-2.5 block">
