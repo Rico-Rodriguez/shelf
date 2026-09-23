@@ -1,4 +1,4 @@
-import { Link, router } from "expo-router";
+import { Link, Redirect, router } from "expo-router";
 import { useState } from "react";
 import { Text } from "react-native";
 import { api } from "../src/api";
@@ -36,8 +36,8 @@ export default function LoginScreen() {
     setError(null);
     try {
       const next = await signInWithGoogle();
-      await refresh();
-      router.replace(next === "setup" ? "/setup" : "/login");
+      const session = await refresh();
+      router.replace(next === "setup" || session?.needsSetup ? "/setup" : "/login");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
@@ -47,7 +47,7 @@ export default function LoginScreen() {
 
   if (state?.needsGoogle) {
     return (
-      <Screen title="Sign in" subtitle="Use your Google account. Shelf asks for the password after that.">
+      <Screen title="Sign in" subtitle="Use your Google account. A new Shelf asks you to create a key. An existing Shelf asks for the key already saved.">
         {error ? <Note>{error}</Note> : null}
         <Button label="Sign in with Google" onPress={() => void google()} busy={busy} />
         {googleRedirectHint() ? (
@@ -56,6 +56,8 @@ export default function LoginScreen() {
       </Screen>
     );
   }
+
+  if (state?.needsSetup) return <Redirect href="/setup" />;
 
   return (
     <Screen title="Unlock" subtitle={state?.googleEmail ? `${state.googleEmail}. This is the Shelf key from the website, not your Google password.` : "Enter the key for this Shelf."}>

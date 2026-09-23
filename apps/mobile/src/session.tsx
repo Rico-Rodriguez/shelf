@@ -16,7 +16,7 @@ type SessionContextValue = {
   ready: boolean;
   state: ShelfState | null;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<ShelfState | null>;
   signOut: () => Promise<void>;
 };
 
@@ -32,9 +32,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const next = await api<ShelfState>("/api/auth/session");
       setState(next);
       setError(null);
+      return next;
     } catch (err) {
       setState(null);
       setError(err instanceof ApiError ? err.message : "Could not reach Shelf.");
+      return null;
     } finally {
       setReady(true);
     }

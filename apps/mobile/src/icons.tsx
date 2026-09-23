@@ -1,12 +1,6 @@
 import { Text, View } from "react-native";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-const stroke = {
-  fill: "none" as const,
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-};
+type Mark = { size: number; color: string; filled: boolean };
 
 export function Icon({
   name,
@@ -19,99 +13,131 @@ export function Icon({
   color?: string;
   filled?: boolean;
 }) {
+  const mark = { size, color, filled };
+  if (name === "home") return <Home {...mark} />;
+  if (name === "list") return <List {...mark} />;
+  if (name === "chart") return <Chart {...mark} />;
+  if (name === "wallet") return <Wallet {...mark} />;
+  if (name === "more") return <More {...mark} />;
+  if (name === "chevron") return <Glyph size={size} color={color} text="›" />;
+  if (name === "bell") return <Glyph size={size} color={color} text="◌" />;
+  if (name === "gear") return <Glyph size={size} color={color} text="⚙" />;
+  if (name === "spark") return <Glyph size={size} color={color} text="↗" />;
+  if (name === "calendar") return <Glyph size={size} color={color} text="▦" />;
+  if (name === "flag") return <Glyph size={size} color={color} text="⚑" />;
+  if (name === "flow") return <Glyph size={size} color={color} text="↕" />;
+  return <Glyph size={size} color={color} text="•" />;
+}
+
+function Glyph({ size, color, text }: { size: number; color: string; text: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      {glyph(name, filled, color)}
-    </Svg>
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ color, fontSize: size * 0.85, lineHeight: size }}>{text}</Text>
+    </View>
   );
 }
 
-function glyph(name: string, filled: boolean, color: string) {
-  if (filled) {
-    if (name === "home") return <Path fill={color} d="M12 3.15 3 10.35V20.2c0 .72.58 1.3 1.3 1.3h5.15v-6.15h5.1V21.5H19.7c.72 0 1.3-.58 1.3-1.3V10.35L12 3.15Z" />;
-    if (name === "list") {
-      return (
-        <>
-          <Path fill={color} d="M8 6h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Zm0 5h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Zm0 5h12.2a1 1 0 1 1 0 2H8a1 1 0 0 1 0-2Z" />
-          <Circle cx="4.4" cy="7" r="1.45" fill={color} />
-          <Circle cx="4.4" cy="12" r="1.45" fill={color} />
-          <Circle cx="4.4" cy="17" r="1.45" fill={color} />
-        </>
-      );
-    }
-    if (name === "chart") return <Path fill={color} d="M3 20.2a1 1 0 0 1 1-1h16.2a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1ZM5.2 10.2a1.2 1.2 0 0 1 1.2-1.2h1.2A1.2 1.2 0 0 1 8.8 10.2V18H5.2v-7.8Zm5.2-5a1.2 1.2 0 0 1 1.2-1.2h1.2a1.2 1.2 0 0 1 1.2 1.2V18h-3.6V5.2Zm5.2 4.2a1.2 1.2 0 0 1 1.2-1.2h1.2a1.2 1.2 0 0 1 1.2 1.2V18h-3.6V9.4Z" />;
-    if (name === "wallet") {
-      return (
-        <>
-          <Path fill={color} d="M5.4 5.5h12.2A2.4 2.4 0 0 1 20 7.9v1.15H5.6A2.1 2.1 0 0 1 3.5 6.95 1.45 1.45 0 0 1 4.95 5.5h.45Zm-1.9 4.7h16.1c.72 0 1.3.58 1.3 1.3v7.2c0 .72-.58 1.3-1.3 1.3H5.4A2.4 2.4 0 0 1 3 17.6V10.2h.5Z" />
-          <Circle cx="16.4" cy="14.6" r="1.15" fill="#ffffff" />
-        </>
-      );
-    }
-    if (name === "more") {
-      return (
-        <>
-          <Rect x="4" y="4" width="6.5" height="6.5" rx="1.6" fill={color} />
-          <Rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" fill={color} />
-          <Rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" fill={color} />
-          <Rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" fill={color} />
-        </>
-      );
-    }
-  }
-  const pen = { ...stroke, stroke: color };
-  if (name === "home") return <Path {...pen} d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" />;
-  if (name === "list") {
-    return (
-      <>
-        <Path {...pen} d="M8 7h12M8 12h12M8 17h12" />
-        <Circle cx="4.5" cy="7" r="1.2" fill={color} />
-        <Circle cx="4.5" cy="12" r="1.2" fill={color} />
-        <Circle cx="4.5" cy="17" r="1.2" fill={color} />
-      </>
-    );
-  }
-  if (name === "chart") return <Path {...pen} d="M4 19V9m6 10V5m6 14v-7m6 7H3" />;
-  if (name === "wallet") {
-    return (
-      <>
-        <Path {...pen} d="M3 8.5A2.5 2.5 0 0 1 5.5 6H19v3M3 8.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9H5.5A2.5 2.5 0 0 1 3 8.5Z" />
-        <Circle cx="16.5" cy="14.5" r="1.1" fill={color} />
-      </>
-    );
-  }
-  if (name === "more") {
-    return (
-      <>
-        <Rect {...pen} x="4" y="4" width="6.5" height="6.5" rx="1.4" />
-        <Rect {...pen} x="13.5" y="4" width="6.5" height="6.5" rx="1.4" />
-        <Rect {...pen} x="4" y="13.5" width="6.5" height="6.5" rx="1.4" />
-        <Rect {...pen} x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4" />
-      </>
-    );
-  }
-  if (name === "chevron") return <Path {...pen} d="m9 6 6 6-6 6" />;
-  if (name === "bell") {
-    return (
-      <>
-        <Path {...pen} d="M6 9a6 6 0 1 1 12 0c0 7 2 7 2 7H4s2 0 2-7" />
-        <Path {...pen} d="M10 19a2 2 0 0 0 4 0" />
-      </>
-    );
-  }
-  if (name === "gear") {
-    return (
-      <>
-        <Circle {...pen} cx="12" cy="12" r="3" />
-        <Path {...pen} d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.2 6.2l1.4 1.4M16.4 16.4l1.4 1.4M17.8 6.2l-1.4 1.4M7.6 16.4 6.2 17.8" />
-      </>
-    );
-  }
-  if (name === "spark") return <Path {...pen} d="M4 16.5 9 11l3.2 3L20 6.5" />;
-  if (name === "flow") return <Path {...pen} d="M4 8h11M4 16h11M15 8l3-3 3 3M15 16l3 3 3-3" />;
-  if (name === "calendar") return <Path {...pen} d="M7 4v3M17 4v3M4 9h16M6 7h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />;
-  if (name === "flag") return <Path {...pen} d="M6 21V4m0 0h11l-2.5 4L17 12H6" />;
-  return <Circle {...pen} cx="12" cy="12" r="8" />;
+function Home({ size, color, filled }: Mark) {
+  return (
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "flex-end" }}>
+      <View
+        style={{
+          width: 0,
+          height: 0,
+          borderLeftWidth: size * 0.38,
+          borderRightWidth: size * 0.38,
+          borderBottomWidth: size * 0.28,
+          borderLeftColor: "transparent",
+          borderRightColor: "transparent",
+          borderBottomColor: color,
+        }}
+      />
+      <View
+        style={{
+          width: size * 0.58,
+          height: size * 0.38,
+          marginTop: -1,
+          backgroundColor: filled ? color : "transparent",
+          borderWidth: filled ? 0 : 1.6,
+          borderColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+function List({ size, color }: Mark) {
+  return (
+    <View style={{ width: size, height: size, justifyContent: "center", gap: size * 0.14 }}>
+      {[0, 1, 2].map((row) => (
+        <View key={row} style={{ flexDirection: "row", alignItems: "center", gap: size * 0.12 }}>
+          <View style={{ width: size * 0.14, height: size * 0.14, borderRadius: size, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.6, backgroundColor: color }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Chart({ size, color, filled }: Mark) {
+  const heights = [0.42, 0.72, 0.54];
+  return (
+    <View style={{ width: size, height: size, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
+      {heights.map((height, index) => (
+        <View
+          key={index}
+          style={{
+            width: size * 0.22,
+            height: size * height,
+            backgroundColor: filled ? color : "transparent",
+            borderWidth: filled ? 0 : 1.6,
+            borderColor: color,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+function Wallet({ size, color, filled }: Mark) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size * 0.72,
+        marginTop: size * 0.14,
+        borderRadius: 4,
+        borderWidth: filled ? 0 : 1.6,
+        borderColor: color,
+        backgroundColor: filled ? color : "transparent",
+        justifyContent: "center",
+        alignItems: "flex-end",
+        paddingRight: size * 0.12,
+      }}
+    >
+      <View style={{ width: size * 0.16, height: size * 0.16, borderRadius: size, backgroundColor: filled ? "#fff" : color }} />
+    </View>
+  );
+}
+
+function More({ size, color, filled }: Mark) {
+  return (
+    <View style={{ width: size, height: size, flexDirection: "row", flexWrap: "wrap", gap: size * 0.12 }}>
+      {[0, 1, 2, 3].map((cell) => (
+        <View
+          key={cell}
+          style={{
+            width: size * 0.38,
+            height: size * 0.38,
+            borderRadius: 3,
+            borderWidth: filled ? 0 : 1.6,
+            borderColor: color,
+            backgroundColor: filled ? color : "transparent",
+          }}
+        />
+      ))}
+    </View>
+  );
 }
 
 export function MerchantMark({ name, color }: { name: string; color?: string | null }) {
