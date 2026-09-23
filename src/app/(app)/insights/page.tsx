@@ -97,7 +97,6 @@ export default function InsightsPage() {
               color: shelfColor(category.color),
             }))}
           />
-          <p className="px-4 pt-3 text-[13px] text-[var(--muted)]">Same shares as Home, next to a usual month.</p>
           {data.byCategory.map((category) => {
             const pct = (category.cents / total) * 100;
             return (
