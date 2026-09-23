@@ -28,7 +28,7 @@ function redirectHost(redirectUri: string): string {
   }
 }
 
-/** Google blocks OAuth on a raw LAN address unless the request names the device. */
+/** Google rejects OAuth redirect URIs that are a raw LAN address. */
 export function privateIpRedirect(redirectUri: string): boolean {
   const host = redirectHost(redirectUri);
   if (host === "localhost" || host.endsWith(".localhost")) return false;
@@ -53,11 +53,16 @@ export function googleAuthUrl(redirectUri: string, state: string, nonce: string,
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("prompt", "select_account");
   url.searchParams.set("login_hint", allowedGoogleEmail());
-  if (privateIpRedirect(redirectUri)) {
-    url.searchParams.set("device_id", "shelfmobile");
-    url.searchParams.set("device_name", "Shelf");
-  }
   return url.toString();
+}
+
+/** 192.168.1.88 -> http://192.168.1.88.nip.io:3000 so Google sees a hostname, not a private IP. */
+export function oauthOrigin(origin: string): string {
+  const url = new URL(origin);
+  if (!privateIpRedirect(url.origin)) return url.origin;
+  url.protocol = "http:";
+  url.hostname = `${url.hostname}.nip.io`;
+  return url.origin;
 }
 
 /** Phone return addresses. Anything else is dropped so this cannot become an open redirect. */

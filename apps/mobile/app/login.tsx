@@ -2,7 +2,7 @@ import { Link, router } from "expo-router";
 import { useState } from "react";
 import { Text } from "react-native";
 import { api } from "../src/api";
-import { signInWithGoogle } from "../src/google";
+import { googleRedirectHint, signInWithGoogle } from "../src/google";
 import { useSession } from "../src/session";
 import { Button, Field, Note, Screen } from "../src/ui";
 
@@ -50,6 +50,9 @@ export default function LoginScreen() {
       <Screen title="Sign in" subtitle="Use your Google account. Shelf asks for the password after that.">
         {error ? <Note>{error}</Note> : null}
         <Button label="Sign in with Google" onPress={() => void google()} busy={busy} />
+        {googleRedirectHint() ? (
+          <Note>{`In Google Cloud, add this Authorized redirect URI, then try again: ${googleRedirectHint()}`}</Note>
+        ) : null}
       </Screen>
     );
   }

@@ -5,7 +5,7 @@ import { users } from "@/db/schema";
 import { deviceTokenFor } from "@/lib/device-session";
 import { getSession } from "@/lib/auth";
 import { publicOrigin } from "@/lib/gate";
-import { appReturnUrl, exchangeGoogleCode, tokensMatch, verifyGoogleIdToken } from "@/lib/google";
+import { appReturnUrl, exchangeGoogleCode, oauthOrigin, tokensMatch, verifyGoogleIdToken } from "@/lib/google";
 import { googleConfigured } from "@/lib/google-config";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
   if (!verifier || !nonce) return fail("denied");
 
   try {
-    const redirectUri = `${origin}/api/auth/google/callback`;
+    const redirectUri = `${oauthOrigin(origin)}/api/auth/google/callback`;
     const idToken = await exchangeGoogleCode(code, redirectUri, verifier);
     const profile = await verifyGoogleIdToken(idToken, nonce);
     const db = await getDb();

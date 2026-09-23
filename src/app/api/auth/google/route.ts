@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { publicOrigin } from "@/lib/gate";
 import { googleConfigured } from "@/lib/google-config";
-import { appReturnUrl, googleAuthUrl, oauthToken } from "@/lib/google";
+import { appReturnUrl, googleAuthUrl, oauthOrigin, oauthToken, privateIpRedirect } from "@/lib/google";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +15,20 @@ const cookieBase = {
 
 export async function GET(request: Request) {
   if (!googleConfigured()) return new NextResponse(null, { status: 404 });
+  const requestUrl = new URL(request.url);
+  const currentOrigin = publicOrigin(request);
+  if (privateIpRedirect(currentOrigin)) {
+    const aliased = new URL(requestUrl);
+    const target = new URL(oauthOrigin(currentOrigin));
+    aliased.protocol = target.protocol;
+    aliased.host = target.host;
+    return NextResponse.redirect(aliased);
+  }
   const state = oauthToken();
   const verifier = oauthToken();
   const nonce = oauthToken();
-  const requestUrl = new URL(request.url);
   const mobile = requestUrl.searchParams.get("mobile") === "1";
-  const redirectUri = `${publicOrigin(request)}/api/auth/google/callback`;
+  const redirectUri = `${oauthOrigin(currentOrigin)}/api/auth/google/callback`;
   const res = NextResponse.redirect(googleAuthUrl(redirectUri, state, nonce, verifier));
   res.cookies.set("shelf_oauth_state", state, cookieBase);
   res.cookies.set("shelf_oauth_verifier", verifier, cookieBase);
