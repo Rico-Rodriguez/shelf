@@ -1,7 +1,9 @@
 import { router } from "expo-router";
-import { ReactNode, useState } from "react";
+import { ReactNode, useId, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useWordmark } from "./brand";
 import { flowMoney, money, shiftMonth } from "./format";
 import { Icon, MerchantMark } from "./icons";
 
@@ -48,13 +50,14 @@ export function Screen({
   action?: ReactNode;
   framed?: boolean;
 }) {
+  const wordmark = useWordmark();
   const body = (
     <>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {title ? (
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{title}</Text>
+              <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
             {action}
@@ -83,6 +86,7 @@ export function Field({
   value,
   onChangeText,
   secureTextEntry,
+  shelfKey,
   placeholder,
   keyboardType,
   multiline,
@@ -91,6 +95,8 @@ export function Field({
   value: string;
   onChangeText: (value: string) => void;
   secureTextEntry?: boolean;
+  /** Masked Shelf key. It is not a password, so the phone must not offer to save it. */
+  shelfKey?: boolean;
   placeholder?: string;
   keyboardType?: "default" | "numeric" | "email-address" | "number-pad" | "decimal-pad";
   multiline?: boolean;
@@ -101,11 +107,17 @@ export function Field({
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry}
+        secureTextEntry={secureTextEntry || shelfKey}
         placeholder={placeholder}
-        keyboardType={keyboardType}
+        keyboardType={shelfKey ? "default" : keyboardType}
         multiline={multiline}
         autoCapitalize="none"
+        autoCorrect={shelfKey ? false : undefined}
+        autoComplete={shelfKey ? "off" : undefined}
+        textContentType={shelfKey ? "none" : undefined}
+        importantForAutofill={shelfKey ? "no" : undefined}
+        spellCheck={shelfKey ? false : undefined}
+        accessibilityLabel={label}
         style={[styles.input, multiline ? styles.multiline : null]}
         placeholderTextColor={colors.tertiary}
       />
@@ -403,6 +415,18 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
+function smoothLine(coords: { x: number; y: number }[]) {
+  if (!coords.length) return "";
+  let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const current = coords[i];
+    const next = coords[i + 1];
+    const mid = (current.x + next.x) / 2;
+    d += ` C${mid.toFixed(2)},${current.y.toFixed(2)} ${mid.toFixed(2)},${next.y.toFixed(2)} ${next.x.toFixed(2)},${next.y.toFixed(2)}`;
+  }
+  return d;
+}
+
 export function SpendChart({
   points,
   onScrub,
@@ -410,11 +434,37 @@ export function SpendChart({
   points: { date: string; cents: number }[];
   onScrub?: (point: { date: string; cents: number } | null) => void;
 }) {
+  const gradientId = `spend-${useId().replace(/:/g, "")}`;
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
   if (series.length < 2) return null;
-  const max = Math.max(...series.map((point) => point.cents), 1);
+  const height = 148;
+  const drawWidth = width || 320;
+  const values = series.map((point) => point.cents);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const raw = max - min;
+  const pad = raw === 0 ? Math.max(Math.abs(max) * 0.22, 1) : raw * 0.22;
+  const lo = min - pad;
+  const hi = max + pad;
+  const span = hi - lo || 1;
+  const insetX = 10;
+  const insetY = 14;
+
+  function xOf(index: number) {
+    if (series.length <= 1) return drawWidth / 2;
+    return insetX + (index / (series.length - 1)) * (drawWidth - insetX * 2);
+  }
+
+  function yOf(cents: number) {
+    return insetY + ((hi - cents) / span) * (height - insetY * 2);
+  }
+
+  const coords = series.map((point, index) => ({ x: xOf(index), y: yOf(point.cents) }));
+  const line = smoothLine(coords);
+  const area = `${line} L${coords[coords.length - 1].x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
+  const dot = coords[active ?? coords.length - 1];
 
   function pick(x: number) {
     if (!width || !onScrub) return;
@@ -441,15 +491,17 @@ export function SpendChart({
         onScrub?.(null);
       }}
     >
-      {series.map((point, index) => {
-        const height = Math.max(8, (point.cents / max) * 120);
-        const on = active == null ? index === series.length - 1 : index <= active;
-        return (
-          <View key={`${point.date}-${index}`} style={styles.chartCol}>
-            <View style={[styles.chartBar, { height, opacity: on ? 0.9 : 0.28 }]} />
-          </View>
-        );
-      })}
+      <Svg width="100%" height={height} viewBox={`0 0 ${drawWidth} ${height}`}>
+        <Defs>
+          <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={colors.accent} stopOpacity={0.34} />
+            <Stop offset="100%" stopColor={colors.accent} stopOpacity={0.02} />
+          </LinearGradient>
+        </Defs>
+        <Path d={area} fill={`url(#${gradientId})`} />
+        <Path d={line} fill="none" stroke={colors.accent} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        {dot ? <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 6.5} fill={colors.accent} stroke="#fff" strokeWidth={3} /> : null}
+      </Svg>
     </View>
   );
 }
@@ -546,9 +598,7 @@ const styles = StyleSheet.create({
   factValue: { fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
   mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill },
   track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
-  chart: { height: 148, marginHorizontal: -18, marginTop: 8, flexDirection: "row", alignItems: "flex-end", gap: 3, paddingHorizontal: 12 },
-  chartCol: { flex: 1, justifyContent: "flex-end" },
-  chartBar: { backgroundColor: colors.accent, borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  chart: { height: 148, marginHorizontal: -18, marginTop: 8 },
   monthNav: { flexDirection: "row", alignItems: "center", gap: 4 },
   monthBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   monthChevron: { fontSize: 26, lineHeight: 28, color: colors.ink },

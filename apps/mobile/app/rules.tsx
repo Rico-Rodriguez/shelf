@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { View } from "react-native";
 import { api } from "../src/api";
 import { Back, Button, Field, Loading, Note, Row, Screen } from "../src/ui";
 
@@ -31,22 +32,42 @@ export default function RulesScreen() {
 
   useEffect(load, []);
 
+  async function move(index: number, dir: -1 | 1) {
+    const nextIndex = index + dir;
+    if (nextIndex < 0 || nextIndex >= rules.length) return;
+    const next = rules.slice();
+    const [row] = next.splice(index, 1);
+    next.splice(nextIndex, 0, row);
+    setRules(next);
+    await Promise.all(next.map((rule, order) => api(`/api/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ priority: order }) })));
+    load();
+  }
+
   const body = { name: name || merchant, matchMerchant: merchant, actionCategoryId: categoryId || null, enabled: true };
 
   return (
     <Screen title="Rules" refresh={<Back />}>
       {error ? <Note>{error}</Note> : null}
       {!rules.length && !error ? <Loading /> : null}
-      {rules.map((rule) => (
-        <Row
-          key={rule.id}
-          title={`${rule.enabled ? "" : "Off · "}${rule.name}`}
-          detail={rule.matchMerchant ?? ""}
-          onPress={() => void api(`/api/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !rule.enabled }) }).then(load)}
-        />
-      ))}
-      {rules.map((rule) => (
-        <Button key={`del-${rule.id}`} label={`Delete ${rule.name}`} tone="danger" onPress={() => void api(`/api/rules/${rule.id}`, { method: "DELETE" }).then(load)} />
+      {rules.map((rule, index) => (
+        <View key={rule.id} style={{ gap: 8 }}>
+          <Row
+            title={`${rule.enabled ? "" : "Off · "}${rule.name}`}
+            detail={rule.matchMerchant ?? ""}
+            onPress={() => void api(`/api/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !rule.enabled }) }).then(load)}
+          />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Earlier" tone="quiet" onPress={() => void move(index, -1)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Later" tone="quiet" onPress={() => void move(index, 1)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Delete" tone="danger" onPress={() => void api(`/api/rules/${rule.id}`, { method: "DELETE" }).then(load)} />
+            </View>
+          </View>
+        </View>
       ))}
       <Field label="Name" value={name} onChangeText={setName} />
       <Field label="Merchant contains" value={merchant} onChangeText={setMerchant} />

@@ -41,16 +41,20 @@ export default function SettingsScreen() {
         label="Load sample data"
         onPress={() => void api("/api/demo/seed", { method: "POST" }).then(() => refresh()).then(() => setMessage("Sample data is ready."))}
       />
-      <Field label="Current password" value={current} onChangeText={setCurrent} secureTextEntry />
-      <Field label="New password" value={next} onChangeText={setNext} secureTextEntry />
+      <Field label="Current Shelf key" value={current} onChangeText={setCurrent} shelfKey />
+      <Field label="New Shelf key" value={next} onChangeText={setNext} shelfKey />
       <Button
-        label="Change password"
+        label="Change Shelf key"
         tone="quiet"
-        onPress={() =>
+        onPress={() => {
+          if (next.length < 12) {
+            setMessage("Use at least 12 characters. A Shelf key is not a PIN.");
+            return;
+          }
           void api("/api/auth/password", { method: "POST", body: JSON.stringify({ current, next }) })
-            .then(() => setMessage("Password updated."))
-            .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not change the password"))
-        }
+            .then(() => setMessage("Shelf key updated."))
+            .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not change the Shelf key"));
+        }}
       />
       <Button label="Export JSON" tone="quiet" onPress={() => void shareExport("json")} />
       <Button label="Export CSV" tone="quiet" onPress={() => void shareExport("csv")} />

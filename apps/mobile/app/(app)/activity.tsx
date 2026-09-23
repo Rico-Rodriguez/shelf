@@ -3,20 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, monthLabel, monthRange } from "../../src/format";
+import { Charge, ChargeSheet } from "../../src/charge";
+import { SwipeRow } from "../../src/swipe";
 import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Sheet } from "../../src/ui";
 
-type Tx = {
-  id: string;
-  name: string;
-  merchantName: string | null;
-  amountCents: number;
-  date: string;
-  pending: boolean;
-  reviewed: boolean;
-  categoryId: string | null;
-  category: { name: string; color?: string | null } | null;
-  account: { name: string } | null;
-};
+type Tx = Charge;
 
 type Group = { id?: string; name: string; categories: { id: string; name: string }[] };
 
@@ -209,16 +200,26 @@ export default function ActivityScreen() {
               {items.map((tx, index) => {
                 const amount = flowMoney(tx.amountCents);
                 return (
-                  <LedgerRow
+                  <SwipeRow
                     key={tx.id}
                     divided={index > 0}
-                    name={tx.merchantName || tx.name}
-                    color={tx.category?.color}
-                    meta={[tx.category?.name ?? "Uncategorized", tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
-                    amount={amount.text}
-                    amountColor={amount.color}
+                    peek={!tx.reviewed}
                     onPress={() => setSelected(tx)}
-                  />
+                    actions={[
+                      { label: "Hide", tone: "danger", onPress: () => void patch(tx.id, { hidden: true }) },
+                      tx.reviewed
+                        ? { label: "Edit", tone: "ink", onPress: () => setSelected(tx) }
+                        : { label: "Done", tone: "accent", onPress: () => void patch(tx.id, { reviewed: true }) },
+                    ]}
+                  >
+                    <LedgerRow
+                      name={tx.merchantName || tx.name}
+                      color={tx.category?.color}
+                      meta={[tx.category?.name ?? "Uncategorized", tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                      amount={amount.text}
+                      amountColor={amount.color}
+                    />
+                  </SwipeRow>
                 );
               })}
             </Card>
@@ -227,28 +228,25 @@ export default function ActivityScreen() {
       })}
 
       {selected ? (
-        <Sheet title={selected.merchantName || selected.name} onClose={() => setSelected(null)}>
-          <FlowAmount cents={selected.amountCents} size={32} />
-          <Note>{[dayLabel(selected.date), selected.account?.name, selected.pending ? "Pending" : ""].filter(Boolean).join(" · ")}</Note>
-          <Button label={selected.reviewed ? "Mark unreviewed" : "Mark reviewed"} onPress={() => void patch(selected.id, { reviewed: !selected.reviewed })} />
-          <Button label="Hide" tone="quiet" onPress={() => void patch(selected.id, { hidden: true })} />
-          {groups.map((group) => (
-            <View key={group.name} style={{ gap: 8 }}>
-              <Section title={group.name} />
-              <Card>
-                {group.categories.map((category, index) => (
-                  <Pressable
-                    key={category.id}
-                    onPress={() => void patch(selected.id, { categoryId: category.id, reviewed: true })}
-                    style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, backgroundColor: selected.categoryId === category.id ? colors.accentSoft : "transparent" }}
-                  >
-                    <Text style={{ fontSize: 16, color: selected.categoryId === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
-                  </Pressable>
-                ))}
-              </Card>
-            </View>
-          ))}
-        </Sheet>
+        <ChargeSheet
+          tx={{
+            ...selected,
+            hidden: selected.hidden ?? false,
+            notes: selected.notes ?? null,
+            goalId: selected.goalId ?? null,
+            isTransfer: selected.isTransfer ?? false,
+            transferPairId: selected.transferPairId ?? null,
+            originalDescription: selected.originalDescription ?? null,
+            tags: selected.tags ?? [],
+            splits: selected.splits ?? [],
+          }}
+          groups={groups}
+          onClose={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            load();
+          }}
+        />
       ) : null}
 
       {filters ? (

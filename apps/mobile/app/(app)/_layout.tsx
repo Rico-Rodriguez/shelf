@@ -1,8 +1,9 @@
 import { router, Tabs, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "../../src/api";
+import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { colors } from "../../src/ui";
 
@@ -16,11 +17,12 @@ const TABS = [
 
 function MobileBar({ unread }: { unread: number }) {
   const insets = useSafeAreaInsets();
+  const wordmark = useWordmark();
   return (
     <View style={{ paddingTop: insets.top, backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1 }} />
-        <Text style={{ fontFamily: Platform.OS === "ios" ? "Georgia" : "serif", fontSize: 20, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
+        <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
           Shelf
         </Text>
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
