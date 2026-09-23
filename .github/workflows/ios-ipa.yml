@@ -1,0 +1,107 @@
+name: Shelf IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - cursor/native-parity-08b4
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/ios-ipa.yml"
+
+concurrency:
+  group: shelf-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install JavaScript dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate the iOS project
+        env:
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+          EXPO_NO_DOCTOR: "1"
+          EXPO_PUBLIC_API_URL: https://shelf-xi-hazel.vercel.app
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        run: pod install
+
+      - name: Archive without signing
+        env:
+          CI: "1"
+          EXPO_PUBLIC_API_URL: https://shelf-xi-hazel.vercel.app
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme: $SCHEME"
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -arch arm64 \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Shelf.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Package Shelf.ipa
+        run: |
+          set -euo pipefail
+          APP=$(find "$RUNNER_TEMP/Shelf.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -r -y Shelf.ipa Payload)
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          mv "$RUNNER_TEMP/Shelf.ipa" "$GITHUB_WORKSPACE/dist/Shelf.ipa"
+          ls -lh "$GITHUB_WORKSPACE/dist/Shelf.ipa"
+
+      - name: Upload Shelf.ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shelf
+          path: dist/Shelf.ipa
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Write the download link
+        run: |
+          {
+            echo "### Shelf.ipa"
+            echo "Download the artifact named **Shelf** from this run. It is an unsigned IPA. Sideload it with the tool you already use."
+            echo ""
+            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
