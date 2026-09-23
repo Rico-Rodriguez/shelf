@@ -1,5 +1,7 @@
+import { currentTotp } from "../src/lib/totp.ts";
+
 const base = process.env.SMOKE_URL ?? "http://127.0.0.1:3000";
-const password = process.env.SMOKE_PASSWORD ?? "shelfpass";
+const password = process.env.SMOKE_PASSWORD ?? "shelf-smoke-key";
 
 async function req(path, init = {}) {
   const res = await fetch(`${base}${path}`, {
@@ -32,23 +34,70 @@ function remember(res) {
 }
 
 const session = await req("/api/auth/session");
+let token = "";
 if (session.json?.needsSetup) {
   const setup = await req("/api/auth/setup", {
     method: "POST",
     body: JSON.stringify({ password }),
   });
+  if (!setup.res.ok || !setup.json?.token) {
+    console.error("setup failed", setup.text);
+    process.exit(1);
+  }
+  token = setup.json.token;
   remember(setup.res);
 } else {
   const login = await req("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ password }),
   });
-  if (!login.res.ok) {
+  if (!login.res.ok || !login.json?.token) {
     console.error("login failed", login.text);
     process.exit(1);
   }
+  token = login.json.token;
   remember(login.res);
 }
+
+const bearer = await req("/api/auth/session", { headers: { authorization: `Bearer ${token}` } });
+const sessionOpen = Boolean(bearer.json?.unlocked || bearer.json?.needsEnroll || bearer.json?.needsTotp);
+if (!bearer.res.ok || !sessionOpen) {
+  console.error("bearer session failed", bearer.text);
+  process.exit(1);
+}
+console.log("ok bearer");
+
+if (bearer.json?.needsEnroll) {
+  const enroll = await authed("/api/auth/totp/setup");
+  if (!enroll.res.ok || !enroll.json?.secret) {
+    console.error("totp setup failed", enroll.text);
+    process.exit(1);
+  }
+  remember(enroll.res);
+  const confirm = await authed("/api/auth/totp/setup", {
+    method: "POST",
+    body: JSON.stringify({ code: currentTotp(enroll.json.secret) }),
+  });
+  if (!confirm.res.ok || !confirm.json?.token) {
+    console.error("totp confirm failed", confirm.text);
+    process.exit(1);
+  }
+  token = confirm.json.token;
+  remember(confirm.res);
+  console.log("ok enroll");
+}
+
+const open = await req("/api/auth/session", { headers: { authorization: `Bearer ${token}` } });
+if (!open.json?.unlocked) {
+  console.error("session is not unlocked", open.text);
+  process.exit(1);
+}
+const bearerDash = await req("/api/dashboard", { headers: { authorization: `Bearer ${token}` } });
+if (!bearerDash.res.ok) {
+  console.error("bearer dashboard failed", bearerDash.text.slice(0, 400));
+  process.exit(1);
+}
+console.log("ok bearer dashboard");
 
 const health = await req("/api/health");
 if (!health.json?.ok) {
@@ -81,13 +130,11 @@ for (const path of paths) {
   console.log("ok", path);
 }
 
-for (const path of ["/", "/accounts", "/transactions", "/budget", "/recurring", "/cash-flow", "/reports", "/investments", "/goals", "/settings"]) {
-  const { res } = await authed(path);
-  if (res.status >= 400) {
-    console.error("page fail", path, res.status);
-    process.exit(1);
-  }
-  console.log("ok page", path);
+const home = await req("/");
+if (home.res.status >= 400) {
+  console.error("page fail", "/", home.res.status);
+  process.exit(1);
 }
+console.log("ok page /");
 
 console.log("smoke passed");

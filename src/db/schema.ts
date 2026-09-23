@@ -319,6 +319,19 @@ export const householdInvites = pgTable("household_invites", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const deviceSessions = pgTable(
+  "device_sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull(),
+    userId: text("user_id"),
+    payload: text("payload").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("device_sessions_token_hash_idx").on(t.tokenHash)],
+);
+
 export const notifications = pgTable(
   "notifications",
   {

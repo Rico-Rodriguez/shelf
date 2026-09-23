@@ -16,13 +16,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Plaid is not configured." }, { status: 400 });
     }
     let itemId = "";
+    let platform: "ios" | "android" = "ios";
     try {
-      const body = (await request.json()) as { itemId?: string };
+      const body = (await request.json()) as { itemId?: string; platform?: string };
       itemId = body.itemId ?? "";
+      if (body.platform === "android") platform = "android";
     } catch {
       itemId = "";
     }
     const client = getPlaidClient();
+    const androidPackage = process.env.PLAID_ANDROID_PACKAGE || "app.shelf.mobile";
+    const oauth =
+      platform === "android"
+        ? { android_package_name: androidPackage }
+        : { redirect_uri: process.env.PLAID_REDIRECT_URI || undefined };
     if (itemId) {
       const db = await getDb();
       const [item] = await db.select().from(plaidItems).where(eq(plaidItems.id, itemId));
@@ -34,7 +41,7 @@ export async function POST(request: Request) {
         access_token: decryptSecret(item.accessTokenEnc, dek),
         country_codes: [CountryCode.Us, CountryCode.Ca],
         webhook: process.env.PLAID_WEBHOOK_URL || undefined,
-        redirect_uri: process.env.PLAID_REDIRECT_URI || undefined,
+        ...oauth,
       });
       return NextResponse.json({ linkToken: res.data.link_token, update: true });
     }
@@ -44,7 +51,7 @@ export async function POST(request: Request) {
       client_name: "Shelf",
       language: "en",
       webhook: process.env.PLAID_WEBHOOK_URL || undefined,
-      redirect_uri: process.env.PLAID_REDIRECT_URI || undefined,
+      ...oauth,
       ...products,
     });
     return NextResponse.json({ linkToken: res.data.link_token });

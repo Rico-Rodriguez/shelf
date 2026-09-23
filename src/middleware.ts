@@ -1,60 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { gateMatches, gateToken, publicOrigin } from "@/lib/gate";
+import { gateMatches, gateToken } from "@/lib/gate";
 import { googleConfigured } from "@/lib/google-config";
-
-const PAGE_REDIRECTS: Record<string, string> = {
-  "/cash-flow": "/",
-  "/reports": "/insights",
-  "/investments": "/accounts",
-};
-
-const PUBLIC = [
-  "/login",
-  "/join",
-  "/setup",
-  "/api/auth/session",
-  "/api/auth/login",
-  "/api/auth/setup",
-  "/api/auth/totp",
-  "/api/auth/google",
-  "/api/health",
-  "/api/plaid/webhook",
-  "/api/plaid/oauth",
-  "/manifest.webmanifest",
-  "/sw.js",
-  "/icon.svg",
-  "/apple-touch-icon.png",
-];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/api/plaid/webhook" || pathname.startsWith("/g/")) {
+  if (pathname === "/" || pathname === "/api/plaid/webhook" || pathname.startsWith("/g/")) {
     return NextResponse.next();
   }
   if (pathname.startsWith("/api/auth/google")) return NextResponse.next();
-  if (!googleConfigured() && !gateMatches(request.cookies.get("shelf_gate")?.value, gateToken())) {
+  const gateOk =
+    gateMatches(request.cookies.get("shelf_gate")?.value, gateToken()) ||
+    gateMatches(request.headers.get("x-shelf-gate") ?? undefined, gateToken());
+  if (!googleConfigured() && !gateOk) {
     return new NextResponse(null, { status: 404 });
-  }
-  if (
-    PUBLIC.some((p) => pathname === p || pathname.startsWith("/_next") || pathname.startsWith("/icon")) ||
-    pathname.startsWith("/setup/two-factor") ||
-    pathname.startsWith("/api/auth/totp/")
-  ) {
-    return NextResponse.next();
-  }
-  if (pathname.startsWith("/api/auth")) return NextResponse.next();
-  const cookie = request.cookies.get("shelf_lock");
-  if (!cookie && !pathname.startsWith("/api/")) {
-    const login = new URL("/login", publicOrigin(request));
-    return NextResponse.redirect(login);
-  }
-  const redirectPath = PAGE_REDIRECTS[pathname];
-  if (cookie && redirectPath) {
-    const dest = request.nextUrl.clone();
-    dest.pathname = redirectPath;
-    dest.search = "";
-    dest.hash = "";
-    return NextResponse.redirect(dest);
   }
   return NextResponse.next();
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { householdMembers, households, users } from "@/db/schema";
-import { getSession } from "@/lib/auth";
+import { getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { createDek, hashPassword, MIN_PASSWORD, wrapDek } from "@/lib/crypto";
 import { nid } from "@/lib/ids";
 
@@ -40,5 +40,5 @@ export async function POST(request: Request) {
   session.pendingTotp = false;
   session.dek = dek.toString("base64");
   await session.save();
-  return NextResponse.json({ ok: true, needEnroll: true });
+  return jsonWithDeviceToken(session, { ok: true, needEnroll: true });
 }

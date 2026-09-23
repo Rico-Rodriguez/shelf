@@ -1,22 +1,22 @@
 # Shelf
 
-A private money app with a quiet luxury finish: accounts, a monthly plan, and one Insights view. Connect real banks with [Plaid’s Trial / Sandbox APIs](https://plaid.com/docs/account/billing/), or load sample data from Settings.
+A private money app for iPhone and Android. Accounts, a monthly plan, bills, goals, and insights. Connect real banks with [Plaid’s Trial / Sandbox APIs](https://plaid.com/docs/account/billing/), or load sample data from Settings.
+
+The phone app is in `apps/mobile` (Expo). This repository’s server keeps the database, the lock, and the Plaid secret. The website UI is not the product.
 
 This is original software. It is not affiliated with Monarch.
 
-## Run locally
+## Server
 
 You do **not** need Docker. Shelf uses embedded Postgres (PGlite) in `data/` when `DATABASE_URL` is unset.
 
 ```bash
-cd shelf
 cp .env.example .env
 npm install
-npm run icons
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Set a lock (password), then **Settings → Load sample data**.
+The server listens on [http://localhost:3000](http://localhost:3000). Opening that address in a browser only confirms the server is up.
 
 Optional real Postgres (same schema as Railway):
 
@@ -26,15 +26,32 @@ docker compose up -d
 DATABASE_URL=postgresql://shelf:shelf@localhost:5432/shelf
 ```
 
+## Phone app
+
+```bash
+cd apps/mobile
+npm install
+# iOS simulator can use localhost. Android emulator uses http://10.0.2.2:3000
+EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
+```
+
+Create a lock in the app, then Settings → Load sample data.
+
+Bank connect uses Plaid’s native Link SDK, so it needs a development build. `npx expo run:ios` needs macOS. Android is `npx expo run:android`. Set `PLAID_ANDROID_PACKAGE=app.shelf.mobile` on the server, and register the iOS redirect URI in the Plaid dashboard.
+
+If `APP_GATE_TOKEN` is set and Google sign-in is not, pass the same value as `EXPO_PUBLIC_GATE_TOKEN`.
+
+Sign-in returns a bearer token stored in the Keychain or Keystore. The website cookie session still works for the API.
+
 ## Plaid (Sandbox, then Trial)
 
 1. Create a dashboard account at [dashboard.plaid.com](https://dashboard.plaid.com).
 2. Put `PLAID_CLIENT_ID` and `PLAID_SECRET` in `.env`. Leave `PLAID_ENV=sandbox` while you build.
-3. Restart `npm run dev`. **Accounts → Connect a bank** uses Plaid Link.
+3. Restart `npm run dev`. In the app, Accounts → Connect a bank.
 4. For live US/CA banks, apply for the [Trial plan](https://dashboard.plaid.com/trial-plan) (new US/CA teams on/after 2026-04-15). Trial includes Transactions, Balance, Investments, and Liabilities, and **10 Items**. An Item is one institution login. Removing an Item does **not** free a slot.
 5. In the Plaid dashboard add:
    - Redirect: `http://localhost:3000/api/plaid/oauth` and later `https://YOUR_APP/api/plaid/oauth`
-   - Webhook: `https://YOUR_APP/api/plaid/webhook` (localhost polls on focus + every 15 minutes instead)
+   - Webhook: `https://YOUR_APP/api/plaid/webhook` (the app can sync on demand)
 6. Set `PLAID_ENV=production`, `PLAID_REDIRECT_URI`, `PLAID_WEBHOOK_URL`, `APP_SECRET`, and `APP_ENCRYPTION_KEY` (32+ characters each).
 
 Never paste keys into chat. Access tokens are encrypted at rest.
@@ -44,18 +61,16 @@ Never paste keys into chat. Access tokens are encrypted at rest.
 1. Create a Railway project from this repo (Nixpacks).
 2. Add a **Postgres** plugin. Railway sets `DATABASE_URL`.
 3. Set variables: `APP_SECRET`, `APP_ENCRYPTION_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_REDIRECT_URI=https://YOUR_APP/api/plaid/oauth`, `PLAID_WEBHOOK_URL=https://YOUR_APP/api/plaid/webhook`.
-4. Generate a public HTTPS URL.
-5. On your phone: open the URL → Share → **Add to Home Screen**.
+4. Generate a public HTTPS URL and set `EXPO_PUBLIC_API_URL` to it when you start the phone app.
 
 A `Dockerfile` is included if you prefer a container. Health check: `GET /api/health`.
 
 ## What Shelf includes
 
-Home leads with this month’s spending, what you saved, the latest charges, and the next bills. Budget is money left in the plan, category by category. Insights is this month against your usual month, plus a net worth line you can scrub. Recurring opens on a monthly bill total. JSON/CSV export stays in Settings.
+Home leads with this month’s spending, what you saved, the latest charges, and the next bills. Budget is money left in the plan, category by category. Insights is this month against your usual month, plus net worth. Bills open on a monthly total. JSON/CSV export stays in Settings.
 
 ## Scripts
 
-- `npm run dev` — local app
+- `npm run dev` — local server
 - `npm run build` / `npm start` — production server
-- `npm run icons` — rebuild PWA PNGs
 - `npm run smoke` — API smoke test against a running server

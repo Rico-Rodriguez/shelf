@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { AuthError, requireDek, requireUnlocked } from "@/lib/auth";
+import { AuthError, jsonWithDeviceToken, requireDek, requireUnlocked } from "@/lib/auth";
 import { hashPassword, MIN_PASSWORD, verifyPassword, wrapDek } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       .where(eq(users.id, user.id));
     session.dek = dek.toString("base64");
     await session.save();
-    return NextResponse.json({ ok: true });
+    return jsonWithDeviceToken(session, { ok: true });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
     throw err;
