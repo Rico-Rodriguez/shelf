@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { Text, View } from "react-native";
 import { api } from "../src/api";
-import { money, monthLabel, shiftMonth } from "../src/format";
-import { Back, Button, Loading, Note, Row, Screen } from "../src/ui";
+import { money, monthLabel } from "../src/format";
+import { Back, Card, colors, Facts, Hero, Loading, MonthNav, Note, Screen } from "../src/ui";
 
 type Report = {
   year: number;
@@ -9,10 +10,9 @@ type Report = {
   incomeCents: number;
   spendingCents: number;
   usualSpentCents?: number | null;
-  byCategory: { id: string; name: string; cents: number }[];
+  byCategory: { id: string; name: string; cents: number; color?: string }[];
   byMerchant?: { name: string; cents: number }[];
   netWorth: { netWorthCents: number };
-  snapshots: { date: string; netWorthCents: number }[];
 };
 
 export default function InsightsScreen() {
@@ -30,26 +30,50 @@ export default function InsightsScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load insights"));
   }, [cursor]);
 
-  const latest = data?.snapshots.at(-1);
+  const categories = (data?.byCategory ?? []).filter((row) => row.cents > 0);
+  const max = categories[0]?.cents ?? 1;
+
   return (
-    <Screen title="Insights" subtitle={monthLabel(cursor.year, cursor.month)} refresh={<Back />}>
-      <Button label="Previous" tone="quiet" onPress={() => setCursor(shiftMonth(cursor.year, cursor.month, -1))} />
-      <Button label="Next" tone="quiet" onPress={() => setCursor(shiftMonth(cursor.year, cursor.month, 1))} />
+    <Screen title="Insights" refresh={<Back />}>
+      <MonthNav year={cursor.year} month={cursor.month} label={monthLabel(cursor.year, cursor.month)} onChange={(year, month) => setCursor({ year, month })} />
       {error ? <Note>{error}</Note> : null}
-      {!data ? <Loading /> : null}
+      {!data && !error ? <Loading /> : null}
       {data ? (
         <>
-          <Row title="Spent" detail={money(data.spendingCents)} />
-          <Row title="Usual month" detail={data.usualSpentCents == null ? "—" : money(data.usualSpentCents)} />
-          <Row title="Income" detail={money(data.incomeCents)} />
-          <Row title="Net worth" detail={money(data.netWorth.netWorthCents)} />
-          {latest ? <Row title={latest.date} detail={money(latest.netWorthCents)} /> : null}
-          {data.byCategory.slice(0, 8).map((row) => (
-            <Row key={row.id} title={row.name} detail={money(row.cents)} />
-          ))}
-          {(data.byMerchant ?? []).map((row) => (
-            <Row key={row.name} title={row.name} detail={money(row.cents)} />
-          ))}
+          <Hero label="Spent" cents={data.spendingCents}>
+            <Facts
+              items={[
+                { kicker: "Usual month", value: data.usualSpentCents == null ? "—" : money(data.usualSpentCents) },
+                { kicker: "Income", value: money(data.incomeCents), color: colors.positive },
+              ]}
+            />
+          </Hero>
+          <Hero label="Net worth" cents={data.netWorth.netWorthCents} tone={data.netWorth.netWorthCents < 0 ? "bad" : undefined} />
+          {categories.length ? (
+            <Card>
+              {categories.map((row, index) => (
+                <View key={row.id} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
+                    <Text style={{ fontWeight: "600", color: colors.ink }}>{money(row.cents)}</Text>
+                  </View>
+                  <View style={{ height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" }}>
+                    <View style={{ width: `${Math.max(4, Math.round((row.cents / max) * 100))}%`, height: "100%", backgroundColor: colors.accent }} />
+                  </View>
+                </View>
+              ))}
+            </Card>
+          ) : null}
+          {(data.byMerchant ?? []).length ? (
+            <Card>
+              {(data.byMerchant ?? []).slice(0, 8).map((row, index) => (
+                <View key={row.name} style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
+                  <Text style={{ fontWeight: "600" }}>{money(row.cents)}</Text>
+                </View>
+              ))}
+            </Card>
+          ) : null}
         </>
       ) : null}
     </Screen>

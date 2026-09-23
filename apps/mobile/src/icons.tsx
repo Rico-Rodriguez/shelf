@@ -1,4 +1,5 @@
 import { Text, View } from "react-native";
+import { shelfColor } from "./format";
 
 type Mark = { size: number; color: string; filled: boolean };
 
@@ -148,9 +149,19 @@ export function MerchantMark({ name, color }: { name: string; color?: string | n
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+  const tint = color ? shelfColor(color) : "";
   return (
-    <View style={{ width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "#e7eaee" }}>
-      <Text style={{ fontSize: 13, fontWeight: "600", color: color || "#1c1f24" }}>{initials || "?"}</Text>
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 11,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: tint ? `${tint}22` : "#e8ecf0",
+      }}
+    >
+      <Text style={{ fontSize: 13, fontWeight: "700", letterSpacing: -0.2, color: tint || "#14181f" }}>{initials || "?"}</Text>
     </View>
   );
 }

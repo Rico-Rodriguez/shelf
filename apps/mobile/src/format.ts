@@ -2,6 +2,28 @@ export function money(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+export function flowMoney(cents: number): { text: string; color: string } {
+  if (cents < 0) return { text: `+${money(Math.abs(cents))}`, color: "#1b7a62" };
+  return { text: money(cents), color: "#14181f" };
+}
+
+export function shelfColor(hex: string | null | undefined): string {
+  const legacy: Record<string, string> = {
+    "#6b8f5e": "#1B7A62",
+    "#c4a484": "#8A5A2B",
+    "#e07a5f": "#D94A2E",
+    "#4a6fa5": "#2F5D8C",
+    "#d4847c": "#B04A3A",
+    "#e0a84a": "#C47A1A",
+    "#7ba3a0": "#3D6B5A",
+    "#8b6b9a": "#6B4F9A",
+    "#8b7355": "#5C6570",
+    "#9a8b7a": "#8B939E",
+  };
+  if (!hex) return "#5C6570";
+  return legacy[hex.trim().toLowerCase()] ?? hex;
+}
+
 export function signed(cents: number): string {
   if (cents > 0) return `+${money(cents)}`;
   if (cents < 0) return `-${money(Math.abs(cents))}`;
@@ -55,4 +77,15 @@ export function monthLabel(year: number, month: number): string {
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const date = new Date(year, month - 1 + delta, 1);
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
+export function monthRange(year: number, month: number): { start: string; end: string } {
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const last = new Date(year, month, 0).getDate();
+  const end = `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+  return { start, end };
+}
+
+export function isLiability(type: string): boolean {
+  return type === "credit" || type === "loan";
 }
