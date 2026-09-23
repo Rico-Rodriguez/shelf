@@ -123,10 +123,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="brand-mark text-[26px]">Shelf</div>
             {syncLabel ? <div className="text-[12px] text-[var(--muted)]">{syncLabel}</div> : null}
           </Link>
-          <button type="button" className="relative text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
-            <Icon name="bell" size={18} />
-            {unread ? <span className="absolute -right-1 -top-1 size-2 rounded-full bg-[var(--danger)]" /> : null}
-          </button>
+          <span className="flex items-center gap-1">
+            <button type="button" className="flex size-8 items-center justify-center text-[var(--muted)]" aria-label="Search" onClick={() => window.dispatchEvent(new Event("shelf-search"))}>
+              <Icon name="search" size={18} />
+            </button>
+            <button type="button" className="relative flex size-8 items-center justify-center text-[var(--muted)]" aria-label="Notifications" onClick={() => setNotesOpen(true)}>
+              <Icon name="bell" size={18} />
+              {unread ? <span className="absolute right-1 top-1 size-2 rounded-full bg-[var(--danger)]" /> : null}
+            </button>
+          </span>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5">
           {PRIMARY.map((item) => {
@@ -164,6 +169,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Shelf
           </Link>
           <span className="mobile-actions">
+            <button type="button" className="flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Search" onClick={() => window.dispatchEvent(new Event("shelf-search"))}>
+              <Icon name="search" size={20} />
+            </button>
             <Link href="/settings" prefetch className="flex size-10 items-center justify-center text-[var(--ink)]" aria-label="Settings">
               <Icon name="gear" size={20} />
             </Link>

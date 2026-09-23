@@ -8,11 +8,12 @@ import { MoneyText } from "@/components/MoneyText";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { ProgressBar } from "@/components/ProgressBar";
 import { SpendMix } from "@/components/SpendMix";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
-import { dayLabel, inDaysPhrase, monthRange, shortDate, todayISO, yearMonth } from "@/lib/dates";
+import { dayLabel, daysLeftInMonth, inDaysPhrase, monthRange, shortDate, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 import { categorizeLabel } from "@/lib/voice";
@@ -65,6 +66,8 @@ export default function HomePage() {
   const hasPlan = dash.budget.plannedCents > 0;
   const left = dash.budget.remainingCents;
   const overPlan = hasPlan && left < 0;
+  const daysLeft = daysLeftInMonth();
+  const perDay = !overPlan && left > 0 ? Math.round(left / daysLeft) : 0;
 
   async function loadSample() {
     setSeeding(true);
@@ -111,13 +114,28 @@ export default function HomePage() {
         />
 
         {hasPlan ? (
-          <Link href="/budget" className="plan-left">
-            <span>{overPlan ? "Over this month" : "Left this month"}</span>
+          <Link href="/budget" className="plan-left" aria-label={overPlan ? "Over this month" : "Left this month"}>
+            <span className="plan-copy">
+              <span>{overPlan ? "Over this month" : "Left this month"}</span>
+              {perDay > 0 ? (
+                <span className="plan-pace">
+                  {daysLeft === 1 ? "Last day" : `${daysLeft} days left`}
+                  {" · "}
+                  <MoneyText cents={perDay} /> a day
+                </span>
+              ) : null}
+              <span className="plan-meter">
+                <ProgressBar value={dash.budget.spentCents} max={dash.budget.plannedCents} overIsBad />
+              </span>
+            </span>
             <MoneyText
               animate
               cents={Math.abs(left)}
-              className={overPlan ? "text-[var(--danger)]" : "text-[var(--positive)]"}
+              className={`plan-left-figure shrink-0 ${overPlan ? "text-[var(--danger)]" : "text-[var(--positive)]"}`}
             />
+            <span className="shrink-0 text-[var(--tertiary)]">
+              <Icon name="chevron" size={18} />
+            </span>
           </Link>
         ) : null}
 
@@ -138,8 +156,15 @@ export default function HomePage() {
         ) : (
           <>
             {dash.unreviewed.count > 0 ? (
-              <Link href={activityHref({ reviewed: "false", focus: "1" })} className="review-banner">
-                <span className="min-w-0 flex-1">{categorizeLabel(dash.unreviewed.count)}</span>
+              <Link
+                href={activityHref({ reviewed: "false", focus: "1" })}
+                className="review-banner"
+                aria-label={categorizeLabel(dash.unreviewed.count)}
+              >
+                <span className="review-count" aria-hidden>
+                  {dash.unreviewed.count > 99 ? "99+" : dash.unreviewed.count}
+                </span>
+                <span className="min-w-0 flex-1">Purchases to categorize</span>
                 <Icon name="chevron" size={18} />
               </Link>
             ) : null}

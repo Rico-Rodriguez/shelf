@@ -48,6 +48,13 @@ const CADENCE_DAYS: Record<string, number> = {
   yearly: 365,
 };
 
+/** Days still in this month, including today. */
+export function daysLeftInMonth(today = todayISO()): number {
+  const [year, month, day] = today.split("-").map(Number);
+  const last = new Date(year, month, 0).getDate();
+  return Math.max(1, last - day + 1);
+}
+
 export function daysFromToday(iso: string, today = todayISO()) {
   const a = new Date(`${today}T12:00:00`).getTime();
   const b = new Date(`${iso}T12:00:00`).getTime();

@@ -33,8 +33,16 @@ export function CommandPalette() {
         setOpen(false);
       }
     };
+    const openSearch = () => {
+      setQ("");
+      setOpen(true);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("shelf-search", openSearch);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("shelf-search", openSearch);
+    };
   }, []);
 
   useEffect(() => {
@@ -87,7 +95,7 @@ export function CommandPalette() {
 
   return (
     <div className="command-backdrop" onClick={() => setOpen(false)}>
-      <div className="command-panel" role="dialog" aria-label="Search" onClick={(event) => event.stopPropagation()}>
+      <div className="command-panel" role="dialog" aria-modal="true" aria-label="Search" onClick={(event) => event.stopPropagation()}>
         <input
           className="shelf-input"
           autoFocus

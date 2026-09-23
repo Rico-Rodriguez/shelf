@@ -52,6 +52,15 @@ export default function AccountsPage() {
   const debts = visible.filter((account) => classifyAccount(account.type) === "liability");
   const assetTotal = assets.reduce((sum, account) => sum + account.currentBalanceCents, 0);
   const debtTotal = debts.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
+  const cashTotal = visible.filter((account) => account.type === "depository").reduce((sum, account) => sum + account.currentBalanceCents, 0);
+  const investTotal = visible.filter((account) => account.type === "investment").reduce((sum, account) => sum + account.currentBalanceCents, 0);
+  const otherTotal = assetTotal - cashTotal - investTotal;
+  const worthFacts = [
+    cashTotal ? { label: "Cash", cents: cashTotal } : null,
+    investTotal ? { label: "Investments", cents: investTotal } : null,
+    otherTotal ? { label: "Other", cents: otherTotal } : null,
+    debtTotal ? { label: "Debts", cents: debtTotal } : null,
+  ].filter((fact): fact is { label: string; cents: number } => Boolean(fact));
 
   const institutions = useMemo(() => {
     if (!data) return [];
@@ -114,6 +123,18 @@ export default function AccountsPage() {
             { label: "Assets", cents: assetTotal, color: "var(--accent)" },
             { label: "Debts", cents: debtTotal, color: "var(--danger)" },
           ]}
+          note={
+            worthFacts.length ? (
+              <span className="safe-facts">
+                {worthFacts.map((fact) => (
+                  <span key={fact.label}>
+                    <span className="safe-kicker">{fact.label}</span>
+                    <MoneyText animate cents={fact.cents} />
+                  </span>
+                ))}
+              </span>
+            ) : null
+          }
         />
       ) : null}
 

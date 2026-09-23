@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { MoneyText } from "@/components/MoneyText";
@@ -12,6 +12,13 @@ export type SummaryTone = "good" | "warn" | "bad" | "neutral";
 
 type Status = { label: string; tone: SummaryTone };
 type Share = { label: string; cents: number; color: string };
+
+const drawnCharts = new Set<string>();
+
+function chartKey(label: string | undefined, points: SummaryPoint[]) {
+  const last = points[points.length - 1];
+  return `${label ?? "chart"}:${points.length}:${last?.cents ?? 0}:${last?.date ?? ""}`;
+}
 
 /** Puts a zero at the start so a short cumulative series still draws a rise. */
 export function seriesFromZero(points: SummaryPoint[], originDate?: string): SummaryPoint[] {
@@ -236,6 +243,14 @@ function Chart({
     return () => observer.disconnect();
   }, [chartRef]);
 
+  const drawKey = chartKey(chartLabel, points);
+  const [playDraw] = useState(() => !drawnCharts.has(drawKey));
+  useEffect(() => {
+    if (!playDraw) return;
+    const timer = window.setTimeout(() => drawnCharts.add(drawKey), 700);
+    return () => window.clearTimeout(timer);
+  }, [drawKey, playDraw]);
+
   const values = points.map((point) => point.cents);
   if (reference) values.push(reference.cents);
   const min = Math.min(...values);
@@ -278,7 +293,7 @@ function Chart({
   return (
     <div
       ref={chartRef}
-      className={`summary-chart ${interactive ? "is-live" : ""} ${active != null ? "is-scrubbing" : ""}`}
+      className={`summary-chart ${playDraw ? "" : "is-settled"} ${interactive ? "is-live" : ""} ${active != null ? "is-scrubbing" : ""}`}
       onPointerDown={
         interactive
           ? (event) => {
