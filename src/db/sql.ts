@@ -290,4 +290,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_idx ON notifications (ded
 CREATE INDEX IF NOT EXISTS tx_date_idx ON transactions (date);
 CREATE INDEX IF NOT EXISTS tx_account_idx ON transactions (account_id);
 CREATE INDEX IF NOT EXISTS tx_category_idx ON transactions (category_id);
+
+CREATE TABLE IF NOT EXISTS device_sessions (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  user_id TEXT,
+  payload TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;

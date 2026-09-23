@@ -1,53 +1,14 @@
-import type { Metadata, Viewport } from "next";
-import { Fraunces, Outfit } from "next/font/google";
-import { PwaRegister } from "@/components/PwaRegister";
-import "./globals.css";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-outfit",
-  display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-});
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Shelf",
-  description: "A private luxury money app — accounts, budget, and cash flow.",
-  applicationName: "Shelf",
-  manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    title: "Shelf",
-    statusBarStyle: "default",
-  },
-  icons: {
-    icon: "/icon.svg",
-    apple: "/apple-touch-icon.png",
-  },
-};
-
-export const viewport: Viewport = {
-  themeColor: "#f3f5f7",
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
+  description: "Shelf runs as an iOS and Android app. This server keeps your data.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${fraunces.variable}`}>
-      <body className="antialiased">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("shelf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}`,
-          }}
-        />
-        <PwaRegister />
+    <html lang="en">
+      <body style={{ margin: 0, background: "#f3f5f7", color: "#1c1f24", fontFamily: "Georgia, 'Times New Roman', serif" }}>
         {children}
       </body>
     </html>

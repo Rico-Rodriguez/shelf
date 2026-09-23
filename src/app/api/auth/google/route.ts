@@ -18,10 +18,12 @@ export async function GET(request: Request) {
   const state = oauthToken();
   const verifier = oauthToken();
   const nonce = oauthToken();
+  const mobile = new URL(request.url).searchParams.get("mobile") === "1";
   const redirectUri = `${publicOrigin(request)}/api/auth/google/callback`;
   const res = NextResponse.redirect(googleAuthUrl(redirectUri, state, nonce, verifier));
   res.cookies.set("shelf_oauth_state", state, cookieBase);
   res.cookies.set("shelf_oauth_verifier", verifier, cookieBase);
   res.cookies.set("shelf_oauth_nonce", nonce, cookieBase);
+  if (mobile) res.cookies.set("shelf_oauth_mobile", "1", cookieBase);
   return res;
 }

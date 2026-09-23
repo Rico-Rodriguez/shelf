@@ -5,6 +5,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   const session = await getSession();
-  session.destroy();
+  await session.destroy();
   return NextResponse.json({ ok: true });
 }

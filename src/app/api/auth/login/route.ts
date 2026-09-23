@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { getSession } from "@/lib/auth";
+import { getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { verifyPassword } from "@/lib/crypto";
 import { googleConfigured, googleSessionOk } from "@/lib/google-config";
 import { clearIpFailures, clientIp, ipBlocked, lockMessage, nextLock, noteIpFailure } from "@/lib/throttle";
@@ -63,16 +63,16 @@ export async function POST(request: Request) {
     session.pendingTotp = false;
     session.pendingEnroll = false;
     await session.save();
-    return NextResponse.json({ ok: true });
+    return jsonWithDeviceToken(session, { ok: true });
   }
   if (user.totpEnabled) {
     session.pendingTotp = true;
     session.pendingEnroll = false;
     await session.save();
-    return NextResponse.json({ ok: true, needTotp: true });
+    return jsonWithDeviceToken(session, { ok: true, needTotp: true });
   }
   session.pendingEnroll = true;
   session.pendingTotp = false;
   await session.save();
-  return NextResponse.json({ ok: true, needEnroll: true });
+  return jsonWithDeviceToken(session, { ok: true, needEnroll: true });
 }

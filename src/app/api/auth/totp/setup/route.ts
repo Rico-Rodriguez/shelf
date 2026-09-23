@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import QRCode from "qrcode";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { AuthError, getSession } from "@/lib/auth";
+import { AuthError, getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { generateTotpSecret, totpUri, verifyTotp } from "@/lib/totp";
 import { prepareVault } from "@/lib/secrets";
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     session.totpSetupSecret = undefined;
     await session.save();
     await prepareVault(dek);
-    return NextResponse.json({ ok: true });
+    return jsonWithDeviceToken(session, { ok: true });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
     throw err;

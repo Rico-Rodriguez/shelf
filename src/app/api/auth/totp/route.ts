@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { AuthError, getSession } from "@/lib/auth";
+import { AuthError, getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { decryptSecret } from "@/lib/crypto";
 import { clearIpFailures, clientIp, ipBlocked, lockMessage, nextLock, noteIpFailure } from "@/lib/throttle";
 import { verifyTotp } from "@/lib/totp";
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     session.pendingTotp = false;
     await session.save();
     await prepareVault(Buffer.from(session.dek, "base64"));
-    return NextResponse.json({ ok: true });
+    return jsonWithDeviceToken(session, { ok: true });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
     throw err;

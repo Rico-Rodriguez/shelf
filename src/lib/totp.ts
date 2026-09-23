@@ -18,6 +18,10 @@ export function verifyTotp(secret: string, code: string, now = Date.now()): bool
   return false;
 }
 
+export function currentTotp(secret: string, now = Date.now()): string {
+  return totpCode(secret, Math.floor(now / 1000 / 30));
+}
+
 export function totpUri(secret: string): string {
   const label = encodeURIComponent("Shelf:owner");
   return `otpauth://totp/${label}?secret=${secret}&issuer=Shelf&algorithm=SHA1&digits=6&period=30`;

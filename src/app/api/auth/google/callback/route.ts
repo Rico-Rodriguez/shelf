@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
+import { deviceTokenFor } from "@/lib/device-session";
 import { getSession } from "@/lib/auth";
 import { publicOrigin } from "@/lib/gate";
 import { exchangeGoogleCode, tokensMatch, verifyGoogleIdToken } from "@/lib/google";
@@ -14,17 +15,12 @@ function clearOauth(res: NextResponse) {
   res.cookies.set("shelf_oauth_state", "", gone);
   res.cookies.set("shelf_oauth_verifier", "", gone);
   res.cookies.set("shelf_oauth_nonce", "", gone);
+  res.cookies.set("shelf_oauth_mobile", "", gone);
   return res;
 }
 
 export async function GET(request: Request) {
   const origin = publicOrigin(request);
-  const fail = (code: string) => clearOauth(NextResponse.redirect(new URL(`/login?google=${code}`, origin)));
-  if (!googleConfigured()) return new NextResponse(null, { status: 404 });
-
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code") ?? "";
-  const state = url.searchParams.get("state") ?? "";
   const cookie = request.headers.get("cookie") ?? "";
   const read = (name: string) =>
     cookie
@@ -32,6 +28,19 @@ export async function GET(request: Request) {
       .map((part) => part.trim())
       .find((part) => part.startsWith(`${name}=`))
       ?.slice(name.length + 1);
+  const fail = (code: string) => {
+    if (read("shelf_oauth_mobile") === "1") {
+      const dest = new URL("shelf://auth");
+      dest.searchParams.set("error", code);
+      return clearOauth(NextResponse.redirect(dest));
+    }
+    return clearOauth(NextResponse.redirect(new URL(`/?google=${code}`, origin)));
+  };
+  if (!googleConfigured()) return new NextResponse(null, { status: 404 });
+
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code") ?? "";
+  const state = url.searchParams.get("state") ?? "";
 
   if (!code || !tokensMatch(state, read("shelf_oauth_state"))) return fail("denied");
   const verifier = read("shelf_oauth_verifier");
@@ -60,7 +69,14 @@ export async function GET(request: Request) {
     session.dek = undefined;
     session.totpSetupSecret = undefined;
     await session.save();
-    return clearOauth(NextResponse.redirect(new URL(user ? "/login" : "/setup", origin)));
+    if (read("shelf_oauth_mobile") === "1") {
+      const token = await deviceTokenFor(session);
+      const dest = new URL("shelf://auth");
+      dest.searchParams.set("token", token);
+      dest.searchParams.set("next", user ? "login" : "setup");
+      return clearOauth(NextResponse.redirect(dest));
+    }
+    return clearOauth(NextResponse.redirect(new URL("/", origin)));
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     return fail(message === "google email rejected" || message === "google profile incomplete" ? "mismatch" : "failed");
