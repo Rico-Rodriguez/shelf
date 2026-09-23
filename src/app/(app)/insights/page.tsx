@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MoneyText } from "@/components/MoneyText";
 import { MonthNav } from "@/components/MonthNav";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SpendMix } from "@/components/SpendMix";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
@@ -32,7 +32,7 @@ export default function InsightsPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
-  const { data, loading, error, reload } = useQuery<Report>(
+  const { data, loading, refreshing, error, reload } = useQuery<Report>(
     `insights:${cursor.year}-${cursor.month}`,
     `/api/reports?year=${cursor.year}&month=${cursor.month}`,
     { keepPrevious: true },
@@ -60,6 +60,7 @@ export default function InsightsPage() {
   const spendingNote = versusShort(data.spendingCents, data.usualSpentCents ?? null);
 
   return (
+    <PageShell refreshing={refreshing}>
     <div className="screen">
       <PageHeader title="Insights">
         <MonthNav
@@ -150,5 +151,6 @@ export default function InsightsPage() {
         </section>
       ) : null}
     </div>
+    </PageShell>
   );
 }

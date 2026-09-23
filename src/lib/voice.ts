@@ -16,6 +16,12 @@ export function versusStatus(deltaCents: number | null, noun = "usual"): { label
   return { label: `${formatMoney(-deltaCents)} under ${noun}`, tone: "good" };
 }
 
+export function categorizeLabel(count: number): string {
+  if (count === 1) return "1 purchase to categorize";
+  const shown = count > 99 ? "99+" : String(count);
+  return `${shown} purchases to categorize`;
+}
+
 export function versusShort(spentCents: number, usualCents: number | null): string | null {
   if (usualCents == null) return null;
   const delta = spentCents - usualCents;

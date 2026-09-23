@@ -15,10 +15,11 @@ import { api } from "@/lib/client";
 import { dayLabel, inDaysPhrase, monthRange, shortDate, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
+import { categorizeLabel } from "@/lib/voice";
 
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
-  budget: { plannedCents: number; spentCents: number; remainingCents: number; mode: string };
+  budget: { plannedCents: number; spentCents: number; remainingCents: number };
   unreviewed: { count: number };
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   accountCount: number;
@@ -34,7 +35,6 @@ type Dash = {
   }[];
   spendSeries?: { date: string; cents: number }[];
   spending?: { id: string; name: string; cents: number; color: string }[];
-  usual?: { deltaCents: number | null };
   suggestedSubscriptions?: { merchantName: string }[];
 };
 
@@ -62,6 +62,9 @@ export default function HomePage() {
   const suggestions = dash.suggestedSubscriptions?.length ?? 0;
   const latest = dash.transactions.slice(0, 4);
   const showCash = dash.cashFlow.incomeCents !== 0 || dash.cashFlow.spendingCents !== 0;
+  const hasPlan = dash.budget.plannedCents > 0;
+  const left = dash.budget.remainingCents;
+  const overPlan = hasPlan && left < 0;
 
   async function loadSample() {
     setSeeding(true);
@@ -107,6 +110,17 @@ export default function HomePage() {
           }
         />
 
+        {hasPlan ? (
+          <Link href="/budget" className="plan-left">
+            <span>{overPlan ? "Over this month" : "Left this month"}</span>
+            <MoneyText
+              animate
+              cents={Math.abs(left)}
+              className={overPlan ? "text-[var(--danger)]" : "text-[var(--positive)]"}
+            />
+          </Link>
+        ) : null}
+
         {dash.accountCount === 0 && dash.transactions.length === 0 ? (
           <EmptyState
             title="Start with one account"
@@ -125,8 +139,7 @@ export default function HomePage() {
           <>
             {dash.unreviewed.count > 0 ? (
               <Link href={activityHref({ reviewed: "false", focus: "1" })} className="review-banner">
-                <span className="nav-count">{dash.unreviewed.count > 99 ? "99+" : dash.unreviewed.count}</span>
-                <span className="min-w-0 flex-1">To review</span>
+                <span className="min-w-0 flex-1">{categorizeLabel(dash.unreviewed.count)}</span>
                 <Icon name="chevron" size={18} />
               </Link>
             ) : null}

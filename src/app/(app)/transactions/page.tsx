@@ -25,6 +25,7 @@ import { useQuery } from "@/lib/use-query";
 import { dayLabel, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { rememberCategory } from "@/lib/category-memory";
 import { merchantMatchKey } from "@/lib/plan";
+import { categorizeLabel } from "@/lib/voice";
 
 type RuleApply = {
   id: string;
@@ -89,7 +90,8 @@ function Activity() {
   const [search, setSearch] = useState(urlQ);
   const [rows, setRows] = useState<Tx[]>([]);
   const [unreviewed, setUnreviewed] = useState(0);
-  const [groups, setGroups] = useState<CatGroup[]>([]);
+  const { data: categoryData } = useQuery<{ groups: CatGroup[] }>("categories", "/api/categories");
+  const groups = categoryData?.groups ?? [];
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
   const [pairs, setPairs] = useState<{ id: string; name: string; date: string; amountCents: number; account: string | null }[]>([]);
@@ -158,7 +160,6 @@ function Activity() {
   }
 
   useEffect(() => {
-    void api<{ groups: CatGroup[] }>("/api/categories").then((r) => setGroups(r.groups));
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((r) => setAccounts(r.accounts));
     void api<{ goals: { id: string; name: string }[] }>("/api/goals")
       .then((r) => setGoals(r.goals))
@@ -467,8 +468,7 @@ function Activity() {
 
       {unreviewed > 0 ? (
         <button className="review-banner w-full text-left" type="button" onClick={() => replaceQuery({ reviewed: "false", focus: "1" })}>
-          <span className="nav-count">{unreviewed > 99 ? "99+" : unreviewed}</span>
-          <span className="min-w-0 flex-1">To review</span>
+          <span className="min-w-0 flex-1">{categorizeLabel(unreviewed)}</span>
           <Icon name="chevron" size={18} />
         </button>
       ) : null}

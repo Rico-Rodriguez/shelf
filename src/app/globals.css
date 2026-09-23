@@ -1202,7 +1202,27 @@ a:focus-visible {
   }
 
   .route-fade {
-    animation: none;
+    animation: fade-in 180ms ease;
+  }
+
+  .plan-left {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    background: var(--paper);
+    box-shadow: var(--shadow-xs);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .plan-left:active {
+    background: var(--fill);
   }
 
   .home-split {

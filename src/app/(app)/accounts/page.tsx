@@ -6,6 +6,7 @@ import { ConnectBank } from "@/components/ConnectBank";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { MoneyText } from "@/components/MoneyText";
 import { Sheet } from "@/components/Sheet";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
@@ -131,7 +132,16 @@ export default function AccountsPage() {
         </div>
       ) : null}
 
-      {institutions.length === 0 ? <p className="text-[15px] text-[var(--muted)]">Add a bank or a balance to see it here.</p> : null}
+      {institutions.length === 0 ? (
+        <EmptyState
+          title="Add a bank or a balance"
+          action={
+            <button className="shelf-btn" type="button" onClick={() => setOpen(true)}>
+              Add an account
+            </button>
+          }
+        />
+      ) : null}
 
       {data.plaidConfigured ? (
         <div className="card">

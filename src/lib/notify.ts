@@ -4,6 +4,7 @@ import { accounts, budgetItems, categories, notifications, plaidItems, recurrenc
 import { getOrCreateBudgetMonth, spentByCategory } from "./budget";
 import { addDays, todayISO, yearMonth } from "./dates";
 import { formatMoney } from "./money";
+import { categorizeLabel } from "./voice";
 import { nid } from "./ids";
 import { merchantKey, priceDrift } from "./plan";
 import { openAccount, openBudgetItem, openRecurrence, openTx } from "./secrets";
@@ -21,7 +22,7 @@ export async function refreshNotifications(dek: Buffer) {
   if (unreviewed.length) {
     notes.push({
       kind: "review",
-      title: `${unreviewed.length} to review`,
+      title: categorizeLabel(unreviewed.length),
       body: "New transactions are waiting.",
       href: "/transactions?reviewed=false",
       dedupeKey: `review:${today}`,

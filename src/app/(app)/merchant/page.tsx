@@ -3,11 +3,14 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { MoneyText } from "@/components/MoneyText";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
+import { merchantMatchKey } from "@/lib/plan";
 import { useQuery } from "@/lib/use-query";
 
 type Tx = {
@@ -16,10 +19,11 @@ type Tx = {
   date: string;
   amountCents: number;
   pending: boolean;
-  category: { name: string } | null;
+  category: { id: string; name: string } | null;
 };
 
 type Rule = { id: string; matchMerchant: string | null; actionCategoryId: string | null; name: string };
+type CatGroups = { groups: { categories: { id: string; name: string }[] }[] };
 
 function Merchant() {
   const params = useSearchParams();
@@ -28,20 +32,17 @@ function Merchant() {
     name ? `merchant:${name}` : null,
     name ? `/api/transactions?merchant=${encodeURIComponent(name)}` : null,
   );
+  const { data: categoryData } = useQuery<CatGroups>(name ? "categories" : null, name ? "/api/categories" : null);
   const rows = data?.transactions ?? null;
   const [rule, setRule] = useState<Rule | null>(null);
-  const [categoryName, setCategoryName] = useState<string | null>(null);
+  const { flash, run } = useConfirmFlash();
 
   useEffect(() => {
     if (!name) return;
     void api<{ rules: Rule[] }>("/api/rules")
-      .then(async (res) => {
+      .then((res) => {
         const match = res.rules.find((item) => item.matchMerchant && name.toLowerCase().includes(item.matchMerchant.toLowerCase()));
         setRule(match ?? null);
-        if (!match?.actionCategoryId) return;
-        const cats = await api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories");
-        const found = cats.groups.flatMap((group) => group.categories).find((category) => category.id === match.actionCategoryId);
-        setCategoryName(found?.name ?? null);
       })
       .catch(() => undefined);
   }, [name]);
@@ -55,21 +56,48 @@ function Merchant() {
     }
     const months = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
     const usual = months.length ? Math.round(months.reduce((sum, [, cents]) => sum + cents, 0) / months.length) : null;
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { name: string; n: number }>();
     for (const tx of list) {
+      const id = tx.category?.id;
       const label = tx.category?.name;
-      if (!label) continue;
-      counts.set(label, (counts.get(label) ?? 0) + 1);
+      if (!id || !label) continue;
+      const current = counts.get(id) ?? { name: label, n: 0 };
+      current.n += 1;
+      counts.set(id, current);
     }
-    const category = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    return { usual, category, series: months.map(([date, cents]) => ({ date, cents })) };
+    const top = [...counts.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+    return {
+      usual,
+      category: top?.[1].name ?? null,
+      categoryId: top?.[0] ?? null,
+      series: months.map(([date, cents]) => ({ date, cents })),
+    };
   }, [rows]);
+
+  const categoryName = useMemo(() => {
+    if (!rule?.actionCategoryId || !categoryData) return null;
+    return categoryData.groups.flatMap((group) => group.categories).find((category) => category.id === rule.actionCategoryId)?.name ?? null;
+  }, [rule, categoryData]);
+
+  async function alwaysFile() {
+    if (!summary.categoryId || !summary.category) return;
+    const created = await api<{ id: string }>("/api/rules", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        matchMerchant: merchantMatchKey(name),
+        actionCategoryId: summary.categoryId,
+        applyUnreviewed: true,
+      }),
+    });
+    setRule({ id: created.id, matchMerchant: merchantMatchKey(name), actionCategoryId: summary.categoryId, name });
+  }
 
   if (!name) {
     return (
-      <div className="space-y-3">
+      <div className="screen">
         <PageHeader title="Merchant" />
-        <p className="text-[15px] text-[var(--muted)]">Open a merchant from Insights.</p>
+        <EmptyState title="Open a merchant from Insights" />
       </div>
     );
   }
@@ -78,6 +106,7 @@ function Merchant() {
 
   return (
     <div className="screen">
+      {flash}
       <Link href="/insights" className="ios-back">
         Insights
       </Link>
@@ -89,24 +118,31 @@ function Merchant() {
         status={summary.category ? { label: summary.category, tone: "neutral" } : null}
         points={summary.series}
         chartLabel="Spending by month"
-        footer={rule ? (categoryName ? `Files as ${categoryName}` : "A rule matches this merchant") : "No rule yet"}
-        detail={rule ? null : "Confirm a category and turn on Always."}
+        footer={rule ? (categoryName ? `Files as ${categoryName}` : "A rule matches this merchant") : summary.category ? null : "No rule yet"}
       />
-      <div className="card">
-        {rows.map((tx) => (
-          <div key={tx.id} className={`data-row justify-between gap-3 ${tx.pending ? "is-pending" : ""}`}>
-            <span className="min-w-0">
-              <span className="block truncate">{tx.name}</span>
-              <span className="block text-[13px] text-[var(--muted)]">
-                {tx.date}
-                {tx.category?.name ? ` · ${tx.category.name}` : ""}
+      {!rule && summary.category ? (
+        <button className="shelf-btn" type="button" onClick={() => void run(alwaysFile)}>
+          Always file as {summary.category}
+        </button>
+      ) : null}
+      {rows.length === 0 ? (
+        <EmptyState title="No transactions for this merchant" />
+      ) : (
+        <div className="card">
+          {rows.map((tx) => (
+            <div key={tx.id} className={`data-row justify-between gap-3 ${tx.pending ? "is-pending" : ""}`}>
+              <span className="min-w-0">
+                <span className="block truncate">{tx.name}</span>
+                <span className="block text-[13px] text-[var(--muted)]">
+                  {tx.date}
+                  {tx.category?.name ? ` · ${tx.category.name}` : ""}
+                </span>
               </span>
-            </span>
-            <MoneyText cents={-tx.amountCents} signed />
-          </div>
-        ))}
-        {rows.length === 0 ? <p className="data-row text-[var(--muted)]">No transactions for this merchant.</p> : null}
-      </div>
+              <MoneyText cents={-tx.amountCents} signed />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

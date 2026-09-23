@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { yearMonth } from "@/lib/dates";
+import { categorizeLabel } from "@/lib/voice";
 import { warmQuery } from "@/lib/use-query";
 import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
@@ -86,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     warmQuery(`insights:${now.year}-${now.month}`, `/api/reports?year=${now.year}&month=${now.month}`);
     warmQuery("bills", "/api/recurring");
     warmQuery("goals", "/api/goals");
+    warmQuery("categories", "/api/categories");
   }, [router]);
 
   useEffect(() => {
@@ -172,7 +174,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </div>
         <main ref={scrollerRef} className="app-main">
-          <div className="route-fade">{children}</div>
+          <div key={path} className="route-fade">
+            {children}
+          </div>
         </main>
         <nav className="ios-tabbar md:hidden" aria-label="Primary">
           {PRIMARY.map((item) => {
@@ -184,7 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 prefetch
                 className={`ios-tab ${active ? "active" : ""}`}
                 aria-current={active ? "page" : undefined}
-                aria-label={item.href === "/transactions" && reviewCount > 0 ? `${item.label}, ${reviewCount} to review` : item.label}
+                aria-label={item.href === "/transactions" && reviewCount > 0 ? `${item.label}, ${categorizeLabel(reviewCount)}` : item.label}
               >
                 <span className="ios-tab-glyph" aria-hidden>
                   <Icon name={item.icon} size={24} filled={active} />
