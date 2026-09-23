@@ -10,13 +10,10 @@ import { Sheet } from "@/components/Sheet";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
-import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
-import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
-import { versusStatus } from "@/lib/voice";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
 type Row = {
@@ -127,14 +124,6 @@ export default function BudgetPage() {
     reload();
   }
 
-  async function suggest() {
-    await run(async () => {
-      await api("/api/budget", { method: "POST", body: JSON.stringify({ year: budget.year, month: budget.month, apply: true }) });
-    });
-    invalidateQueries("budget:");
-    reload();
-  }
-
   async function commit(work: (() => Promise<void>) | null, close: () => void) {
     if (work) await run(work);
     close();
@@ -164,14 +153,6 @@ export default function BudgetPage() {
             Edit
           </button>
         </PageHeader>
-
-        <BudgetSummary budget={budget} />
-
-        {budget.expensePlannedCents <= 0 ? (
-          <button className="shelf-btn" type="button" onClick={() => void suggest()}>
-            Use your usual spending
-          </button>
-        ) : null}
 
         {visibleGroups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
@@ -243,16 +224,6 @@ export default function BudgetPage() {
                 className="data-row w-full text-left font-medium"
                 onClick={() => {
                   setPlanOpen(false);
-                  void suggest();
-                }}
-              >
-                Use your usual spending
-              </button>
-              <button
-                type="button"
-                className="data-row w-full text-left font-medium"
-                onClick={() => {
-                  setPlanOpen(false);
                   void openAdd();
                 }}
               >
@@ -319,48 +290,6 @@ export default function BudgetPage() {
 
       </div>
     </PageShell>
-  );
-}
-
-function leftSeries(points: { date: string; cents: number }[], leftCents: number, origin: string) {
-  if (!points.length) return [];
-  const last = points[points.length - 1].cents;
-  const mapped = points.map((point) => ({ date: point.date, cents: leftCents + (last - point.cents) }));
-  if (mapped[0].date !== origin) return [{ date: origin, cents: leftCents + last }, ...mapped];
-  if (mapped.length === 1) return [{ date: origin, cents: leftCents + last }, mapped[0]];
-  return mapped;
-}
-
-function BudgetSummary({ budget }: { budget: Budget }) {
-  const range = monthRange(budget.year, budget.month);
-  const left = budget.expensePlannedCents - budget.expenseSpentCents;
-  const points = budget.expensePlannedCents > 0 ? leftSeries(budget.spendSeries ?? [], left, range.start) : [];
-  const pace = budget.expensePlannedCents > 0 ? budgetPace(budget.expenseSpentCents, budget.expensePlannedCents, budget.year, budget.month) : null;
-  const paceTone: SummaryTone | null = !pace
-    ? null
-    : pace.tone === "over"
-      ? "bad"
-      : pace.tone === "hot"
-        ? "warn"
-        : pace.tone === "muted"
-          ? "neutral"
-          : "good";
-  const status =
-    pace?.label && paceTone
-      ? { label: pace.label, tone: paceTone }
-      : versusStatus(budget.usualSpentCents == null ? null : budget.expenseSpentCents - budget.usualSpentCents);
-
-  const unplanned = budget.expensePlannedCents <= 0;
-
-  return (
-    <SummaryCard
-      label={unplanned ? "Spent this month" : "Left in the plan"}
-      cents={unplanned ? budget.expenseSpentCents : left}
-      signed={!unplanned && left < 0}
-      status={unplanned ? { label: "No plan yet", tone: "neutral" } : status}
-      points={points}
-      chartLabel={unplanned ? "Spending this month" : "Left in the plan through the month"}
-    />
   );
 }
 
