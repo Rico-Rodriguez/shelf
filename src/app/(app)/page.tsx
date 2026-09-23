@@ -23,16 +23,7 @@ type Dash = {
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   accountCount: number;
   transactions: { id: string; name: string }[];
-  safeToSpend?: {
-    cents: number;
-    incomeCents?: number;
-    committedCents?: number;
-    committedFrom?: "plan" | "bills";
-    goalsCents?: number;
-    spentCents?: number;
-    pendingCents?: number;
-  };
-  safeSeries?: { date: string; cents: number }[];
+  spendSeries?: { date: string; cents: number }[];
   spending?: { id: string; name: string; cents: number; color: string }[];
   usual?: { deltaCents: number | null };
   suggestedSubscriptions?: { merchantName: string }[];
@@ -49,14 +40,10 @@ export default function HomePage() {
 
   const now = yearMonth();
   const range = monthRange(now.year, now.month);
-  const hero = dash.safeToSpend?.cents ?? dash.budget.remainingCents;
-  const shown = scrub?.cents ?? hero;
+  const shown = scrub?.cents ?? dash.cashFlow.spendingCents;
   const today = todayISO();
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
-  const series = dash.safeSeries ?? [];
-  const goalsCents = dash.safeToSpend?.goalsCents ?? 0;
-  const committedFromPlan = dash.safeToSpend?.committedFrom === "plan";
-  const committedLabel = committedFromPlan ? (goalsCents > 0 ? "Set aside & goals" : "Set aside") : goalsCents > 0 ? "Bills & goals" : "Bills";
+  const series = dash.spendSeries ?? [];
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
@@ -84,30 +71,19 @@ export default function HomePage() {
         {flash}
         <SummaryCard
           className="is-hero"
-          label={scrub ? dayLabel(scrub.date) : "Safe to spend"}
+          label={scrub ? dayLabel(scrub.date) : "Spent this month"}
           cents={shown}
-          signed={shown < 0}
           points={series}
-          chartLabel="Safe to spend through the month"
+          chartLabel="Spending this month"
           onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
           note={
             scrub ? null : (
-              <>
-                <span className="safe-facts">
-                  <span>
-                    <span className="safe-kicker">Income</span>
-                    <MoneyText cents={dash.safeToSpend?.incomeCents ?? dash.cashFlow.incomeCents} />
-                  </span>
-                  <span>
-                    <span className="safe-kicker">{committedLabel}</span>
-                    <MoneyText cents={(dash.safeToSpend?.committedCents ?? 0) + goalsCents} />
-                  </span>
-                  <span>
-                    <span className="safe-kicker">Day to day</span>
-                    <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
-                  </span>
+              <span className="safe-facts">
+                <span>
+                  <span className="safe-kicker">Income</span>
+                  <MoneyText cents={dash.cashFlow.incomeCents} />
                 </span>
-              </>
+              </span>
             )
           }
         />
