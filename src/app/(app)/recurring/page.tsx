@@ -10,7 +10,8 @@ import { Sheet } from "@/components/Sheet";
 import { offerUndo } from "@/components/UndoHost";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { Segment } from "@/components/ui/Segment";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { seriesFromZero, SummaryCard } from "@/components/ui/SummaryCard";
@@ -62,7 +63,7 @@ const emptyForm = { merchantName: "", amount: "", cadence: "monthly", nextDate: 
 export default function RecurringPage() {
   const now = yearMonth();
   const [cursor, setCursor] = useState(now);
-  const { data, loading, error, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
+  const { data, loading, refreshing, error, reload } = useQuery<{ recurrences: Rec[] }>("bills", "/api/recurring");
   const rows = data?.recurrences ?? [];
   const [view, setView] = useState<"list" | "calendar">("list");
   const [findOpen, setFindOpen] = useState(false);
@@ -224,6 +225,7 @@ export default function RecurringPage() {
   }
 
   return (
+    <PageShell refreshing={refreshing}>
     <div className="screen">
       {flash}
       <PageHeader title="Bills">
@@ -273,6 +275,15 @@ export default function RecurringPage() {
             })}
           </div>
         </div>
+      ) : bills.length === 0 ? (
+        <EmptyState
+          title="No bills yet"
+          action={
+            <button className="shelf-btn" type="button" onClick={() => void detect()}>
+              Find bills
+            </button>
+          }
+        />
       ) : (
         <section>
           <h2 className="ios-section">Coming up</h2>
@@ -289,11 +300,6 @@ export default function RecurringPage() {
                 </button>
               </DismissRow>
             ))}
-            {bills.length === 0 ? (
-              <div className="data-row text-[var(--muted)]">
-                <span className="min-w-0">No bills yet.</span>
-              </div>
-            ) : null}
           </div>
         </section>
       )}
@@ -398,6 +404,7 @@ export default function RecurringPage() {
         </Sheet>
       ) : null}
     </div>
+    </PageShell>
   );
 }
 

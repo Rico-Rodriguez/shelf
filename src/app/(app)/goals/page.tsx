@@ -6,7 +6,7 @@ import { Sheet } from "@/components/Sheet";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PageError, PageSkeleton } from "@/components/ui/PageShell";
+import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { Segment } from "@/components/ui/Segment";
 import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
@@ -36,7 +36,7 @@ type GoalForm = { name: string; kind: "save_up" | "pay_down"; target: string; ta
 const empty: GoalForm = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [], categoryId: "" };
 
 export default function GoalsPage() {
-  const { data, loading, error, reload } = useQuery<{ goals: Goal[]; accounts: Account[] }>("goals", "/api/goals");
+  const { data, loading, refreshing, error, reload } = useQuery<{ goals: Goal[]; accounts: Account[] }>("goals", "/api/goals");
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [form, setForm] = useState(empty);
@@ -108,6 +108,7 @@ export default function GoalsPage() {
   if (!data) return <PageError title="Goals" message={error} onRetry={() => void reload()} />;
 
   return (
+    <PageShell refreshing={refreshing}>
     <div className="screen">
       {flash}
       <PageHeader title="Goals">
@@ -223,5 +224,6 @@ export default function GoalsPage() {
         </Sheet>
       ) : null}
     </div>
+    </PageShell>
   );
 }

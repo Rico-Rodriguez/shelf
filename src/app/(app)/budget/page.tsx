@@ -15,7 +15,7 @@ import { api } from "@/lib/client";
 import { dayLabel, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { shelfColor } from "@/lib/palette";
-import { invalidateQueries, useQuery } from "@/lib/use-query";
+import { invalidateQueries, peekQuery, useQuery, writeQuery } from "@/lib/use-query";
 
 type Row = {
   category: { id: string; name: string; flexBucket: string | null; rollover: boolean; sortOrder: number; groupId?: string };
@@ -133,9 +133,14 @@ export default function BudgetPage() {
   }
 
   async function openAdd() {
-    const res = await api<{ groups: { id: string; name: string }[] }>("/api/categories");
-    setGroupsList(res.groups);
-    setEditor({ kind: "add", groupId: res.groups[0]?.id ?? "", name: "" });
+    let groups = peekQuery<{ groups: { id: string; name: string }[] }>("categories")?.groups;
+    if (!groups) {
+      const res = await api<{ groups: { id: string; name: string }[] }>("/api/categories");
+      writeQuery("categories", res);
+      groups = res.groups;
+    }
+    setGroupsList(groups);
+    setEditor({ kind: "add", groupId: groups[0]?.id ?? "", name: "" });
   }
 
   return (
@@ -390,16 +395,14 @@ function CategorySheet({
   onCommit: (work: (() => Promise<void>) | null, close: () => void) => Promise<void>;
   onMoved: () => void;
 }) {
-  const [groups, setGroups] = useState<CatGroup[]>([]);
+  const { data: categoryData } = useQuery<{ groups: CatGroup[] }>("categories", "/api/categories");
+  const groups = categoryData?.groups ?? [];
   const [txs, setTxs] = useState<MonthTx[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const categoryId = editor.row.category.id;
 
   useEffect(() => {
     let live = true;
-    void api<{ groups: CatGroup[] }>("/api/categories").then((res) => {
-      if (live) setGroups(res.groups);
-    });
     void api<{ transactions: MonthTx[] }>(`/api/transactions?categoryId=${categoryId}&start=${start}&end=${end}`).then((res) => {
       if (live) setTxs(res.transactions);
     });
@@ -447,7 +450,14 @@ function CategorySheet({
         <div>
           <div className="field-label">This month</div>
           {txs == null ? (
-            <p className="mt-2 text-[15px] text-[var(--muted)]">Loading…</p>
+            <div className="card mt-2" aria-busy="true">
+              <div className="data-row">
+                <span className="skeleton h-4 w-36 rounded-md" />
+              </div>
+              <div className="data-row">
+                <span className="skeleton h-4 w-24 rounded-md" />
+              </div>
+            </div>
           ) : txs.length === 0 ? (
             <p className="mt-2 text-[15px] text-[var(--muted)]">Nothing in this category yet.</p>
           ) : (
