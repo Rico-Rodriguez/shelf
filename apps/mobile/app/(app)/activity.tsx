@@ -2,17 +2,18 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { api } from "../../src/api";
 import { outflow } from "../../src/format";
-import { Button, Field, Loading, Note, Row, Screen } from "../../src/ui";
+import { Button, Card, Field, LedgerRow, Loading, Note, Row, Screen } from "../../src/ui";
 
 type Tx = {
   id: string;
   name: string;
+  merchantName: string | null;
   amountCents: number;
   date: string;
   pending: boolean;
   reviewed: boolean;
   categoryId: string | null;
-  category: { name: string } | null;
+  category: { name: string; color?: string | null } | null;
   account: { name: string } | null;
 };
 
@@ -92,14 +93,18 @@ export default function ActivityScreen() {
       <Button label="Search" tone="quiet" onPress={load} />
       {error ? <Note>{error}</Note> : null}
       {!rows.length && !error ? <Loading /> : null}
-      {rows.map((tx) => (
-        <Row
-          key={tx.id}
-          title={`${tx.name}${tx.pending ? " · pending" : ""}`}
-          detail={`${outflow(tx.amountCents)} · ${tx.category?.name ?? "Uncategorized"}`}
-          onPress={() => setSelected(tx)}
-        />
-      ))}
+      <Card>
+        {rows.map((tx) => (
+          <LedgerRow
+            key={tx.id}
+            name={tx.merchantName || tx.name}
+            color={tx.category?.color}
+            meta={[tx.date, tx.category?.name ?? "Uncategorized", tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+            amount={outflow(tx.amountCents)}
+            onPress={() => setSelected(tx)}
+          />
+        ))}
+      </Card>
       {selected ? (
         <>
           <Note>{`${selected.name} · ${selected.account?.name ?? ""} · ${selected.date}`}</Note>

@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Icon, MerchantMark } from "./icons";
 
 export const colors = {
   bg: "#f3f5f7",
@@ -113,9 +114,50 @@ export function Button({
   );
 }
 
-export function Row({ title, detail, onPress }: { title: string; detail?: string; onPress?: () => void }) {
+export function Section({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {action && onAction ? (
+        <Pressable onPress={onAction} hitSlop={8}>
+          <Text style={styles.sectionAction}>{action}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function LedgerRow({
+  name,
+  meta,
+  amount,
+  color,
+  onPress,
+}: {
+  name: string;
+  meta?: string;
+  amount: string;
+  color?: string | null;
+  onPress?: () => void;
+}) {
+  const body = (
+    <View style={styles.ledger}>
+      <MerchantMark name={name} color={color} />
+      <View style={styles.ledgerCopy}>
+        <Text numberOfLines={1} style={styles.rowTitle}>{name}</Text>
+        {meta ? <Text numberOfLines={1} style={styles.meta}>{meta}</Text> : null}
+      </View>
+      <Text style={styles.amount}>{amount}</Text>
+    </View>
+  );
+  if (!onPress) return body;
+  return <Pressable onPress={onPress}>{body}</Pressable>;
+}
+
+export function Row({ title, detail, icon, onPress }: { title: string; detail?: string; icon?: string; onPress?: () => void }) {
   const body = (
     <View style={styles.row}>
+      {icon ? <Icon name={icon} size={18} color={colors.ink} /> : null}
       <Text style={styles.rowTitle}>{title}</Text>
       {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
     </View>
@@ -173,6 +215,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 8 },
+  sectionTitle: { fontSize: 13, fontWeight: "600", letterSpacing: 0.4, textTransform: "uppercase", color: colors.muted },
+  sectionAction: { fontSize: 15, color: colors.ink },
+  ledger: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  ledgerCopy: { flex: 1, gap: 2 },
+  meta: { fontSize: 12, color: colors.muted },
+  amount: { fontSize: 15, fontWeight: "600", color: colors.ink },
   rowTitle: { flex: 1, fontSize: 16, color: colors.ink },
   rowDetail: { fontSize: 15, color: colors.muted },
   note: { color: colors.muted, fontSize: 14 },

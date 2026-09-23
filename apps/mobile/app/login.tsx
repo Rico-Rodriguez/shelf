@@ -58,8 +58,8 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen title="Unlock" subtitle={state?.googleEmail ?? "Enter the key for this Shelf."}>
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+    <Screen title="Unlock" subtitle={state?.googleEmail ? `${state.googleEmail}. This is the Shelf key from the website, not your Google password.` : "Enter the key for this Shelf."}>
+      <Field label="Shelf key" value={password} onChangeText={setPassword} secureTextEntry />
       {error ? <Note>{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />
       <Link href="/join"><Text>Join with an invite</Text></Link>
