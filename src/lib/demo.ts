@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   accounts,
+  budgetItems,
   goals,
   goalAccounts,
   holdings,
@@ -13,10 +14,11 @@ import {
   transactionTags,
   transactions,
 } from "@/db/schema";
+import { getOrCreateBudgetMonth } from "./budget";
 import { nid } from "./ids";
 import { addDays, addMonths, todayISO, yearMonth } from "./dates";
 import { snapshotNetWorth } from "./networth";
-import { prepareVault } from "./secrets";
+import { prepareVault, sealedBudgetItemWrite } from "./secrets";
 
 export async function seedDemoHouse(dek: Buffer) {
   const db = await getDb();
@@ -91,7 +93,7 @@ export async function seedDemoHouse(dek: Buffer) {
   const vacation = nid();
   const debt = nid();
   await db.insert(goals).values([
-    { id: vacation, name: "Cabin week", kind: "save_up", targetCents: 250000, targetDate: addDays(todayISO(), 180) },
+    { id: vacation, name: "Cabin week", kind: "save_up", targetCents: 1_800_000, targetDate: addDays(todayISO(), 180) },
     { id: debt, name: "Clear the card", kind: "pay_down", targetCents: 0 },
   ]);
   await db.insert(goalAccounts).values([
@@ -122,6 +124,29 @@ export async function seedDemoHouse(dek: Buffer) {
   const firstGroc = groceryTx.find((t) => t.categoryId === "cat-groceries");
   if (firstGroc) {
     await db.insert(transactionTags).values({ transactionId: firstGroc.id, tagId: cozy });
+  }
+
+  const openedMonth = await getOrCreateBudgetMonth(year, month, dek);
+  const plans: Record<string, number> = {
+    "cat-rent": 185_000,
+    "cat-utilities": 11_000,
+    "cat-groceries": 18_000,
+    "cat-restaurants": 4_000,
+    "cat-coffee": 1_500,
+    "cat-gas": 6_000,
+    "cat-shopping": 3_000,
+    "cat-clothing": 4_000,
+    "cat-medical": 2_000,
+    "cat-pets": 2_500,
+    "cat-entertainment": 3_000,
+    "cat-streaming": 1_600,
+    "cat-phone": 5_400,
+  };
+  const plannedItems = await db.select().from(budgetItems).where(eq(budgetItems.budgetMonthId, openedMonth.id));
+  for (const item of plannedItems) {
+    const planned = plans[item.categoryId];
+    if (!planned) continue;
+    await db.update(budgetItems).set(sealedBudgetItemWrite(planned, 0, dek)).where(eq(budgetItems.id, item.id));
   }
 
   await snapshotNetWorth(dek);

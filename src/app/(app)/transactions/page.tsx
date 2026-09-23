@@ -599,9 +599,14 @@ function Activity() {
         <EmptyState title="No matches">Try another search or clear a filter.</EmptyState>
       ) : null}
 
-      {grouped.map(([date, items]) => (
+      {grouped.map(([date, items]) => {
+        const dayNet = items.reduce((sum, tx) => sum + tx.amountCents, 0);
+        return (
         <section key={date}>
-          <h2 className="ios-section day-head">{dayLabel(date)}</h2>
+          <h2 className="ios-section day-head">
+            <span>{dayLabel(date)}</span>
+            <MoneyText cents={dayNet} flow />
+          </h2>
           <div className="card">
             {items.map((tx) => {
               const row = (
@@ -660,7 +665,8 @@ function Activity() {
             })}
           </div>
         </section>
-      ))}
+        );
+      })}
 
       {edit ? (
         <Sheet title={edit.merchantName || edit.name} onClose={() => setEdit(null)}>
