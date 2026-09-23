@@ -1,9 +1,25 @@
 import * as SecureStore from "expo-secure-store";
 
 const TOKEN_KEY = "shelf.token";
+const LIVE_SERVER = "https://shelf-xi-hazel.vercel.app";
+
+function localServer(value: string): boolean {
+  try {
+    const host = new URL(value).hostname;
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".nip.io") || host.endsWith(".sslip.io")) return true;
+    const parts = host.split(".").map((part) => Number(part));
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
+    const [a, b] = parts;
+    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+  } catch {
+    return false;
+  }
+}
 
 export function apiBase(): string {
-  return (process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000").replace(/\/$/, "");
+  const configured = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+  if (configured && !localServer(configured)) return configured;
+  return LIVE_SERVER;
 }
 
 export async function getToken(): Promise<string | null> {
