@@ -13,6 +13,7 @@ import { monthRange, shortDate, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { formatMoney } from "@/lib/money";
 import { useQuery } from "@/lib/use-query";
+import { versusShort } from "@/lib/voice";
 
 type Report = {
   year: number;
@@ -56,6 +57,8 @@ export default function InsightsPage() {
       : moved > 0
         ? { label: `Up ${formatMoney(moved)}`, tone: "good" as const }
         : { label: `Down ${formatMoney(-moved)}`, tone: "bad" as const };
+  const spendingNote = versusShort(data.spendingCents, data.usualSpentCents ?? null);
+
   return (
     <div className="screen">
       <PageHeader title="Insights">
@@ -83,6 +86,7 @@ export default function InsightsPage() {
           <h2 className="ios-section mb-0">Spending</h2>
           <span className="text-[15px] font-semibold">
             <MoneyText cents={data.spendingCents} />
+            {spendingNote ? <span className="font-medium text-[var(--muted)]"> · {spendingNote}</span> : null}
           </span>
         </div>
         <div className="card">
@@ -107,6 +111,11 @@ export default function InsightsPage() {
                     <span className="spend-dot" style={{ background: shelfColor(category.color) }} />
                     <span className="truncate">{category.name}</span>
                   </span>
+                  {category.avgCents ? (
+                    <span className="mt-0.5 block pl-4 text-[12px] text-[var(--muted)]">
+                      Usual <MoneyText cents={category.avgCents} />
+                    </span>
+                  ) : null}
                 </span>
                 <MoneyText className="shrink-0" cents={category.cents} />
               </span>

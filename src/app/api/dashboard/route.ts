@@ -3,8 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, budgetItems, categories, categoryGroups, goalAccounts, goals, holdings, netWorthSnapshots, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spendByDay, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
-import { addDays, todayISO, yearMonth } from "@/lib/dates";
+import { getOrCreateBudgetMonth, incomeInMonth, spendByDay, spentByCategory, trailingCategoryAverage } from "@/lib/budget";
+import { yearMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { computeNetWorth } from "@/lib/networth";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
@@ -76,9 +76,6 @@ export async function GET() {
     const fixedIds = new Set(
       cats.filter((cat) => cat.kind === "expense" && (cat.flexBucket === "fixed" || cat.flexBucket === "non_monthly")).map((cat) => cat.id),
     );
-    const fixedPlanned = plannedRows
-      .filter((row) => fixedIds.has(row.categoryId))
-      .reduce((sum, row) => sum + row.plannedCents + row.rolloverInCents, 0);
     const variableSpent = Object.entries(spent)
       .filter(([id]) => !fixedIds.has(id))
       .reduce((sum, [, cents]) => sum + cents, 0);
@@ -118,17 +115,7 @@ export async function GET() {
         pace: goalPace({ targetCents: goal.targetCents, targetDate: goal.targetDate, progressCents, remainingCents }),
       };
     });
-    const goalsMonthly = goalViews.reduce((sum, goal) => sum + (goal.monthlyCents ?? 0), 0);
-    const today = todayISO();
-    const horizon = addDays(today, 30);
-    const upcomingBills = activeRecurring
-      .filter((row) => !row.isIncome && row.nextDate >= today && row.nextDate <= horizon)
-      .reduce((sum, row) => sum + row.amountCents, 0);
-    const incomeBase = monthRow.plannedIncomeCents > 0 ? monthRow.plannedIncomeCents : income;
-    const committedFromPlan = fixedPlanned > 0;
-    const committed = committedFromPlan ? fixedPlanned : upcomingBills;
     const trail = await trailingCategoryAverage(now.year, now.month, dek);
-    const pendingCents = await pendingOutflow(now.year, now.month, dek);
     const cash = openedAccounts
       .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"))
       .reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
@@ -142,22 +129,6 @@ export async function GET() {
       suggestedSubscriptions = [];
     }
     await refreshNotifications(dek);
-
-    const safeBase = incomeBase - committed - goalsMonthly;
-    const monthStart = `${now.year}-${String(now.month).padStart(2, "0")}-01`;
-    const variableSeries = await spendByDay(now.year, now.month, dek, (id) => !fixedIds.has(id));
-    const safeSeries: { date: string; cents: number }[] = [{ date: monthStart, cents: safeBase }];
-    for (const point of variableSeries) {
-      const cents = safeBase - point.cents;
-      const last = safeSeries[safeSeries.length - 1];
-      if (last?.date === point.date) last.cents = cents;
-      else safeSeries.push({ date: point.date, cents });
-    }
-    const todayCents = safeBase - variableSpent;
-    if (!safeSeries.some((point) => point.date === today)) safeSeries.push({ date: today, cents: todayCents });
-    safeSeries.sort((a, b) => a.date.localeCompare(b.date));
-    safeSeries[safeSeries.length - 1].cents = todayCents;
-    if (safeSeries.length < 2) safeSeries.push({ date: today, cents: todayCents });
 
     const groupRows = await db.select().from(categoryGroups);
     const spending = Object.entries(spent)
@@ -183,24 +154,12 @@ export async function GET() {
       netWorthDelta: netWorthDelta(snapshots),
       snapshots: snapshots.map((row) => ({ date: row.date, netWorthCents: row.netWorthCents })),
       cashFlow: { incomeCents: income, spendingCents: spentTotal, savedCents: income - spentTotal },
-      safeToSpend: {
-        cents: incomeBase - committed - goalsMonthly - variableSpent,
-        incomeCents: incomeBase,
-        committedCents: committed,
-        committedFrom: committedFromPlan ? "plan" : "bills",
-        goalsCents: goalsMonthly,
-        spentCents: variableSpent,
-        cashCents: cash,
-        billsDueCents: upcomingBills,
-        planOpenCents: planned - spentTotal,
-        pendingCents,
-      },
       usual: {
         spentCents: variableSpent,
         usualCents: variableUsual,
         deltaCents: variableUsual == null ? null : variableSpent - variableUsual,
       },
-      safeSeries,
+      spendSeries: await spendByDay(now.year, now.month, dek),
       spending,
       forecast: projectBalances(cash, activeRecurring, 30).filter((_, index) => index % 3 === 0 || index === 29),
       suggestedSubscriptions,

@@ -9,9 +9,10 @@ import { useConfirmFlash } from "@/components/ConfirmFlash";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SpendMix } from "@/components/SpendMix";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { activityHref } from "@/lib/activity";
 import { api } from "@/lib/client";
-import { inDaysPhrase, monthRange, todayISO, yearMonth } from "@/lib/dates";
+import { dayLabel, inDaysPhrase, monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { shelfColor } from "@/lib/palette";
 import { invalidateQueries, useQuery } from "@/lib/use-query";
 
@@ -22,12 +23,15 @@ type Dash = {
   recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   accountCount: number;
   transactions: { id: string; name: string }[];
+  spendSeries?: { date: string; cents: number }[];
   spending?: { id: string; name: string; cents: number; color: string }[];
+  usual?: { deltaCents: number | null };
   suggestedSubscriptions?: { merchantName: string }[];
 };
 
 export default function HomePage() {
   const { data: dash, loading, refreshing, error, reload } = useQuery<Dash>("dashboard", "/api/dashboard");
+  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [seeding, setSeeding] = useState(false);
   const { flash, run } = useConfirmFlash();
 
@@ -36,8 +40,10 @@ export default function HomePage() {
 
   const now = yearMonth();
   const range = monthRange(now.year, now.month);
+  const shown = scrub?.cents ?? dash.cashFlow.spendingCents;
   const today = todayISO();
   const bills = dash.recurring.filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
+  const series = dash.spendSeries ?? [];
   const categories = (dash.spending ?? []).filter((row) => row.cents > 0);
   const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
@@ -63,6 +69,24 @@ export default function HomePage() {
     <PageShell refreshing={refreshing}>
       <div className="screen">
         {flash}
+        <SummaryCard
+          className="is-hero"
+          label={scrub ? dayLabel(scrub.date) : "Spent this month"}
+          cents={shown}
+          points={series}
+          chartLabel="Spending this month"
+          onScrub={(point) => setScrub(point?.date ? { date: point.date, cents: point.cents } : null)}
+          note={
+            scrub ? null : (
+              <span className="safe-facts">
+                <span>
+                  <span className="safe-kicker">Income</span>
+                  <MoneyText cents={dash.cashFlow.incomeCents} />
+                </span>
+              </span>
+            )
+          }
+        />
 
         {dash.accountCount === 0 && dash.transactions.length === 0 ? (
           <EmptyState
@@ -126,7 +150,7 @@ export default function HomePage() {
                       <span className="flex items-baseline gap-3">
                         <MoneyText className="text-[15px] font-semibold" cents={dash.cashFlow.spendingCents} />
                         <Link href="/insights" className="text-btn">
-                          Insights
+                          Compare
                         </Link>
                       </span>
                     </div>

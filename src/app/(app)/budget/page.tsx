@@ -10,6 +10,7 @@ import { Sheet } from "@/components/Sheet";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
 import { dayLabel, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
@@ -154,6 +155,8 @@ export default function BudgetPage() {
           </button>
         </PageHeader>
 
+        <BudgetSummary budget={budget} />
+
         {visibleGroups.map((group) => {
           const planned = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
           const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
@@ -293,6 +296,18 @@ export default function BudgetPage() {
   );
 }
 
+function BudgetSummary({ budget }: { budget: Budget }) {
+  return (
+    <SummaryCard
+      label="Spent this month"
+      cents={budget.expenseSpentCents}
+      status={budget.expensePlannedCents > 0 ? null : { label: "No plan yet", tone: "neutral" }}
+      points={budget.spendSeries ?? []}
+      chartLabel="Spending this month"
+    />
+  );
+}
+
 function CategoryRow({
   row,
   color,
@@ -318,7 +333,7 @@ function CategoryRow({
             </span>
           ) : null}
         </span>
-        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={paced ? row.remainingCents : row.spentCents} />
+        <MoneyText className={`shrink-0 ${over ? "text-[var(--danger)]" : ""}`} cents={row.spentCents} />
       </span>
       {paced ? (
         <span className="my-2.5 block">
