@@ -5,7 +5,7 @@ import { users } from "@/db/schema";
 import { deviceTokenFor } from "@/lib/device-session";
 import { getSession } from "@/lib/auth";
 import { publicOrigin } from "@/lib/gate";
-import { exchangeGoogleCode, tokensMatch, verifyGoogleIdToken } from "@/lib/google";
+import { appReturnUrl, exchangeGoogleCode, tokensMatch, verifyGoogleIdToken } from "@/lib/google";
 import { googleConfigured } from "@/lib/google-config";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,7 @@ function clearOauth(res: NextResponse) {
   res.cookies.set("shelf_oauth_verifier", "", gone);
   res.cookies.set("shelf_oauth_nonce", "", gone);
   res.cookies.set("shelf_oauth_mobile", "", gone);
+  res.cookies.set("shelf_oauth_return", "", gone);
   return res;
 }
 
@@ -28,9 +29,10 @@ export async function GET(request: Request) {
       .map((part) => part.trim())
       .find((part) => part.startsWith(`${name}=`))
       ?.slice(name.length + 1);
+  const mobileReturn = () => appReturnUrl(read("shelf_oauth_return"));
   const fail = (code: string) => {
     if (read("shelf_oauth_mobile") === "1") {
-      const dest = new URL("shelf://auth");
+      const dest = new URL(mobileReturn());
       dest.searchParams.set("error", code);
       return clearOauth(NextResponse.redirect(dest));
     }
@@ -71,7 +73,7 @@ export async function GET(request: Request) {
     await session.save();
     if (read("shelf_oauth_mobile") === "1") {
       const token = await deviceTokenFor(session);
-      const dest = new URL("shelf://auth");
+      const dest = new URL(mobileReturn());
       dest.searchParams.set("token", token);
       dest.searchParams.set("next", user ? "login" : "setup");
       return clearOauth(NextResponse.redirect(dest));

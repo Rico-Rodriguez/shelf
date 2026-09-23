@@ -14,12 +14,9 @@ export default function Gate() {
     );
   }
   if (!state) return <Screen title="Shelf"><Note>No session.</Note></Screen>;
+  if (state.needsGoogle) return <Redirect href="/login" />;
   if (state.needsSetup) return <Redirect href="/setup" />;
-  if (state.needsGoogle || state.needsTotp || !state.unlocked) {
-    if (state.needsEnroll) return <Redirect href="/enroll" />;
-    if (state.needsTotp) return <Redirect href="/totp" />;
-    return <Redirect href="/login" />;
-  }
   if (state.needsEnroll) return <Redirect href="/enroll" />;
+  if (state.needsTotp || !state.unlocked) return <Redirect href="/login" />;
   return <Redirect href="/(app)" />;
 }

@@ -1,7 +1,6 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
 import { api } from "../src/api";
-import { signInWithGoogle } from "../src/google";
 import { useSession } from "../src/session";
 import { Button, Field, Note, Screen } from "../src/ui";
 
@@ -25,22 +24,17 @@ export default function SetupScreen() {
     }
   }
 
-  async function google() {
-    setBusy(true);
-    setError(null);
-    try {
-      await signInWithGoogle();
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (state?.needsGoogle) return <Redirect href="/login" />;
 
   return (
-    <Screen title="Create a lock" subtitle="At least 12 characters. This wraps the key to your data.">
-      {state?.needsGoogle ? <Button label="Sign in with Google" onPress={() => void google()} busy={busy} /> : null}
+    <Screen
+      title="Create a lock"
+      subtitle={
+        state?.googleEmail
+          ? "Google is done. Choose a password of at least 12 characters."
+          : "Choose a password of at least 12 characters. This wraps the key to your data."
+      }
+    >
       <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
       {error ? <Note>{error}</Note> : null}
       <Button label="Create Shelf" onPress={() => void submit()} busy={busy} />

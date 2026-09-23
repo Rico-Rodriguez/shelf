@@ -45,9 +45,17 @@ export default function LoginScreen() {
     }
   }
 
+  if (state?.needsGoogle) {
+    return (
+      <Screen title="Sign in" subtitle="Use your Google account. Shelf asks for the password after that.">
+        {error ? <Note>{error}</Note> : null}
+        <Button label="Sign in with Google" onPress={() => void google()} busy={busy} />
+      </Screen>
+    );
+  }
+
   return (
     <Screen title="Unlock" subtitle={state?.googleEmail ?? "Enter the key for this Shelf."}>
-      {state?.needsGoogle ? <Button label="Sign in with Google" onPress={() => void google()} busy={busy} /> : null}
       <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
       {error ? <Note>{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />

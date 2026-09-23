@@ -20,6 +20,27 @@ export function tokensMatch(a: string | undefined, b: string | undefined): boole
   return timingSafeEqual(left, right);
 }
 
+function redirectHost(redirectUri: string): string {
+  try {
+    return new URL(redirectUri).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return "";
+  }
+}
+
+/** Google blocks OAuth on a raw LAN address unless the request names the device. */
+export function privateIpRedirect(redirectUri: string): boolean {
+  const host = redirectHost(redirectUri);
+  if (host === "localhost" || host.endsWith(".localhost")) return false;
+  const parts = host.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [a, b] = parts;
+  if (a === 10 || a === 127) return a !== 127;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
 export function googleAuthUrl(redirectUri: string, state: string, nonce: string, verifier: string): string {
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", googleClientId());
@@ -32,7 +53,30 @@ export function googleAuthUrl(redirectUri: string, state: string, nonce: string,
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("prompt", "select_account");
   url.searchParams.set("login_hint", allowedGoogleEmail());
+  if (privateIpRedirect(redirectUri)) {
+    url.searchParams.set("device_id", "shelfmobile");
+    url.searchParams.set("device_name", "Shelf");
+  }
   return url.toString();
+}
+
+/** Phone return addresses. Anything else is dropped so this cannot become an open redirect. */
+export function appReturnUrl(value: string | null | undefined): string {
+  const fallback = "shelf://auth";
+  if (!value) return fallback;
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return fallback;
+  }
+  try {
+    const url = new URL(decoded);
+    if (url.protocol === "shelf:" || url.protocol === "exp:" || url.protocol === "exps:") return decoded;
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 
 export async function exchangeGoogleCode(code: string, redirectUri: string, verifier: string): Promise<string> {
