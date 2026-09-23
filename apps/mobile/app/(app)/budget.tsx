@@ -42,6 +42,9 @@ export default function BudgetScreen() {
   const [txs, setTxs] = useState<MonthTx[] | null>(null);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
   const [adding, setAdding] = useState<{ groupId: string; name: string } | null>(null);
+  const [catGroups, setCatGroups] = useState<{ name: string; categories: { id: string; name: string }[] }[]>([]);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -109,11 +112,29 @@ export default function BudgetScreen() {
     load();
   }
 
+  async function reassign(tx: MonthTx, nextId: string) {
+    await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify({ categoryId: nextId, reviewed: true }) });
+    setTxs((current) => (current ?? []).filter((row) => row.id !== tx.id));
+    setMoving(null);
+    load();
+  }
+
+  async function removeCategory() {
+    if (!editing) return;
+    await api("/api/categories", { method: "DELETE", body: JSON.stringify({ id: editing.category.id, entity: "category" }) });
+    setEditing(null);
+    setConfirmDelete(false);
+    load();
+  }
+
   function openRow(row: BudgetRow) {
     setEditing(row);
     setPlanned((row.plannedCents / 100).toFixed(0));
     setCatName(row.category.name);
     setTxs(null);
+    setMoving(null);
+    setConfirmDelete(false);
+    void api<{ groups: { name: string; categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setCatGroups(res.groups));
     if (!data) return;
     const range = monthRange(data.year, data.month);
     void api<{ transactions: MonthTx[] }>(`/api/transactions?categoryId=${row.category.id}&start=${range.start}&end=${range.end}`).then((res) => setTxs(res.transactions));
@@ -251,18 +272,46 @@ export default function BudgetScreen() {
               {txs.map((tx, index) => {
                 const flow = flowMoney(tx.amountCents);
                 return (
-                  <View key={tx.id} style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text numberOfLines={1} style={{ fontWeight: "500", color: colors.ink }}>{tx.merchantName || tx.name}</Text>
-                      <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(tx.date)}</Text>
+                  <View key={tx.id} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text numberOfLines={1} style={{ fontWeight: "500", color: colors.ink }}>{tx.merchantName || tx.name}</Text>
+                        <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(tx.date)}</Text>
+                      </View>
+                      <Text style={{ fontWeight: "600", color: flow.color }}>{flow.text}</Text>
                     </View>
-                    <Text style={{ fontWeight: "600", color: flow.color }}>{flow.text}</Text>
+                    <Pressable onPress={() => setMoving(moving === tx.id ? null : tx.id)}>
+                      <Text style={{ color: colors.accentInk, fontWeight: "600" }}>{moving === tx.id ? "Close" : "Move"}</Text>
+                    </Pressable>
+                    {moving === tx.id
+                      ? catGroups.map((group) => (
+                          <View key={group.name} style={{ gap: 4 }}>
+                            <Text style={{ fontSize: 12, color: colors.muted }}>{group.name}</Text>
+                            {group.categories.map((category) => (
+                              <Pressable key={category.id} onPress={() => void reassign(tx, category.id)}>
+                                <Text style={{ fontSize: 16, paddingVertical: 4, color: category.id === editing.category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ))
+                      : null}
                   </View>
                 );
               })}
             </Card>
           ) : null}
           <Button label="Save" onPress={() => void saveCategory()} />
+          <Button
+            label={confirmDelete ? "Delete this category?" : "Delete"}
+            tone={confirmDelete ? "danger" : "quiet"}
+            onPress={() => {
+              if (!confirmDelete) {
+                setConfirmDelete(true);
+                return;
+              }
+              void removeCategory();
+            }}
+          />
         </Sheet>
       ) : null}
 

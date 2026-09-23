@@ -13,6 +13,10 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    if (password.length < 12) {
+      setError("Use at least 12 characters. A Shelf key is not a PIN.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -45,11 +49,11 @@ export default function LoginScreen() {
     }
   }
 
-  if (state?.needsGoogle) {
+  if (!state || state.needsGoogle) {
     return (
       <Screen title="Sign in" subtitle="Use your Google account. A new Shelf asks you to create a key. An existing Shelf asks for the key already saved.">
         {error ? <Note>{error}</Note> : null}
-        <Button label="Sign in with Google" onPress={() => void google()} busy={busy} />
+        {state ? <Button label="Sign in with Google" onPress={() => void google()} busy={busy} /> : null}
         {googleRedirectHint() ? (
           <Note>{`In Google Cloud, add this Authorized redirect URI, then try again: ${googleRedirectHint()}`}</Note>
         ) : null}
@@ -57,11 +61,11 @@ export default function LoginScreen() {
     );
   }
 
-  if (state?.needsSetup) return <Redirect href="/setup" />;
+  if (state.needsSetup) return <Redirect href="/setup" />;
 
   return (
-    <Screen title="Unlock" subtitle={state?.googleEmail ? `${state.googleEmail}. This is the Shelf key from the website, not your Google password.` : "Enter the key for this Shelf."}>
-      <Field label="Shelf key" value={password} onChangeText={setPassword} secureTextEntry />
+    <Screen title="Unlock" subtitle={state.googleEmail ? `${state.googleEmail}. Enter the Shelf key already saved. It is not your Google password.` : "Enter the Shelf key already saved."}>
+      <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />
       <Link href="/join"><Text>Join with an invite</Text></Link>

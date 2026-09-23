@@ -13,6 +13,10 @@ export default function JoinScreen() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    if (password.length < 12) {
+      setError("Use at least 12 characters. A Shelf key is not a PIN.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -30,10 +34,10 @@ export default function JoinScreen() {
   }
 
   return (
-    <Screen title="Join" subtitle="Use an invite code and a new password of at least 12 characters.">
+    <Screen title="Join" subtitle="Use an invite code and a new Shelf key of at least 12 characters.">
       <Field label="Invite code" value={code} onChangeText={setCode} />
       <Field label="Name" value={name} onChangeText={setName} />
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}
       <Button label="Join household" onPress={() => void submit()} busy={busy} />
     </Screen>

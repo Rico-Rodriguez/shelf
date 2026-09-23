@@ -11,6 +11,10 @@ export default function SetupScreen() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    if (password.length < 12) {
+      setError("Use at least 12 characters. A Shelf key is not a PIN.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -24,7 +28,7 @@ export default function SetupScreen() {
     }
   }
 
-  if (state?.needsGoogle) return <Redirect href="/login" />;
+  if (!state || state.needsGoogle) return <Redirect href="/login" />;
 
   return (
     <Screen
@@ -35,7 +39,7 @@ export default function SetupScreen() {
           : "Choose a key of at least 12 characters. This is what locks your data."
       }
     >
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}
       <Button label="Create Shelf" onPress={() => void submit()} busy={busy} />
     </Screen>
