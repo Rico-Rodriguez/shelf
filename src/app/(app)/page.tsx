@@ -107,9 +107,6 @@ export default function HomePage() {
                     <MoneyText cents={dash.safeToSpend?.spentCents ?? dash.cashFlow.spendingCents} />
                   </span>
                 </span>
-                <span className="mt-3 block text-[13px] leading-snug text-[var(--muted)]">
-                  Income, minus what you set aside, minus day-to-day spending.
-                </span>
               </>
             )
           }
@@ -189,7 +186,6 @@ export default function HomePage() {
                           color: shelfColor(category.color),
                         }))}
                       />
-                      <p className="px-4 pt-3 text-[13px] text-[var(--muted)]">Each slice is that category’s share of this month.</p>
                       {spendRows.map((category) => (
                         <Link
                           key={category.id || category.name}

@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PageError, PageShell, PageSkeleton } from "@/components/ui/PageShell";
 import { SummaryCard, type SummaryTone } from "@/components/ui/SummaryCard";
 import { api } from "@/lib/client";
-import { addMonths, dayLabel, monthName, monthRange, shortDate } from "@/lib/dates";
+import { dayLabel, monthRange } from "@/lib/dates";
 import { dollarsToCents } from "@/lib/money";
 import { budgetPace } from "@/lib/plan";
 import { shelfColor } from "@/lib/palette";
@@ -49,7 +49,7 @@ type Budget = {
   flex: { fixed: Row[]; non_monthly: Row[]; flex: Row[] };
 };
 
-type RowEditor = { kind: "row"; row: Row; planned: string; name: string; rollover: boolean };
+type RowEditor = { kind: "row"; row: Row; planned: string; name: string };
 
 type Editor = RowEditor | { kind: "add"; groupId: string; name: string } | null;
 
@@ -66,13 +66,10 @@ export default function BudgetPage() {
   const [cursor, setCursor] = useState<{ year?: number; month?: number }>({});
   const [income, setIncome] = useState("");
   const [closed, setClosed] = useState<Record<string, boolean>>({});
-  const [moving, setMoving] = useState(false);
-  const [moveForm, setMoveForm] = useState({ from: "", to: "", amount: "" });
   const [editor, setEditor] = useState<Editor>(null);
   const [planOpen, setPlanOpen] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
   const [groupsList, setGroupsList] = useState<{ id: string; name: string }[]>([]);
-  const [closeMonth, setCloseMonth] = useState<Budget | null>(null);
   const { flash, run } = useConfirmFlash();
   const qs = cursor.year && cursor.month ? `?year=${cursor.year}&month=${cursor.month}` : "";
   const { data, loading, refreshing, error, reload } = useQuery<Budget>(`budget:${qs || "current"}`, `/api/budget${qs}`, { keepPrevious: true });
@@ -145,25 +142,11 @@ export default function BudgetPage() {
     reload();
   }
 
-  function dismissClose() {
-    setCloseMonth(null);
-  }
-
-  async function openLastMonth() {
-    setPlanOpen(false);
-    const prev = addMonths(budget.year, budget.month, -1);
-    const previous = await api<Budget>(`/api/budget?year=${prev.year}&month=${prev.month}`);
-    if (previous.expensePlannedCents <= 0 && previous.expenseSpentCents <= 0) return;
-    setCloseMonth(previous);
-  }
-
   async function openAdd() {
     const res = await api<{ groups: { id: string; name: string }[] }>("/api/categories");
     setGroupsList(res.groups);
     setEditor({ kind: "add", groupId: res.groups[0]?.id ?? "", name: "" });
   }
-
-  const rolled = closeMonth?.rows.filter((row) => row.category.rollover && row.remainingCents > 0) ?? [];
 
   return (
     <PageShell refreshing={refreshing}>
@@ -225,7 +208,6 @@ export default function BudgetPage() {
                           row,
                           planned: (row.plannedCents / 100).toFixed(0),
                           name: row.category.name,
-                          rollover: row.category.rollover,
                         })
                       }
                     />
@@ -258,103 +240,25 @@ export default function BudgetPage() {
             <div className="card">
               <button
                 type="button"
-                className="data-row w-full text-left"
+                className="data-row w-full text-left font-medium"
                 onClick={() => {
                   setPlanOpen(false);
                   void suggest();
                 }}
               >
-                <span className="min-w-0">
-                  <span className="block font-medium">Use your usual spending</span>
-                  <span className="block text-[13px] font-normal text-[var(--muted)]">Replace each plan with what you typically spend.</span>
-                </span>
+                Use your usual spending
               </button>
               <button
                 type="button"
-                className="data-row w-full text-left"
-                onClick={() => {
-                  setPlanOpen(false);
-                  setMoving(true);
-                }}
-              >
-                <span className="min-w-0">
-                  <span className="block font-medium">Move money</span>
-                  <span className="block text-[13px] font-normal text-[var(--muted)]">Take from one category and add it to another.</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="data-row w-full text-left"
+                className="data-row w-full text-left font-medium"
                 onClick={() => {
                   setPlanOpen(false);
                   void openAdd();
                 }}
               >
-                <span className="min-w-0">
-                  <span className="block font-medium">Add a category</span>
-                  <span className="block text-[13px] font-normal text-[var(--muted)]">Give a kind of spending its own plan.</span>
-                </span>
-              </button>
-              <button type="button" className="data-row w-full text-left" onClick={() => void openLastMonth()}>
-                <span className="min-w-0">
-                  <span className="block font-medium">Last month</span>
-                  <span className="block text-[13px] font-normal text-[var(--muted)]">See what was left over and carried in.</span>
-                </span>
+                Add a category
               </button>
             </div>
-          </Sheet>
-        ) : null}
-
-        {moving ? (
-          <Sheet title="Move money" onClose={() => setMoving(false)}>
-            <form
-              className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const cents = dollarsToCents(moveForm.amount || 0);
-                if (!moveForm.from || !moveForm.to || cents <= 0) return;
-                void commit(
-                  () =>
-                    api("/api/budget", {
-                      method: "PUT",
-                      body: JSON.stringify({
-                        year: budget.year,
-                        month: budget.month,
-                        move: { fromCategoryId: moveForm.from, toCategoryId: moveForm.to, cents },
-                      }),
-                    }).then(() => undefined),
-                  () => setMoving(false),
-                );
-              }}
-            >
-              <label className="field">
-                <span className="field-label">From</span>
-                <select className="shelf-input" value={moveForm.from} onChange={(event) => setMoveForm({ ...moveForm, from: event.target.value })} required>
-                  <option value="">Choose</option>
-                  {budget.rows.map((row) => (
-                    <option key={row.category.id} value={row.category.id}>
-                      {row.category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">To</span>
-                <select className="shelf-input" value={moveForm.to} onChange={(event) => setMoveForm({ ...moveForm, to: event.target.value })} required>
-                  <option value="">Choose</option>
-                  {budget.rows.map((row) => (
-                    <option key={row.category.id} value={row.category.id}>
-                      {row.category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">Amount</span>
-                <input className="shelf-input" inputMode="decimal" value={moveForm.amount} onChange={(event) => setMoveForm({ ...moveForm, amount: event.target.value })} required />
-              </label>
-              <button className="shelf-btn w-full">Move</button>
-            </form>
           </Sheet>
         ) : null}
 
@@ -413,30 +317,6 @@ export default function BudgetPage() {
           </Sheet>
         ) : null}
 
-        {closeMonth ? (
-          <Sheet title={`${monthName(budget.year, budget.month).split(" ")[0]} is ready`} onClose={dismissClose}>
-            <p className="text-[15px]">
-              {monthName(closeMonth.year, closeMonth.month)} left <MoneyText cents={Math.max(0, closeMonth.expensePlannedCents - closeMonth.expenseSpentCents)} />.
-            </p>
-            {rolled.length ? (
-              <ul className="card">
-                {rolled.map((row) => (
-                  <li key={row.category.id} className="data-row justify-between">
-                    <span>{row.category.name}</span>
-                    <span className="text-[var(--muted)]">
-                      kept <MoneyText cents={row.remainingCents} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[15px] text-[var(--muted)]">Nothing rolled over.</p>
-            )}
-            <button className="shelf-btn w-full" type="button" onClick={dismissClose}>
-              Done
-            </button>
-          </Sheet>
-        ) : null}
       </div>
     </PageShell>
   );
@@ -480,11 +360,6 @@ function BudgetSummary({ budget }: { budget: Budget }) {
       status={unplanned ? { label: "No plan yet", tone: "neutral" } : status}
       points={points}
       chartLabel={unplanned ? "Spending this month" : "Left in the plan through the month"}
-      note={
-        unplanned
-          ? `Charges from ${shortDate(monthRange(budget.year, budget.month).start)} through ${shortDate(monthRange(budget.year, budget.month).end)}.`
-          : `Charges from ${shortDate(monthRange(budget.year, budget.month).start)} through ${shortDate(monthRange(budget.year, budget.month).end)}. A plan with no charges was carried from an earlier month.`
-      }
     />
   );
 }
@@ -511,12 +386,6 @@ function CategoryRow({
           {paced ? (
             <span className="mt-1 block pl-4 text-[13px] text-[var(--muted)]">
               <MoneyText cents={row.spentCents} /> of <MoneyText cents={row.availableCents} />
-              {row.rolloverInCents > 0 ? (
-                <>
-                  {" · "}
-                  <MoneyText cents={row.rolloverInCents} /> left from last month
-                </>
-              ) : null}
             </span>
           ) : null}
         </span>
@@ -554,7 +423,6 @@ function CategorySheet({
 }) {
   const [groups, setGroups] = useState<CatGroup[]>([]);
   const [txs, setTxs] = useState<MonthTx[] | null>(null);
-  const [inSafe, setInSafe] = useState(editor.row.category.flexBucket === "flex");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const categoryId = editor.row.category.id;
 
@@ -598,13 +466,6 @@ function CategorySheet({
     if (editor.name.trim() && editor.name.trim() !== row.category.name) {
       jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, name: editor.name.trim() }) }));
     }
-    if (editor.rollover !== row.category.rollover) {
-      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, rollover: editor.rollover }) }));
-    }
-    const wasFlex = row.category.flexBucket === "flex";
-    if (inSafe !== wasFlex) {
-      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: row.category.id, flexBucket: inSafe ? "flex" : "fixed" }) }));
-    }
     void onCommit(jobs.length ? () => Promise.all(jobs).then(() => undefined) : null, onClose);
   }
 
@@ -640,20 +501,6 @@ function CategorySheet({
         <Field label="Name">
           <input className="shelf-input" value={editor.name} onChange={(event) => onChange({ ...editor, name: event.target.value })} />
         </Field>
-        <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={editor.rollover} onClick={() => onChange({ ...editor, rollover: !editor.rollover })}>
-          <span className="min-w-0">
-            <span className="block font-medium">Keep leftovers for next month</span>
-            <span className="block text-[13px] font-normal text-[var(--muted)]">Whatever you don’t spend is added to next month. Off, next month starts fresh.</span>
-          </span>
-          <span className={`switch shrink-0 ${editor.rollover ? "on" : ""}`} />
-        </button>
-        <button type="button" className="data-row w-full justify-between gap-3 rounded-[16px] text-left" aria-pressed={inSafe} onClick={() => setInSafe((value) => !value)}>
-          <span className="min-w-0">
-            <span className="block font-medium">Leave the plan in safe to spend</span>
-            <span className="block text-[13px] font-normal text-[var(--muted)]">On, safe to spend drops only when a charge posts. Off, the whole plan comes out now, even with no charges.</span>
-          </span>
-          <span className={`switch shrink-0 ${inSafe ? "on" : ""}`} />
-        </button>
         <button className="shelf-btn w-full">Save</button>
         <button
           className="text-btn"
