@@ -1,0 +1,76 @@
+name: Publish phone update
+
+on:
+  push:
+    branches:
+      - master
+      - cursor/native-parity-08b4
+    paths:
+      - "apps/mobile/**"
+      - "scripts/publish-ota.mjs"
+      - "src/app/api/ota/**"
+      - ".github/workflows/publish-ota.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shelf-ota
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to the live server
+    if: ${{ !contains(github.event.head_commit.message, '[ota]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install the phone app
+        working-directory: apps/mobile
+        run: npm ci --legacy-peer-deps
+
+      - name: Export the phone bundle
+        run: node scripts/publish-ota.mjs
+
+      - name: Push the bundle to master
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- public/ota && [ -z "$(git ls-files --others --exclude-standard public/ota)" ]; then
+            echo "No new phone bundle."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/ota-stage"
+          cp -a public/ota "$RUNNER_TEMP/ota-stage/ota"
+          cp src/app/api/ota/route.ts "$RUNNER_TEMP/ota-stage/route.ts"
+          cp scripts/publish-ota.mjs "$RUNNER_TEMP/ota-stage/publish-ota.mjs"
+          cp .github/workflows/publish-ota.yml "$RUNNER_TEMP/ota-stage/publish-ota.yml"
+          git fetch origin master
+          git checkout -B master origin/master
+          rm -rf public/ota
+          mkdir -p public/ota src/app/api/ota scripts .github/workflows
+          cp -a "$RUNNER_TEMP/ota-stage/ota/." public/ota/
+          cp "$RUNNER_TEMP/ota-stage/route.ts" src/app/api/ota/route.ts
+          cp "$RUNNER_TEMP/ota-stage/publish-ota.mjs" scripts/publish-ota.mjs
+          cp "$RUNNER_TEMP/ota-stage/publish-ota.yml" .github/workflows/publish-ota.yml
+          git add public/ota src/app/api/ota/route.ts scripts/publish-ota.mjs .github/workflows/publish-ota.yml
+          if git diff --cached --quiet; then
+            echo "Master already has this bundle."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Publish the phone update [ota]"
+          git push origin master

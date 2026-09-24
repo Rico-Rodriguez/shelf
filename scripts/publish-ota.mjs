@@ -40,6 +40,22 @@ const launch = asset(ios.bundle, "application/javascript");
 delete launch.fileExtension;
 const assets = ios.assets.map((file) => asset(file.path, file.ext === "ttf" ? "font/ttf" : "image/png", `.${file.ext}`));
 
+const manifestPath = join(destination, "manifest.json");
+try {
+  const previous = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const sameLaunch = previous.launchAsset?.hash === launch.hash;
+  const sameAssets =
+    previous.assets?.length === assets.length &&
+    previous.assets.every((item, index) => item.hash === assets[index]?.hash);
+  if (sameLaunch && sameAssets && previous.runtimeVersion === "1.0.0") {
+    rmSync(exported, { recursive: true, force: true });
+    console.log("Phone bundle is unchanged");
+    process.exit(0);
+  }
+} catch {
+  // First publish, or the previous manifest cannot be read.
+}
+
 rmSync(destination, { recursive: true, force: true });
 mkdirSync(destination, { recursive: true });
 cpSync(join(exported, "_expo"), join(destination, "_expo"), { recursive: true });
