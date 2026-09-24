@@ -6,6 +6,7 @@ import { ChargeSheet, ChargeGroup } from "../../src/charge";
 import {
   categorizeLabel,
   dayLabel,
+  daysLeftInMonth,
   flowMoney,
   inDaysPhrase,
   money,
@@ -62,6 +63,10 @@ type Dash = {
 function MonthHero({ data }: { data: Dash }) {
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const planned = data.budget.plannedCents > 0;
+  const remaining = data.budget.remainingCents;
+  const daysLeft = daysLeftInMonth();
+  const dailySafe = planned && remaining > 0 ? Math.round(remaining / daysLeft) : null;
+  const over = planned && remaining < 0;
 
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
@@ -75,10 +80,49 @@ function MonthHero({ data }: { data: Dash }) {
         ]
       : undefined;
 
+  let subtitleContent: React.ReactNode = null;
+  if (scrub) {
+    const startCents = data.spendSeries?.[0]?.cents ?? 0;
+    const delta = scrub.cents - startCents;
+    subtitleContent = (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
+          {delta >= 0 ? `+${money(delta)}` : money(delta)}
+        </Text>
+        <Text style={{ fontSize: 13, color: colors.tertiary }}>since {shortDate(range.start)}</Text>
+      </View>
+    );
+  } else if (planned) {
+    subtitleContent = (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: over ? colors.danger : colors.positive }} />
+        <Text style={{ fontSize: 13, fontWeight: "600", color: over ? colors.danger : colors.accentInk }}>
+          {over ? `${money(Math.abs(remaining))} over plan` : `${money(remaining)} remaining`}
+        </Text>
+        {dailySafe != null ? (
+          <Text style={{ fontSize: 13, color: colors.muted }}>
+            · {money(dailySafe)}/day safe
+          </Text>
+        ) : null}
+      </View>
+    );
+  } else if (data.cashFlow.incomeCents > 0) {
+    const netSavings = data.cashFlow.incomeCents - data.cashFlow.spendingCents;
+    subtitleContent = (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: netSavings >= 0 ? colors.positive : colors.warn }} />
+        <Text style={{ fontSize: 13, fontWeight: "600", color: netSavings >= 0 ? colors.accentInk : colors.warn }}>
+          {netSavings >= 0 ? `${money(netSavings)} saved this month` : `${money(-netSavings)} net deficit`}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <Hero
       label={scrub ? dayLabel(scrub.date) : "Spent this month"}
       cents={scrub ? scrub.cents : data.cashFlow.spendingCents}
+      subtitle={subtitleContent}
       points={data.spendSeries}
       baselinePoints={baselinePoints}
       onScrub={setScrub}
@@ -245,6 +289,45 @@ export default function HomeScreen() {
               <Icon name="check" size={16} color={colors.ink} />
               <Text style={styles.pillText}>
                 {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
+              </Text>
+            </SpringPressable>
+          </View>
+
+          {/* Financial Pulse Cards (Monarch / Rocket style) */}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <SpringPressable
+              onPress={() => router.push("/(app)/budget")}
+              style={[styles.pulseCard, { flex: 1 }]}
+            >
+              <Text style={styles.pulseLabel}>{plannedTotal > 0 ? "Remaining" : "Saved"}</Text>
+              <Text
+                style={[
+                  styles.pulseFigure,
+                  plannedTotal > 0 && left < 0 ? { color: colors.danger } : { color: colors.ink },
+                ]}
+                numberOfLines={1}
+              >
+                {money(plannedTotal > 0 ? left : data.cashFlow.savedCents)}
+              </Text>
+            </SpringPressable>
+
+            <SpringPressable
+              onPress={() => router.push("/cash-flow")}
+              style={[styles.pulseCard, { flex: 1 }]}
+            >
+              <Text style={styles.pulseLabel}>Income</Text>
+              <Text style={[styles.pulseFigure, { color: colors.positive }]} numberOfLines={1}>
+                {money(data.cashFlow.incomeCents)}
+              </Text>
+            </SpringPressable>
+
+            <SpringPressable
+              onPress={() => router.push("/bills")}
+              style={[styles.pulseCard, { flex: 1 }]}
+            >
+              <Text style={styles.pulseLabel}>Bills due</Text>
+              <Text style={styles.pulseFigure} numberOfLines={1}>
+                {bills.length > 0 ? money(bills.reduce((s, b) => s + b.amountCents, 0)) : "None"}
               </Text>
             </SpringPressable>
           </View>
@@ -504,5 +587,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  pulseCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  pulseLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.tertiary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  pulseFigure: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.3,
+    fontVariant: ["tabular-nums"],
   },
 });

@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { isLiability, money, signed } from "../../src/format";
+import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
 import { Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
 
@@ -188,6 +189,7 @@ export default function AccountsScreen() {
                   <Pressable
                     key={account.id}
                     onPress={() => router.push(`/account/${account.id}`)}
+                    onPressIn={tapPress}
                     style={({ pressed }) => [{ minHeight: 64, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }, pressed ? { backgroundColor: colors.fill } : null]}
                   >
                     <View style={{ flex: 1 }}>

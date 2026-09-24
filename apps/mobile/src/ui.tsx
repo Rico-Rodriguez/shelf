@@ -206,11 +206,11 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => {
+      onPress={onPress}
+      onPressIn={() => {
         tapPress();
-        onPress();
+        settle(0.97);
       }}
-      onPressIn={() => settle(0.97)}
       onPressOut={() => settle(1)}
       disabled={busy}
     >
@@ -502,6 +502,7 @@ export function Hero({
   shares,
   footer,
   onPressFigure,
+  subtitle,
   children,
 }: {
   label: string;
@@ -523,6 +524,7 @@ export function Hero({
   shares?: { label: string; cents: number; color: string }[];
   footer?: string;
   onPressFigure?: () => void;
+  subtitle?: ReactNode;
   children?: ReactNode;
 }) {
   const styles = useStyles();
@@ -560,6 +562,7 @@ export function Hero({
           style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
         />
       )}
+      {subtitle ? <View style={{ marginTop: 4 }}>{subtitle}</View> : null}
       {charting && points ? (
         <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} baselinePoints={baselinePoints} />
       ) : shownShares.length ? (
@@ -648,13 +651,11 @@ export function SpringPressable({
   return (
     <Pressable
       disabled={disabled}
-      onPress={() => {
+      onPress={onPress}
+      onPressIn={() => {
         tapPress();
-        onPress?.();
+        Animated.spring(scale, { toValue: scaleTo, useNativeDriver: true, stiffness: 500, damping: 26, mass: 0.6 }).start();
       }}
-      onPressIn={() =>
-        Animated.spring(scale, { toValue: scaleTo, useNativeDriver: true, stiffness: 500, damping: 26, mass: 0.6 }).start()
-      }
       onPressOut={() =>
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 500, damping: 26, mass: 0.6 }).start()
       }

@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { dayLabel, daysLeftInMonth, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
-import { tapSelect } from "../../src/haptic";
+import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet, SpringPressable } from "../../src/ui";
 
@@ -284,7 +284,11 @@ export default function BudgetScreen() {
                         <Pressable
                           key={row.category.id}
                           onPress={() => openRow(row)}
-                          style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
+                          onPressIn={tapPress}
+                          style={({ pressed }) => [
+                            { paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line },
+                            pressed ? { backgroundColor: colors.fill } : null,
+                          ]}
                         >
                           <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
                             <View style={{ flex: 1, gap: 4 }}>
@@ -354,6 +358,46 @@ export default function BudgetScreen() {
       {editing && data ? (
         <Sheet title={catName || "Category"} onClose={() => setEditing(null)}>
           <Field label="Plan" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: 4 }}>
+            {[25, 50, 100, 250].map((delta) => (
+              <Pressable
+                key={delta}
+                onPress={() => {
+                  tapSelect();
+                  const current = Number(planned || 0);
+                  setPlanned(String(Math.max(0, current + delta)));
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: colors.fill,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>+{delta}</Text>
+              </Pressable>
+            ))}
+            {editing.spentCents > 0 ? (
+              <Pressable
+                onPress={() => {
+                  tapSelect();
+                  setPlanned(String(Math.round(editing.spentCents / 100)));
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: colors.accentSoft,
+                  borderWidth: 1,
+                  borderColor: colors.accent,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.accentInk }}>Match spent</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Field label="Name" value={catName} onChangeText={setCatName} />
           <Section title="This month" />
           {txs == null ? <Loading /> : null}

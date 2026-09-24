@@ -32,23 +32,37 @@ const listeners = new Map<string, Set<CacheListener>>();
 let tokenPromise: Promise<string | null> | undefined;
 
 const PERSIST_PREFIX = "shelf.c.";
-const PERSISTED_PATHS = [
+const PERSIST_INDEX_KEY = "shelf.c.idx";
+const PERSISTED_PREFIXES = [
   "/api/dashboard",
   "/api/accounts",
   "/api/categories",
-  "/api/transactions?countOnly=1",
+  "/api/budget",
+  "/api/transactions",
+  "/api/recurring",
+  "/api/reports",
 ];
 
 function persistKey(path: string): string {
   return `${PERSIST_PREFIX}${path.replace(/[^a-zA-Z0-9]/g, "_")}`.slice(0, 64);
 }
 
+let knownPersistedKeys = new Set<string>();
+
 async function persistItem(path: string, data: unknown) {
-  if (!PERSISTED_PATHS.some((p) => path.startsWith(p))) return;
+  if (!PERSISTED_PREFIXES.some((p) => path.startsWith(p))) return;
   try {
     const raw = JSON.stringify(data);
     if (raw.length < 64000) {
-      await SecureStore.setItemAsync(persistKey(path), raw);
+      const key = persistKey(path);
+      await SecureStore.setItemAsync(key, raw);
+      if (!knownPersistedKeys.has(path)) {
+        knownPersistedKeys.add(path);
+        await SecureStore.setItemAsync(
+          PERSIST_INDEX_KEY,
+          JSON.stringify(Array.from(knownPersistedKeys)),
+        ).catch(() => undefined);
+      }
     }
   } catch {
     // Ignore storage limits
@@ -57,19 +71,31 @@ async function persistItem(path: string, data: unknown) {
 
 // Immediately initiate hydration from disk so memory is primed as early as possible
 export const cacheHydrationPromise = (async () => {
-  for (const path of PERSISTED_PATHS) {
-    try {
-      const raw = await SecureStore.getItemAsync(persistKey(path));
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (!memory.has(path)) {
-          memory.set(path, parsed);
-          notifyCache(path, parsed);
+  try {
+    const rawIdx = await SecureStore.getItemAsync(PERSIST_INDEX_KEY);
+    const paths: string[] = rawIdx ? JSON.parse(rawIdx) : [
+      "/api/dashboard",
+      "/api/accounts",
+      "/api/categories",
+      "/api/transactions?countOnly=1",
+    ];
+    knownPersistedKeys = new Set(paths);
+    for (const path of paths) {
+      try {
+        const raw = await SecureStore.getItemAsync(persistKey(path));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (!memory.has(path)) {
+            memory.set(path, parsed);
+            notifyCache(path, parsed);
+          }
         }
+      } catch {
+        // Ignore single key error
       }
-    } catch {
-      // Ignore
     }
+  } catch {
+    // Ignore index hydration error
   }
 })();
 
@@ -88,9 +114,11 @@ export async function setToken(token: string | null): Promise<void> {
       flight.clear();
       listeners.clear();
       await SecureStore.deleteItemAsync(TOKEN_KEY);
-      for (const path of PERSISTED_PATHS) {
+      for (const path of knownPersistedKeys) {
         SecureStore.deleteItemAsync(persistKey(path)).catch(() => undefined);
       }
+      knownPersistedKeys.clear();
+      SecureStore.deleteItemAsync(PERSIST_INDEX_KEY).catch(() => undefined);
       return;
     }
     await SecureStore.setItemAsync(TOKEN_KEY, token);
