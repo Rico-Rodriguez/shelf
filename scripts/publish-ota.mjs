@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +41,10 @@ function asset(path, contentType, extension) {
 const launch = asset(ios.bundle, "application/javascript");
 delete launch.fileExtension;
 const assets = ios.assets.map((file) => asset(file.path, file.ext === "ttf" ? "font/ttf" : "image/png", `.${file.ext}`));
+const { exp } = createRequire(join(mobile, "package.json"))("@expo/config").getConfig(mobile, {
+  skipSDKVersionRequirement: true,
+});
+const extra = { expoClient: exp };
 
 const manifestPath = join(destination, "manifest.json");
 try {
@@ -48,7 +53,8 @@ try {
   const sameAssets =
     previous.assets?.length === assets.length &&
     previous.assets.every((item, index) => item.hash === assets[index]?.hash && item.key === assets[index]?.key);
-  if (sameLaunch && sameAssets && previous.runtimeVersion === "1.0.0") {
+  const sameExtra = JSON.stringify(previous.extra) === JSON.stringify(extra);
+  if (sameLaunch && sameAssets && sameExtra && previous.runtimeVersion === "1.0.0") {
     rmSync(exported, { recursive: true, force: true });
     console.log("Phone bundle is unchanged");
     process.exit(0);
@@ -70,7 +76,7 @@ writeFileSync(
     launchAsset: launch,
     assets,
     metadata: {},
-    extra: {},
+    extra,
   }),
 );
 rmSync(exported, { recursive: true, force: true });
