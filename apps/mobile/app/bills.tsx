@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
+import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
 import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet, Switch } from "../src/ui";
 
@@ -60,7 +61,7 @@ export default function BillsScreen() {
   const [editing, setEditing] = useState<Bill | "new" | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [groups, setGroups] = useState<{ categories: { id: string; name: string }[] }[]>([]);
+  const [groups, setGroups] = useState<ChargeGroup[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState<"cadence" | "category" | "account" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export default function BillsScreen() {
 
   useEffect(() => {
     load();
-    void api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
+    void api<{ groups: ChargeGroup[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
   }, []);
 
@@ -331,21 +332,15 @@ export default function BillsScreen() {
             </Card>
           ) : null}
           <Field label="Next date" value={form.nextDate} onChangeText={(nextDate) => setForm({ ...form, nextDate })} placeholder="YYYY-MM-DD" />
-          <Pressable onPress={() => setPicking(picking === "category" ? null : "category")} style={toggle}>
-            <Text style={{ fontSize: 16, color: colors.ink }}>{categories.find((row) => row.id === form.categoryId)?.name ?? "No category"}</Text>
+          <Pressable onPress={() => setPicking("category")} style={toggle}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getCategoryColor(categories.find((c) => c.id === form.categoryId)) }} />
+              <Text style={{ fontSize: 16, color: colors.ink }}>
+                {categories.find((row) => row.id === form.categoryId)?.name ?? "Select Category"}
+              </Text>
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>Change ›</Text>
           </Pressable>
-          {picking === "category" ? (
-            <Card>
-              <Pressable onPress={() => { setForm({ ...form, categoryId: "" }); setPicking(null); }} style={choice}>
-                <Text>No category</Text>
-              </Pressable>
-              {categories.map((category) => (
-                <Pressable key={category.id} onPress={() => { setForm({ ...form, categoryId: category.id }); setPicking(null); }} style={choice}>
-                  <Text style={{ color: form.categoryId === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
-                </Pressable>
-              ))}
-            </Card>
-          ) : null}
           <Pressable onPress={() => setPicking(picking === "account" ? null : "account")} style={toggle}>
             <Text style={{ fontSize: 16, color: colors.ink }}>{accounts.find((row) => row.id === form.accountId)?.name ?? "Any account"}</Text>
           </Pressable>
@@ -377,6 +372,20 @@ export default function BillsScreen() {
               <Button label={confirmDelete ? "Delete this bill?" : "Delete"} tone="danger" onPress={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void remove(editing); }} />
             </>
           ) : null}
+        </Sheet>
+      ) : null}
+
+      {picking === "category" ? (
+        <Sheet title="Select Category" onClose={() => setPicking(null)}>
+          <CategoryPicker
+            groups={groups}
+            selected={form.categoryId}
+            onSelect={(id) => {
+              setForm({ ...form, categoryId: id });
+              setPicking(null);
+            }}
+            onClose={() => setPicking(null)}
+          />
         </Sheet>
       ) : null}
     </Screen>

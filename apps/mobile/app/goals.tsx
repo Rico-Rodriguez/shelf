@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
+import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money } from "../src/format";
 import { celebrate } from "../src/toast";
 import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
@@ -33,6 +34,8 @@ export default function GoalsScreen() {
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<ChargeGroup[]>([]);
+  const [pickingCategory, setPickingCategory] = useState(false);
   const [form, setForm] = useState<Form>(empty);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -46,8 +49,11 @@ export default function GoalsScreen() {
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load goals"));
-    void api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories")
-      .then((res) => setCategories(res.groups.flatMap((group) => group.categories)))
+    void api<{ groups: ChargeGroup[] }>("/api/categories")
+      .then((res) => {
+        setGroups(res.groups);
+        setCategories(res.groups.flatMap((group) => group.categories));
+      })
       .catch(() => undefined);
   }
 
@@ -182,20 +188,37 @@ export default function GoalsScreen() {
             })}
           </Card>
           <Note>Category is optional.</Note>
-          <Card>
-            <Pressable onPress={() => setForm({ ...form, categoryId: "" })} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 16 }}>
-              <Text style={{ color: form.categoryId ? colors.ink : colors.accentInk }}>No category</Text>
-            </Pressable>
-            {categories.map((category) => (
-              <Pressable
-                key={category.id}
-                onPress={() => setForm({ ...form, categoryId: category.id })}
-                style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}
-              >
-                <Text style={{ color: form.categoryId === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
-              </Pressable>
-            ))}
-          </Card>
+          <Pressable
+            onPress={() => setPickingCategory(true)}
+            style={{
+              minHeight: 52,
+              paddingHorizontal: 16,
+              borderRadius: 16,
+              backgroundColor: colors.card,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderWidth: 1,
+              borderColor: colors.line,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+              {form.categoryId ? (
+                <View
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 5,
+                    backgroundColor: getCategoryColor(categories.find((c) => c.id === form.categoryId)),
+                  }}
+                />
+              ) : null}
+              <Text style={{ fontSize: 16, color: colors.ink }}>
+                {categories.find((c) => c.id === form.categoryId)?.name ?? "No category"}
+              </Text>
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>Change ›</Text>
+          </Pressable>
           <Button label="Save" onPress={() => void save()} />
           {editing !== "new" ? (
             <Button
@@ -210,6 +233,39 @@ export default function GoalsScreen() {
               }}
             />
           ) : null}
+        </Sheet>
+      ) : null}
+
+      {pickingCategory ? (
+        <Sheet title="Select Category" onClose={() => setPickingCategory(false)}>
+          <Pressable
+            onPress={() => {
+              setForm({ ...form, categoryId: "" });
+              setPickingCategory(false);
+            }}
+            style={{
+              minHeight: 48,
+              borderRadius: 14,
+              backgroundColor: colors.card,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: colors.line,
+            }}
+          >
+            <Text style={{ fontSize: 15, fontWeight: "600", color: form.categoryId ? colors.ink : colors.accentInk }}>
+              No Category
+            </Text>
+          </Pressable>
+          <CategoryPicker
+            groups={groups}
+            selected={form.categoryId}
+            onSelect={(id) => {
+              setForm({ ...form, categoryId: id });
+              setPickingCategory(false);
+            }}
+            onClose={() => setPickingCategory(false)}
+          />
         </Sheet>
       ) : null}
     </Screen>

@@ -37,6 +37,42 @@ export function Icon({
   if (name === "calendar") return <Calendar size={size} color={color} />;
   if (name === "flag") return <Glyph size={size} color={color} d="M6 20.5V4.5h11l-2.6 4 2.6 4H6" />;
   if (name === "spark") return <Glyph size={size} color={color} d="M4 16.5 9 11l3.2 3L20 6.5" />;
+  if (name === "check") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M5 12.5l4.5 4.5L19 7" stroke={color} strokeWidth={filled ? 2.5 : STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    );
+  }
+  if (name === "pencil" || name === "edit") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 18.5 3 19.5l1-4L16.5 3.5z" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    );
+  }
+  if (name === "skip") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M5 5l9 7-9 7V5zM17 5v14" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill={filled ? color : "none"} />
+      </Svg>
+    );
+  }
+  if (name === "close" || name === "x") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M18 6L6 18M6 6l12 12" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    );
+  }
+  if (name === "tag") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <Circle cx={7} cy={7} r={1.5} fill={color} />
+      </Svg>
+    );
+  }
   if (name === "flow") {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
