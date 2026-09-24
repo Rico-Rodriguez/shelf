@@ -81,6 +81,7 @@ export default function InsightsScreen() {
             points={points.length > 1 ? points : undefined}
             caption="Net worth"
             onScrub={setScrub}
+            live={scrub != null}
           />
           <Section title="Spending" trailing={`${money(data.spendingCents)}${note ? ` · ${note}` : ""}`} />
           <Card>

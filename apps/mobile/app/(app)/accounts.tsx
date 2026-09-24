@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../../src/api";
+import { api, load as read, peek } from "../../src/api";
 import { isLiability, money, signed } from "../../src/format";
 import { connectBank } from "../../src/plaid";
 import { Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
@@ -27,10 +27,13 @@ function accountLine(account: Account) {
   return [label, mask].filter(Boolean).join(" · ");
 }
 
+type AccountsPayload = { accounts: Account[]; items?: Item[]; plaidConfigured: boolean };
+
 export default function AccountsScreen() {
-  const [accounts, setAccounts] = useState<Account[] | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
-  const [plaidConfigured, setPlaidConfigured] = useState(false);
+  const cached = peek<AccountsPayload>("/api/accounts");
+  const [accounts, setAccounts] = useState<Account[] | null>(cached ? cached.accounts.filter((account) => !account.isHidden) : null);
+  const [items, setItems] = useState<Item[]>(cached?.items ?? []);
+  const [plaidConfigured, setPlaidConfigured] = useState(cached?.plaidConfigured ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -39,7 +42,7 @@ export default function AccountsScreen() {
   const [type, setType] = useState("depository");
 
   const load = useCallback(() => {
-    void api<{ accounts: Account[]; items?: Item[]; plaidConfigured: boolean }>("/api/accounts")
+    void read<AccountsPayload>("/api/accounts")
       .then((res) => {
         setAccounts(res.accounts.filter((account) => !account.isHidden));
         setItems(res.items ?? []);
@@ -116,8 +119,8 @@ export default function AccountsScreen() {
       title="Accounts"
       framed
       action={
-        <Pressable onPress={() => setOpen(true)} style={{ backgroundColor: colors.ink, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Add</Text>
+        <Pressable onPress={() => setOpen(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
         </Pressable>
       }
     >

@@ -22,16 +22,56 @@ export function apiBase(): string {
   return LIVE_SERVER;
 }
 
-export async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_KEY);
+const memory = new Map<string, unknown>();
+const flight = new Map<string, Promise<unknown>>();
+
+let tokenPromise: Promise<string | null> | undefined;
+
+export function getToken(): Promise<string | null> {
+  if (!tokenPromise) {
+    tokenPromise = SecureStore.getItemAsync(TOKEN_KEY).catch((err: unknown) => {
+      tokenPromise = undefined;
+      throw err;
+    });
+  }
+  return tokenPromise;
 }
 
 export async function setToken(token: string | null): Promise<void> {
+  tokenPromise = Promise.resolve(token);
   if (!token) {
+    memory.clear();
+    flight.clear();
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     return;
   }
   await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+export function peek<T>(path: string): T | undefined {
+  return memory.get(path) as T | undefined;
+}
+
+/** Reads a GET through a shared in-memory cache so tabs can show the last answer immediately. */
+export function load<T>(path: string): Promise<T> {
+  const pending = flight.get(path);
+  if (pending) return pending as Promise<T>;
+  const req = api<T>(path)
+    .then((data) => {
+      memory.set(path, data);
+      flight.delete(path);
+      return data;
+    })
+    .catch((err: unknown) => {
+      flight.delete(path);
+      throw err;
+    });
+  flight.set(path, req);
+  return req;
+}
+
+export function warm(paths: string[]) {
+  for (const path of paths) void load(path).catch(() => undefined);
 }
 
 export class ApiError extends Error {

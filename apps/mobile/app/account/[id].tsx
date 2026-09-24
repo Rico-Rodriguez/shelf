@@ -109,6 +109,7 @@ export default function AccountScreen() {
             tone={debt || signed < 0 ? "bad" : undefined}
             points={points.length > 1 ? points : undefined}
             onScrub={setScrub}
+            live={scrub != null}
           >
             <View style={{ paddingHorizontal: 18, paddingBottom: 16, gap: 4 }}>
               {usedPct != null ? <Text style={{ fontSize: 13, color: usedPct >= 90 ? colors.danger : colors.muted }}>{`${usedPct}% of the limit`}</Text> : null}
