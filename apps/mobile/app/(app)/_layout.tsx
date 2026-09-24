@@ -23,7 +23,7 @@ function MobileBar({ unread }: { unread: number }) {
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1 }} />
         <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
-          Shelf
+          Belf
         </Text>
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
           <Pressable accessibilityLabel="Settings" onPress={() => router.push("/settings")} style={barButton}>
