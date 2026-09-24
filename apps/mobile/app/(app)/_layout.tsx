@@ -58,6 +58,56 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
   );
 }
 
+function ShelfTabBarItem({
+  route,
+  focused,
+  reviewCount,
+  spec,
+  onPress,
+}: {
+  route: { key: string; name: string };
+  focused: boolean;
+  reviewCount: number;
+  spec?: { name: string; title: string; icon: string };
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(focused ? 1.06 : 1)).current;
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: focused ? 1.08 : 1,
+      useNativeDriver: true,
+      stiffness: 480,
+      damping: 24,
+      mass: 0.6,
+    }).start();
+  }, [focused, scale]);
+
+  const color = focused ? colors.accentInk : colors.tertiary;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={focused ? { selected: true } : {}}
+      accessibilityLabel={route.name === "activity" && reviewCount > 0 ? `Activity, ${reviewCount} to categorize` : spec?.title}
+      onPress={() => {
+        if (!focused) tapSelect();
+        onPress();
+      }}
+      style={{ flex: 1, alignItems: "center", gap: 3, minHeight: 46 }}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Icon name={spec?.icon ?? "more"} size={24} color={color} filled={focused} />
+        {route.name === "activity" && reviewCount > 0 ? (
+          <View style={[badge, { backgroundColor: colors.danger }]}>
+            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{reviewCount > 99 ? "99+" : reviewCount}</Text>
+          </View>
+        ) : null}
+      </Animated.View>
+      <Text style={{ fontSize: 11, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color }}>{spec?.title}</Text>
+    </Pressable>
+  );
+}
+
 function ShelfTabBar({
   state,
   reviewCount,
@@ -83,35 +133,21 @@ function ShelfTabBar({
       {tab > 0 ? (
         <Animated.View
           pointerEvents="none"
-          style={{ position: "absolute", top: 0, left: tab * 0.28, width: tab * 0.44, height: 3, borderRadius: 99, backgroundColor: colors.accent, transform: [{ translateX: x }] }}
+          style={{ position: "absolute", top: 0, left: tab * 0.28, width: tab * 0.44, height: 3.5, borderRadius: 99, backgroundColor: colors.accent, transform: [{ translateX: x }] }}
         />
       ) : null}
       {state.routes.map((route, index) => {
         const spec = TABS.find((tab) => tab.name === route.name);
         const focused = state.index === index;
-        const color = focused ? colors.accentInk : colors.tertiary;
         return (
-          <Pressable
+          <ShelfTabBarItem
             key={route.key}
-            accessibilityRole="button"
-            accessibilityState={focused ? { selected: true } : {}}
-            accessibilityLabel={route.name === "activity" && reviewCount > 0 ? `Activity, ${reviewCount} to categorize` : spec?.title}
-            onPress={() => {
-              if (!focused) tapSelect();
-              onPress(route, focused);
-            }}
-            style={{ flex: 1, alignItems: "center", gap: 4, minHeight: 44 }}
-          >
-            <View>
-              <Icon name={spec?.icon ?? "more"} size={24} color={color} filled={focused} />
-              {route.name === "activity" && reviewCount > 0 ? (
-                <View style={[badge, { backgroundColor: colors.danger }]}>
-                  <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{reviewCount > 99 ? "99+" : reviewCount}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={{ fontSize: 10, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color }}>{spec?.title}</Text>
-          </Pressable>
+            route={route}
+            focused={focused}
+            reviewCount={reviewCount}
+            spec={spec}
+            onPress={() => onPress(route, focused)}
+          />
         );
       })}
     </View>
