@@ -406,8 +406,10 @@ export function Hero({
   empty,
   status,
   points,
+  baselinePoints,
   reference,
   caption,
+  color,
   onScrub,
   live = false,
   meter,
@@ -422,8 +424,10 @@ export function Hero({
   empty?: string;
   status?: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null;
   points?: { date: string; cents: number }[];
+  baselinePoints?: { date: string; cents: number }[];
   reference?: { cents: number; label: string };
   caption?: string;
+  color?: string;
   onScrub?: (point: { date: string; cents: number } | null) => void;
   /** Skip the figure animation while a finger is on the chart. */
   live?: boolean;
@@ -454,7 +458,7 @@ export function Hero({
         style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
       />
       {charting && points ? (
-        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} />
+        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} baselinePoints={baselinePoints} />
       ) : shownShares.length ? (
         <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16, gap: 8 }}>
           <View style={[styles.mix, { borderRadius: 99, overflow: "hidden" }]}>
@@ -522,7 +526,51 @@ export function SpendMix({ rows }: { rows: { key: string; cents: number; color: 
   );
 }
 
-export function Progress({ value, max, color = colors.positive }: { value: number; max: number; color?: string }) {
+export function SpringPressable({
+  children,
+  onPress,
+  style,
+  disabled,
+  scaleTo = 0.97,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+  style?: StyleProp<TextStyle | View["props"]["style"]>;
+  disabled?: boolean;
+  scaleTo?: number;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={() => {
+        tapPress();
+        onPress?.();
+      }}
+      onPressIn={() =>
+        Animated.spring(scale, { toValue: scaleTo, useNativeDriver: true, stiffness: 500, damping: 26, mass: 0.6 }).start()
+      }
+      onPressOut={() =>
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 500, damping: 26, mass: 0.6 }).start()
+      }
+      style={style as never}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+export function Progress({
+  value,
+  max,
+  color = colors.positive,
+  markerRatio,
+}: {
+  value: number;
+  max: number;
+  color?: string;
+  markerRatio?: number;
+}) {
   const styles = useStyles();
   const ratio = max <= 0 ? (value > 0 ? 1 : 0) : Math.min(1, value / max);
   const over = max > 0 ? value > max : value > 0;
@@ -531,9 +579,27 @@ export function Progress({ value, max, color = colors.positive }: { value: numbe
   useEffect(() => {
     Animated.timing(fill, { toValue: width * ratio, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [fill, ratio, width]);
+
+  const markerX = markerRatio != null && width > 0 ? Math.min(width, Math.max(0, width * markerRatio)) : null;
+
   return (
     <View style={styles.track} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
       <Animated.View style={{ width: fill, height: "100%", backgroundColor: over ? colors.danger : color, borderRadius: 99 }} />
+      {markerX != null ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: Math.max(0, markerX - 1.5),
+            top: -2,
+            bottom: -2,
+            width: 3,
+            borderRadius: 1.5,
+            backgroundColor: colors.ink,
+            opacity: 0.5,
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -640,7 +706,7 @@ function RollingMoney({
   const fromRef = useRef(text);
   const [from, setFrom] = useState(text);
   const progress = useRef(new Animated.Value(1)).current;
-  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [box, setBox] = useState({ w: 26, h: 54 });
 
   useEffect(() => {
     if (live || blank || fromRef.current === text) {
@@ -651,30 +717,32 @@ function RollingMoney({
     }
     setFrom(fromRef.current);
     progress.setValue(0);
-    const anim = Animated.timing(progress, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    const anim = Animated.timing(progress, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true });
     anim.start(({ finished }) => {
       if (finished) fromRef.current = text;
     });
     return () => anim.stop();
   }, [text, live, blank, progress]);
 
-  if (blank) return <Text style={style}>{text}</Text>;
-  if (box.h === 0) {
-    return (
-      <View>
-        <Text style={[style, { position: "absolute", opacity: 0 }]} onLayout={(event) => setBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
-          8
-        </Text>
-        <Text style={style}>{text}</Text>
-      </View>
-    );
-  }
+  if (blank || live) return <Text style={style}>{text}</Text>;
 
   const len = Math.max(from.length, text.length);
   const left = from.padStart(len);
   const right = text.padStart(len);
   return (
     <View style={{ flexDirection: "row", alignItems: "center", height: box.h, marginTop: 2 }}>
+      <Text
+        style={[style, { position: "absolute", opacity: 0 }]}
+        pointerEvents="none"
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (height > 0 && width > 0 && (height !== box.h || width !== box.w)) {
+            setBox({ w: width, h: height });
+          }
+        }}
+      >
+        8
+      </Text>
       {right.split("").map((glyph, index) => (
         <Digit key={`${len - index}-${glyph}`} from={left[index]} to={glyph} progress={progress} width={box.w} height={box.h} style={style} />
       ))}

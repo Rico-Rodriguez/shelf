@@ -6,9 +6,9 @@ import { api } from "../src/api";
 import { CategoryPicker, Charge, ChargeSheet, getCategoryColor } from "../src/charge";
 import { ReviewCard } from "../src/decide";
 import { dayLabel, merchantMatchKey, money } from "../src/format";
-import { tapPress, tapSelect } from "../src/haptic";
+import { tapCelebration, tapPress, tapSelect } from "../src/haptic";
 import { Icon, MerchantMark } from "../src/icons";
-import { celebrate, SuccessMark } from "../src/toast";
+import { celebrate, CelebrationBurst, SuccessMark } from "../src/toast";
 import { colors, Field, Sheet, Switch } from "../src/ui";
 
 type Group = { name: string; color?: string | null; categories: { id: string; name: string; color?: string | null }[] };
@@ -81,16 +81,89 @@ export default function ReviewScreen() {
     });
   }
 
+  useEffect(() => {
+    if (rows && rows.length === 0 && reviewedCount > 0) {
+      tapCelebration();
+    }
+  }, [rows?.length, reviewedCount]);
+
+  const currentCategoryObj = categories.find((category) => category.id === categoryId);
+  const categoryName = currentCategoryObj?.name ?? "Uncategorized";
+  const categoryColor = getCategoryColor(currentCategoryObj);
+  const remainingCount = rows?.length ?? 0;
+
+  // When "Always file as" is checked, recursively update the category for all matching charges in the queue
+  useEffect(() => {
+    if (!always || !categoryId || !current) return;
+    const merchant = current.merchantName || name || current.name;
+    const matchKey = merchantMatchKey(merchant).toLowerCase();
+    if (!matchKey) return;
+
+    setRows((list) => {
+      if (!list) return list;
+      let changed = false;
+      const nextList = list.map((row) => {
+        if (row.id === current.id) return row;
+        const hay = `${row.merchantName ?? ""} ${row.name} ${row.originalDescription ?? ""}`.toLowerCase();
+        if (hay.includes(matchKey) && row.categoryId !== categoryId) {
+          changed = true;
+          return {
+            ...row,
+            categoryId,
+            category: currentCategoryObj
+              ? { name: currentCategoryObj.name, color: currentCategoryObj.color }
+              : row.category,
+          };
+        }
+        return row;
+      });
+      return changed ? nextList : list;
+    });
+  }, [always, categoryId, current?.id, currentCategoryObj, name]);
+
+  const similarCount = useMemo(() => {
+    if (!current) return 0;
+    const matchKey = merchantMatchKey(current.merchantName || name || current.name).toLowerCase();
+    if (!matchKey) return 0;
+    return (rows ?? []).filter((tx) => {
+      if (tx.id === current.id) return false;
+      const hay = `${tx.merchantName ?? ""} ${tx.name} ${tx.originalDescription ?? ""}`.toLowerCase();
+      return hay.includes(matchKey);
+    }).length;
+  }, [current, name, rows]);
+
   async function markReviewed() {
     if (!current) return;
     const id = current.id;
     const finalCategoryId = categoryId || null;
     const finalName = name.trim() || current.name;
     const saveAlways = always && Boolean(finalCategoryId);
+    const merchant = current.merchantName || finalName;
+    const matchKey = merchantMatchKey(merchant).toLowerCase();
 
-    celebrate("Reviewed");
-    setReviewedCount((count) => count + 1);
-    setRows((list) => (list ?? []).filter((row) => row.id !== id));
+    // Find any other unreviewed transactions currently in the queue that match this merchant rule
+    const matchingOtherIds = saveAlways
+      ? (rows ?? [])
+          .filter((tx) => {
+            if (tx.id === id) return false;
+            const hay = `${tx.merchantName ?? ""} ${tx.name} ${tx.originalDescription ?? ""}`.toLowerCase();
+            return hay.includes(matchKey);
+          })
+          .map((tx) => tx.id)
+      : [];
+
+    const clearedTotal = 1 + matchingOtherIds.length;
+    const clearedSet = new Set([id, ...matchingOtherIds]);
+
+    if (clearedTotal > 1) {
+      celebrate(`Reviewed (+${clearedTotal - 1} cleared)`);
+    } else {
+      celebrate("Reviewed");
+    }
+
+    setReviewedCount((count) => count + clearedTotal);
+    // Recursively drop all matching charges from the queue immediately
+    setRows((list) => (list ?? []).filter((row) => !clearedSet.has(row.id)));
 
     try {
       await api(`/api/transactions/${id}`, {
@@ -98,8 +171,7 @@ export default function ReviewScreen() {
         body: JSON.stringify({ categoryId: finalCategoryId, reviewed: true, name: finalName }),
       });
       if (saveAlways && finalCategoryId) {
-        const merchant = current.merchantName || finalName;
-        await api("/api/rules", {
+        const ruleRes = await api<{ id: string; applied?: number; ids?: string[] }>("/api/rules", {
           method: "POST",
           body: JSON.stringify({
             name: merchant,
@@ -110,17 +182,18 @@ export default function ReviewScreen() {
             applyUnreviewed: true,
           }),
         });
+
+        // If the server matched any additional IDs not in our local set, drop them too
+        if (ruleRes?.ids?.length) {
+          const serverSet = new Set(ruleRes.ids);
+          setRows((list) => (list ?? []).filter((row) => !serverSet.has(row.id)));
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
       void load();
     }
   }
-
-  const currentCategoryObj = categories.find((category) => category.id === categoryId);
-  const categoryName = currentCategoryObj?.name ?? "Uncategorized";
-  const categoryColor = getCategoryColor(currentCategoryObj);
-  const remainingCount = rows?.length ?? 0;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
@@ -150,9 +223,10 @@ export default function ReviewScreen() {
         </View>
       ) : null}
 
-      {/* All Done Empty State */}
+      {/* All Done Empty State with Celebratory Confetti Burst */}
       {rows && !current ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingHorizontal: 32 }}>
+          <CelebrationBurst />
           <SuccessMark />
           <Text style={{ fontSize: 24, fontWeight: "700", letterSpacing: -0.6, color: colors.ink }}>
             You’re all caught up
@@ -368,8 +442,16 @@ export default function ReviewScreen() {
                       <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>
                         Always file as {categoryName}
                       </Text>
-                      <Text style={{ fontSize: 11, color: colors.muted }}>
-                        Auto-rules future charges for {name}
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: always && similarCount > 0 ? colors.accentInk : colors.muted,
+                          fontWeight: always && similarCount > 0 ? "600" : "400",
+                        }}
+                      >
+                        {always && similarCount > 0
+                          ? `Clears ${similarCount} matching ${similarCount === 1 ? "charge" : "charges"} in queue`
+                          : `Auto-rules future charges for ${name}`}
                       </Text>
                     </View>
                     <Switch on={always} />
@@ -449,11 +531,12 @@ export default function ReviewScreen() {
           tx={{ ...current, categoryId: categoryId || current.categoryId, name }}
           groups={groups}
           onClose={() => setEditing(false)}
-          onSaved={() => {
+          onSaved={(clearedIds) => {
             setEditing(false);
-            setReviewedCount((count) => count + 1);
-            setRows((list) => (list ?? []).filter((row) => row.id !== current.id));
-            celebrate("Reviewed");
+            const clearedSet = new Set(clearedIds && clearedIds.length ? clearedIds : [current.id]);
+            setReviewedCount((count) => count + clearedSet.size);
+            setRows((list) => (list ?? []).filter((row) => !clearedSet.has(row.id)));
+            celebrate(clearedSet.size > 1 ? `Reviewed (+${clearedSet.size - 1} cleared)` : "Reviewed");
           }}
         />
       ) : null}

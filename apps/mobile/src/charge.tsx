@@ -73,7 +73,7 @@ export function ChargeSheet({
   tx: Charge;
   groups: ChargeGroup[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (clearedIds?: string[]) => void;
 }) {
   const [name, setName] = useState(tx.name);
   const [categoryId, setCategoryId] = useState(tx.categoryId);
@@ -125,9 +125,10 @@ export function ChargeSheet({
           splits: splits.filter((part) => part.categoryId && part.amount).map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
         }),
       });
+      const clearedIds: string[] = [tx.id];
       if (always && categoryId) {
         const merchant = tx.merchantName || name;
-        await api("/api/rules", {
+        const ruleRes = await api<{ id: string; applied?: number; ids?: string[] }>("/api/rules", {
           method: "POST",
           body: JSON.stringify({
             name: merchant,
@@ -138,8 +139,11 @@ export function ChargeSheet({
             applyUnreviewed: true,
           }),
         });
+        if (ruleRes?.ids?.length) {
+          clearedIds.push(...ruleRes.ids);
+        }
       }
-      onSaved();
+      onSaved(clearedIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {

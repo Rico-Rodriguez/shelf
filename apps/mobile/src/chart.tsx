@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from "react-native-svg";
-import { tapSelect } from "./haptic";
+import { money, shortDate } from "./format";
+import { tapTick } from "./haptic";
 import { useScrollLock } from "./scroll";
 import { colors } from "./theme";
 
@@ -33,12 +34,14 @@ export function SpendChart({
   reference,
   caption,
   color = colors.accent,
+  baselinePoints,
 }: {
   points: { date: string; cents: number }[];
   onScrub?: (point: { date: string; cents: number } | null) => void;
   reference?: { cents: number; label: string };
   caption?: string;
   color?: string;
+  baselinePoints?: { date: string; cents: number }[];
 }) {
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
@@ -47,13 +50,14 @@ export function SpendChart({
   const ringRef = useRef<Circle>(null);
   const lastIndex = useRef<number | null>(null);
   const setScrollLocked = useScrollLock();
-  const height = 156;
+  const height = 160;
   const signature = series.map((point) => point.cents).join(",");
 
   const geometry = useMemo(() => {
     if (series.length < 2 || width <= 0) return null;
     const values = series.map((point) => point.cents);
     if (reference) values.push(reference.cents);
+    if (baselinePoints) values.push(...baselinePoints.map((p) => p.cents));
     const min = Math.min(...values);
     const max = Math.max(...values);
     const raw = max - min;
@@ -61,15 +65,35 @@ export function SpendChart({
     const lo = min - pad;
     const hi = max + pad;
     const span = hi - lo || 1;
-    const insetX = 8;
-    const insetY = 16;
-    const xOf = (index: number) => (series.length <= 1 ? width / 2 : insetX + (index / (series.length - 1)) * (width - insetX * 2));
+    const insetX = 12;
+    const insetY = 20;
+
+    const xOf = (index: number) =>
+      series.length <= 1 ? width / 2 : insetX + (index / (series.length - 1)) * (width - insetX * 2);
     const yOf = (cents: number) => insetY + ((hi - cents) / span) * (height - insetY * 2);
+
     const coords = series.map((point, index) => ({ x: xOf(index), y: yOf(point.cents) }));
     const line = smoothLine(coords);
     const area = `${line} L ${coords[coords.length - 1].x} ${height} L ${coords[0].x} ${height} Z`;
-    return { coords, line, area, length: pathLength(coords), refY: reference ? yOf(reference.cents) : null };
-  }, [series, width, reference, height]);
+
+    let baselineLine = "";
+    if (baselinePoints && baselinePoints.length >= 2) {
+      const baseCoords = baselinePoints.map((p, idx) => ({
+        x: insetX + (idx / (baselinePoints.length - 1)) * (width - insetX * 2),
+        y: yOf(p.cents),
+      }));
+      baselineLine = smoothLine(baseCoords);
+    }
+
+    return {
+      coords,
+      line,
+      area,
+      baselineLine,
+      length: pathLength(coords),
+      refY: reference ? yOf(reference.cents) : null,
+    };
+  }, [series, width, reference, baselinePoints, height]);
 
   const lineLength = geometry?.length ?? 0;
 
@@ -78,7 +102,7 @@ export function SpendChart({
     let frame = 0;
     const started = Date.now();
     const tick = () => {
-      const t = Math.min(1, (Date.now() - started) / 720);
+      const t = Math.min(1, (Date.now() - started) / 640);
       const eased = 1 - Math.pow(1 - t, 3);
       lineRef.current?.setNativeProps?.({ strokeDashoffset: lineLength * (1 - eased) });
       if (t < 1) frame = requestAnimationFrame(tick);
@@ -107,11 +131,11 @@ export function SpendChart({
   }, [active, lineLength, signature]);
 
   function pick(x: number) {
-    if (!width || !onScrub) return;
+    if (!width || !onScrub || series.length < 2) return;
     const index = Math.round(Math.min(1, Math.max(0, x / width)) * (series.length - 1));
     if (lastIndex.current !== index) {
       lastIndex.current = index;
-      tapSelect();
+      tapTick();
     }
     setActive(index);
     onScrub(series[index] ?? null);
@@ -125,7 +149,7 @@ export function SpendChart({
   }
 
   const scrub = Gesture.Pan()
-    .activeOffsetX([-8, 8])
+    .activeOffsetX([-6, 6])
     .onStart((event) => {
       runOnJS(setScrollLocked)(true);
       runOnJS(pick)(event.x);
@@ -140,59 +164,130 @@ export function SpendChart({
   if (series.length < 2) return null;
 
   const dot = geometry?.coords[active ?? geometry.coords.length - 1];
+  const activePoint = active != null ? series[active] : null;
   const gradientId = `wash-${color.replace("#", "")}`;
+
+  // Clamped horizontal position for floating pill tooltip
+  const pillWidth = 110;
+  const pillLeft = dot ? Math.max(6, Math.min(width - pillWidth - 6, dot.x - pillWidth / 2)) : 0;
 
   return (
     <GestureDetector gesture={scrub}>
-    <View
-      style={{ height, marginHorizontal: -18, marginTop: 6 }}
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-    >
-      {geometry && width > 0 ? (
-        <Svg width={width} height={height}>
-          <Defs>
-            <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color} stopOpacity="0.32" />
-              <Stop offset="0.72" stopColor={color} stopOpacity="0.06" />
-              <Stop offset="1" stopColor={color} stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          {geometry.refY != null ? (
-            <Line x1={0} x2={width} y1={geometry.refY} y2={geometry.refY} stroke={colors.tertiary} strokeDasharray="3 5" strokeWidth={1} />
-          ) : null}
-          <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.9} />
-          <Path
-            ref={lineRef}
-            d={geometry.line}
-            stroke={color}
-            strokeWidth={2.5}
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={geometry.length}
-            strokeDashoffset={0}
-          />
-          {active != null && dot ? <Line x1={dot.x} x2={dot.x} y1={8} y2={height - 4} stroke={colors.ink} strokeOpacity={0.28} strokeWidth={1} /> : null}
-          {dot ? (
-            <>
-              {active == null ? <Circle ref={ringRef} cx={dot.x} cy={dot.y} r={6} fill={color} opacity={0.18} /> : null}
-              <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 6.5} fill={color} />
-              <Circle cx={dot.x} cy={dot.y} r={active == null ? 2.2 : 3} fill={colors.card} />
-            </>
-          ) : null}
-        </Svg>
-      ) : null}
-      {reference && geometry?.refY != null ? (
-        <Text pointerEvents="none" style={{ position: "absolute", top: geometry.refY - 8, left: 10, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" }}>
-          {reference.label}
-        </Text>
-      ) : null}
-      {caption ? (
-        <Text pointerEvents="none" style={{ position: "absolute", top: 2, right: 10, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" }}>
-          {caption}
-        </Text>
-      ) : null}
-    </View>
+      <View
+        style={{ height, marginHorizontal: -18, marginTop: 4, position: "relative" }}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      >
+        {geometry && width > 0 ? (
+          <Svg width={width} height={height}>
+            <Defs>
+              <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={color} stopOpacity="0.28" />
+                <Stop offset="0.65" stopColor={color} stopOpacity="0.05" />
+                <Stop offset="1" stopColor={color} stopOpacity="0" />
+              </LinearGradient>
+            </Defs>
+
+            {/* Optional Baseline / Comparison trajectory */}
+            {geometry.baselineLine ? (
+              <Path
+                d={geometry.baselineLine}
+                stroke={colors.tertiary}
+                strokeWidth={1.5}
+                strokeDasharray="4 6"
+                fill="none"
+                opacity={0.7}
+              />
+            ) : null}
+
+            {/* Reference horizontal guideline */}
+            {geometry.refY != null ? (
+              <Line
+                x1={0}
+                x2={width}
+                y1={geometry.refY}
+                y2={geometry.refY}
+                stroke={colors.tertiary}
+                strokeDasharray="3 5"
+                strokeWidth={1}
+                opacity={0.8}
+              />
+            ) : null}
+
+            {/* Gradient wash under curve */}
+            <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.9} />
+
+            {/* Main fluid spend curve */}
+            <Path
+              ref={lineRef}
+              d={geometry.line}
+              stroke={color}
+              strokeWidth={2.75}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={geometry.length}
+              strokeDashoffset={0}
+            />
+
+            {/* Interactive Vertical Crosshair when scrubbing */}
+            {active != null && dot ? (
+              <Line
+                x1={dot.x}
+                x2={dot.x}
+                y1={10}
+                y2={height - 4}
+                stroke={colors.ink}
+                strokeOpacity={0.3}
+                strokeWidth={1.25}
+                strokeDasharray="2 3"
+              />
+            ) : null}
+
+            {/* Glow Point / Indicator on curve */}
+            {dot ? (
+              <>
+                {active == null ? <Circle ref={ringRef} cx={dot.x} cy={dot.y} r={6} fill={color} opacity={0.2} /> : null}
+                <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 7} fill={color} />
+                <Circle cx={dot.x} cy={dot.y} r={active == null ? 2.2 : 3.2} fill={colors.card} />
+              </>
+            ) : null}
+          </Svg>
+        ) : null}
+
+        {/* Floating Interactive Tooltip Pill (Robinhood Style) */}
+        {activePoint && dot && width > 0 ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.floatingPill,
+              {
+                left: pillLeft,
+                top: Math.max(4, Math.min(height - 44, dot.y - 42)),
+              },
+            ]}
+          >
+            <Text style={styles.pillDate}>{shortDate(activePoint.date)}</Text>
+            <Text style={styles.pillAmount}>{money(activePoint.cents)}</Text>
+          </View>
+        ) : null}
+
+        {/* Reference label */}
+        {reference && geometry?.refY != null && active == null ? (
+          <Text
+            pointerEvents="none"
+            style={[styles.tagText, { top: geometry.refY - 8, left: 12 }]}
+          >
+            {reference.label}
+          </Text>
+        ) : null}
+
+        {/* Caption */}
+        {caption && active == null ? (
+          <Text pointerEvents="none" style={[styles.tagText, { top: 4, right: 12 }]}>
+            {caption}
+          </Text>
+        ) : null}
+      </View>
     </GestureDetector>
   );
 }
@@ -263,3 +358,46 @@ export function GroupedBars({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  floatingPill: {
+    position: "absolute",
+    width: 110,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+    zIndex: 10,
+  },
+  pillDate: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  pillAmount: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.ink,
+    letterSpacing: -0.2,
+    marginTop: 1,
+  },
+  tagText: {
+    position: "absolute",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: colors.tertiary,
+    textTransform: "uppercase",
+  },
+});

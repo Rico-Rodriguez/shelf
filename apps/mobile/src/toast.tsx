@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LottieView from "lottie-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import success from "./success.json";
@@ -22,6 +23,94 @@ export function celebrate(message: string) {
 /** The same check, large enough to be the whole moment — used when a queue clears. */
 export function SuccessMark({ size = 120 }: { size?: number }) {
   return <LottieView source={success} autoPlay loop={false} style={{ width: size, height: size }} />;
+}
+
+const CONFETTI_COLORS = ["#1B7A62", "#3DBE9A", "#C47A1A", "#E07A5F", "#2F5D8C", "#6B4F9A", "#FFD166"];
+
+type Particle = {
+  id: number;
+  color: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  size: number;
+  shape: "circle" | "square" | "strip";
+};
+
+export function CelebrationBurst() {
+  const particles = useMemo<Particle[]>(() => {
+    return Array.from({ length: 42 }).map((_, i) => {
+      const angle = (Math.PI * 2 * i) / 42 + (Math.random() * 0.4 - 0.2);
+      const distance = 90 + Math.random() * 150;
+      return {
+        id: i,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        x: Math.cos(angle) * distance,
+        y: Math.sin(angle) * distance - 30,
+        scale: 0.6 + Math.random() * 0.8,
+        rotation: Math.random() * 360,
+        size: 7 + Math.random() * 7,
+        shape: i % 3 === 0 ? "circle" : i % 3 === 1 ? "strip" : "square",
+      };
+    });
+  }, []);
+
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 1400,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [progress]);
+
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        {particles.map((p: Particle) => {
+          const translateX = progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, p.x],
+          });
+          const translateY = progress.interpolate({
+            inputRange: [0, 0.4, 1],
+            outputRange: [0, p.y * 0.8, p.y + 120], // subtle gravity drop
+          });
+          const opacity = progress.interpolate({
+            inputRange: [0, 0.1, 0.75, 1],
+            outputRange: [0, 1, 0.9, 0],
+          });
+          const rotate = progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: ["0deg", `${p.rotation + 360}deg`],
+          });
+          const scale = progress.interpolate({
+            inputRange: [0, 0.2, 1],
+            outputRange: [0.2, p.scale, p.scale * 0.7],
+          });
+
+          return (
+            <Animated.View
+              key={p.id}
+              style={{
+                position: "absolute",
+                width: p.shape === "strip" ? p.size * 2 : p.size,
+                height: p.shape === "strip" ? p.size * 0.6 : p.size,
+                borderRadius: p.shape === "circle" ? p.size / 2 : p.shape === "strip" ? 2 : 3,
+                backgroundColor: p.color,
+                opacity,
+                transform: [{ translateX }, { translateY }, { rotate }, { scale }],
+              }}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 function DrawnCheck({ size = CHECK }: { size?: number }) {
@@ -107,6 +196,7 @@ function DrawnCheck({ size = CHECK }: { size?: number }) {
 }
 
 export function ToastHost() {
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -134,7 +224,7 @@ export function ToastHost() {
         ]).start(({ finished }) => {
           if (finished) setMessage(null);
         });
-      }, 1200);
+      }, 1400);
     };
     return () => {
       listener = null;
@@ -144,7 +234,17 @@ export function ToastHost() {
 
   if (!message) return null;
   return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 72, alignItems: "center" }}>
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: Math.max(insets.top + 8, 56),
+        alignItems: "center",
+        zIndex: 9999,
+      }}
+    >
       <Animated.View
         style={{
           opacity,
@@ -161,6 +261,7 @@ export function ToastHost() {
           shadowOpacity: 0.22,
           shadowRadius: 16,
           shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
         }}
       >
         <DrawnCheck key={tick} size={CHECK} />

@@ -1,12 +1,13 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
+import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { celebrate } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet } from "../../src/ui";
+import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, SpringPressable } from "../../src/ui";
 
 type Tx = Charge;
 
@@ -168,15 +169,87 @@ export default function ActivityScreen() {
           <Text style={{ color: colors.accentInk, fontWeight: "600" }}>Filter</Text>
         </Pressable>
       </View>
-      {unreviewedOnly || categoryId || range || accountFilter || tag ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {unreviewedOnly ? <Pressable onPress={() => setUnreviewedOnly(false)} style={chip}><Text>Needs review</Text></Pressable> : null}
-          {accountFilter ? <Pressable onPress={() => setAccountFilter("")} style={chip}><Text>{accounts.find((row) => row.id === accountFilter)?.name ?? "Account"}</Text></Pressable> : null}
-          {categoryId ? <Pressable onPress={() => setCategoryId("")} style={chip}><Text>{categories.find((row) => row.id === categoryId)?.name ?? "Category"}</Text></Pressable> : null}
-          {tag ? <Pressable onPress={() => setTag("")} style={chip}><Text>{tag}</Text></Pressable> : null}
-          {month ? <Pressable onPress={() => setRange(null)} style={chip}><Text>{monthLabel(month.year, month.month)}</Text></Pressable> : null}
-        </View>
-      ) : null}
+      {/* Horizontal Fast Filter Carousel (Robinhood / Monarch style) */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8, paddingVertical: 2, alignItems: "center" }}
+      >
+        <SpringPressable
+          onPress={() => {
+            tapSelect();
+            setUnreviewedOnly(false);
+            setCategoryId("");
+            setAccountFilter("");
+            setTag("");
+            setRange(null);
+          }}
+          style={[chip, !unreviewedOnly && !categoryId && !range && !accountFilter && !tag ? chipActive : null]}
+        >
+          <Text style={[chipText, !unreviewedOnly && !categoryId && !range && !accountFilter && !tag ? chipTextActive : null]}>
+            All
+          </Text>
+        </SpringPressable>
+
+        <SpringPressable
+          onPress={() => {
+            tapSelect();
+            setUnreviewedOnly((v) => !v);
+          }}
+          style={[chip, unreviewedOnly ? chipActive : null]}
+        >
+          <Text style={[chipText, unreviewedOnly ? chipTextActive : null]}>
+            {`Needs review${unreviewed > 0 ? ` (${unreviewed})` : ""}`}
+          </Text>
+        </SpringPressable>
+
+        <SpringPressable
+          onPress={() => {
+            tapSelect();
+            if (range) {
+              setRange(null);
+            } else {
+              const now = new Date();
+              setRange(monthRange(now.getFullYear(), now.getMonth() + 1));
+            }
+          }}
+          style={[chip, range ? chipActive : null]}
+        >
+          <Text style={[chipText, range ? chipTextActive : null]}>This month</Text>
+        </SpringPressable>
+
+        {accountFilter ? (
+          <SpringPressable onPress={() => setAccountFilter("")} style={[chip, chipActive]}>
+            <Text style={[chipText, chipTextActive]}>
+              {`${accounts.find((row) => row.id === accountFilter)?.name ?? "Account"} ✕`}
+            </Text>
+          </SpringPressable>
+        ) : null}
+
+        {categoryId ? (
+          <SpringPressable onPress={() => setCategoryId("")} style={[chip, chipActive]}>
+            <Text style={[chipText, chipTextActive]}>
+              {`${categories.find((row) => row.id === categoryId)?.name ?? "Category"} ✕`}
+            </Text>
+          </SpringPressable>
+        ) : null}
+
+        {tag ? (
+          <SpringPressable onPress={() => setTag("")} style={[chip, chipActive]}>
+            <Text style={[chipText, chipTextActive]}>{`#${tag} ✕`}</Text>
+          </SpringPressable>
+        ) : null}
+
+        <SpringPressable
+          onPress={() => {
+            tapSelect();
+            setFilters(true);
+          }}
+          style={[chip, { borderStyle: "dashed" }]}
+        >
+          <Text style={chipText}>More filters ›</Text>
+        </SpringPressable>
+      </ScrollView>
       {selecting ? <Button label="Cancel select" tone="quiet" onPress={() => { setSelecting(false); setSelectedIds([]); }} /> : null}
       {rows === null && !error ? <Loading /> : null}
       {rows && grouped.length === 0 ? <Note>No matches. Try another search or clear a filter.</Note> : null}
@@ -369,5 +442,29 @@ export default function ActivityScreen() {
   );
 }
 
-const chip = { backgroundColor: colors.fill, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 };
+const chip = {
+  backgroundColor: colors.card,
+  borderRadius: 999,
+  paddingHorizontal: 13,
+  paddingVertical: 7,
+  borderWidth: 1,
+  borderColor: colors.line,
+  minHeight: 34,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+const chipActive = {
+  backgroundColor: colors.accentSoft,
+  borderColor: colors.accent,
+};
+const chipText = {
+  fontSize: 13,
+  fontWeight: "600" as const,
+  color: colors.muted,
+  letterSpacing: -0.1,
+};
+const chipTextActive = {
+  color: colors.accentInk,
+  fontWeight: "700" as const,
+};
 
