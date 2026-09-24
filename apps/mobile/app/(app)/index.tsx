@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../../src/api";
+import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
 import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
 
@@ -26,13 +26,13 @@ type Dash = {
 };
 
 export default function HomeScreen() {
-  const [data, setData] = useState<Dash | null>(null);
+  const [data, setData] = useState<Dash | null>(() => peek<Dash>("/api/dashboard") ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
-    void api<Dash>("/api/dashboard")
+    void read<Dash>("/api/dashboard")
       .then((next) => {
         setData(next);
         setError(null);
@@ -82,6 +82,7 @@ export default function HomeScreen() {
             cents={shown}
             points={data.spendSeries}
             onScrub={setScrub}
+            live={scrub != null}
           >
             {scrub || !showCash ? null : (
               <Facts
@@ -98,9 +99,24 @@ export default function HomeScreen() {
           </Hero>
 
           {data.budget.plannedCents > 0 ? (
-            <Pressable onPress={() => router.push("/(app)/budget")} style={({ pressed }) => [plan, pressed ? { backgroundColor: colors.fill } : null]}>
-              <Text style={planText}>{overPlan ? "Over this month" : "Left this month"}</Text>
-              <Text style={[planText, { color: overPlan ? colors.danger : colors.positive }]}>{money(Math.abs(left))}</Text>
+            <Pressable
+              onPress={() => router.push("/(app)/budget")}
+              style={({ pressed }) => [
+                {
+                  minHeight: 52,
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  borderRadius: 20,
+                  backgroundColor: colors.card,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                },
+                pressed ? { backgroundColor: colors.fill } : null,
+              ]}
+            >
+              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over this month" : "Left this month"}</Text>
+              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: overPlan ? colors.danger : colors.positive }}>{money(Math.abs(left))}</Text>
             </Pressable>
           ) : null}
 
@@ -200,15 +216,3 @@ export default function HomeScreen() {
     </Screen>
   );
 }
-
-const plan = {
-  minHeight: 52,
-  paddingHorizontal: 16,
-  paddingVertical: 14,
-  borderRadius: 20,
-  backgroundColor: colors.card,
-  flexDirection: "row" as const,
-  alignItems: "center" as const,
-  justifyContent: "space-between" as const,
-};
-const planText = { fontSize: 15, fontWeight: "600" as const, letterSpacing: -0.3, color: colors.ink };

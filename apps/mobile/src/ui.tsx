@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { ReactNode, useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { flowMoney, money, shiftMonth } from "./format";
@@ -326,6 +326,7 @@ export function Hero({
   reference,
   caption,
   onScrub,
+  live = false,
   meter,
   shares,
   footer,
@@ -341,6 +342,8 @@ export function Hero({
   reference?: { cents: number; label: string };
   caption?: string;
   onScrub?: (point: { date: string; cents: number } | null) => void;
+  /** Skip the figure animation while a finger is on the chart. */
+  live?: boolean;
   meter?: { value: number; max: number; color?: string };
   shares?: { label: string; cents: number; color: string }[];
   footer?: string;
@@ -348,8 +351,7 @@ export function Hero({
 }) {
   const styles = useStyles();
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
-  const live = (points?.length ?? 0) >= 2;
-  const figure = empty ? empty : signed ? (cents < 0 ? `−${money(Math.abs(cents))}` : money(cents)) : money(cents);
+  const charting = (points?.length ?? 0) >= 2;
   return (
     <View style={styles.hero}>
       <View pointerEvents="none" style={styles.heroWash} />
@@ -361,10 +363,14 @@ export function Hero({
           </Text>
         ) : null}
       </View>
-      <Text style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}>
-        {figure}
-      </Text>
-      {live && points ? (
+      <RollingMoney
+        cents={cents}
+        signed={signed}
+        blank={empty}
+        live={live}
+        style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
+      />
+      {charting && points ? (
         <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} />
       ) : shownShares.length ? (
         <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16, gap: 8 }}>
@@ -388,7 +394,7 @@ export function Hero({
       ) : null}
       {children}
       {footer ? <Text style={styles.heroFooter}>{footer}</Text> : null}
-      {!children && !footer && !live && !shownShares.length && !meter ? <View style={{ height: 18 }} /> : null}
+      {!children && !footer && !charting && !shownShares.length && !meter ? <View style={{ height: 18 }} /> : null}
     </View>
   );
 }
@@ -512,6 +518,129 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
+function easeOut(t: number) {
+  const x1 = 0.22;
+  const y1 = 1;
+  const x2 = 0.36;
+  const y2 = 1;
+  const sample = (a: number, b: number, u: number) => 3 * (1 - u) * (1 - u) * u * a + 3 * (1 - u) * u * u * b + u * u * u;
+  let u = t;
+  for (let i = 0; i < 5; i++) {
+    const x = sample(x1, x2, u) - t;
+    const dx = 3 * (1 - u) * (1 - u) * x1 + 6 * (1 - u) * u * (x2 - x1) + 3 * u * u * (1 - x2);
+    if (Math.abs(dx) < 1e-4) break;
+    u = Math.min(1, Math.max(0, u - x / dx));
+  }
+  return sample(y1, y2, u);
+}
+
+function RollingMoney({
+  cents,
+  signed,
+  blank,
+  live,
+  style,
+}: {
+  cents: number;
+  signed?: boolean;
+  blank?: string;
+  live?: boolean;
+  style: StyleProp<TextStyle>;
+}) {
+  const text = blank ? blank : signed && cents < 0 ? `−${money(Math.abs(cents))}` : money(cents);
+  const fromRef = useRef(text);
+  const [from, setFrom] = useState(text);
+  const [progress, setProgress] = useState(1);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    if (live || blank || fromRef.current === text) {
+      fromRef.current = text;
+      setFrom(text);
+      setProgress(1);
+      return;
+    }
+    const startText = fromRef.current;
+    setFrom(startText);
+    setProgress(0);
+    const started = Date.now();
+    let frame = 0;
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - started) / 520);
+      setProgress(easeOut(t));
+      if (t < 1) frame = requestAnimationFrame(tick);
+      else {
+        fromRef.current = text;
+        setFrom(text);
+        setProgress(1);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [text, live, blank]);
+
+  if (blank) return <Text style={style}>{text}</Text>;
+  if (box.h === 0) {
+    return (
+      <View>
+        <Text style={[style, box.h === 0 ? { position: "absolute", opacity: 0 } : null]} onLayout={(event) => setBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
+          8
+        </Text>
+        <Text style={style}>{text}</Text>
+      </View>
+    );
+  }
+
+  const len = Math.max(from.length, text.length);
+  const left = from.padStart(len);
+  const right = text.padStart(len);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", height: box.h, marginTop: 2 }}>
+      {right.split("").map((glyph, index) => (
+        <Digit key={len - index} from={left[index]} to={glyph} progress={progress} width={box.w} height={box.h} style={style} />
+      ))}
+    </View>
+  );
+}
+
+function Digit({
+  from,
+  to,
+  progress,
+  width,
+  height,
+  style,
+}: {
+  from: string;
+  to: string;
+  progress: number;
+  width: number;
+  height: number;
+  style: StyleProp<TextStyle>;
+}) {
+  const fromDigit = /\d/.test(from) ? Number(from) : null;
+  const toDigit = /\d/.test(to) ? Number(to) : null;
+  if (fromDigit == null || toDigit == null || from === to) {
+    return <Text style={[style, { width: to === " " ? 0 : undefined }]}>{to === " " ? "" : to}</Text>;
+  }
+  let delta = toDigit - fromDigit;
+  if (delta > 5) delta -= 10;
+  if (delta < -5) delta += 10;
+  const offset = (((fromDigit + delta * progress) % 10) + 10) % 10;
+  const glyphs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+  return (
+    <View style={{ width, height, overflow: "hidden" }}>
+      <View style={{ transform: [{ translateY: -offset * height }] }}>
+        {glyphs.map((glyph, index) => (
+          <Text key={index} style={[style, { height, lineHeight: height, width, marginTop: 0 }]}>
+            {glyph}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function curvePoint(start: number, controlA: number, controlB: number, end: number, t: number) {
   const rest = 1 - t;
   return rest * rest * rest * start + 3 * rest * rest * t * controlA + 3 * rest * t * t * controlB + t * t * t * end;
@@ -579,7 +708,7 @@ export function SpendChart({
   }
 
   const coords = series.map((point, index) => ({ x: xOf(index), y: yOf(point.cents) }));
-  const samples = smoothSamples(coords, 3);
+  const samples = width ? smoothSamples(coords, 1.5) : [];
   const dot = coords[active ?? coords.length - 1];
   const dotSize = active == null ? 9 : 13;
   const refY = reference ? yOf(reference.cents) : null;
@@ -611,12 +740,14 @@ export function SpendChart({
     >
       {samples.map((sample, index) => {
         const next = samples[index + 1];
-        const columnWidth = Math.max(1, (next?.x ?? sample.x + 3) - sample.x);
+        const columnWidth = Math.max(1.5, (next?.x ?? sample.x + 1.5) - sample.x + 0.6);
         const fill = Math.max(0, height - sample.y);
         return (
           <View key={`fill-${index}`} pointerEvents="none" style={{ position: "absolute", left: sample.x, top: sample.y, width: columnWidth, height: fill }}>
-            <View style={{ flex: 1, backgroundColor: color, opacity: 0.22 }} />
-            <View style={{ flex: 1, backgroundColor: color, opacity: 0.06 }} />
+            <View style={{ flex: 1, backgroundColor: color, opacity: 0.38 }} />
+            <View style={{ flex: 1.2, backgroundColor: color, opacity: 0.22 }} />
+            <View style={{ flex: 1.6, backgroundColor: color, opacity: 0.1 }} />
+            <View style={{ flex: 2, backgroundColor: color, opacity: 0.03 }} />
           </View>
         );
       })}
@@ -625,18 +756,19 @@ export function SpendChart({
         const dx = next.x - sample.x;
         const dy = next.y - sample.y;
         const length = Math.hypot(dx, dy);
-        if (length < 0.5) return null;
+        if (length < 0.2) return null;
+        const span = length + 1.4;
         return (
           <View
             key={`line-${index}`}
             pointerEvents="none"
             style={{
               position: "absolute",
-              left: (sample.x + next.x) / 2 - length / 2,
-              top: (sample.y + next.y) / 2 - 1.25,
-              width: length,
-              height: 2.5,
-              borderRadius: 2,
+              left: (sample.x + next.x) / 2 - span / 2,
+              top: (sample.y + next.y) / 2 - 1.15,
+              width: span,
+              height: 2.3,
+              borderRadius: 1,
               backgroundColor: color,
               transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
             }}

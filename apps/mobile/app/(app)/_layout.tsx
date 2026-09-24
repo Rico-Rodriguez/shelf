@@ -2,7 +2,7 @@ import { router, Tabs, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
 import { AppState, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ApiError, api } from "../../src/api";
+import { ApiError, api, load, peek } from "../../src/api";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { colors } from "../../src/ui";
@@ -37,7 +37,7 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
           </Pressable>
           <Pressable accessibilityLabel="Notifications" onPress={() => router.push("/notifications")} style={barButton}>
             <Icon name="bell" size={20} color={colors.ink} />
-            {unread ? <View style={unreadDot} /> : null}
+            {unread ? <View style={[unreadDot, { backgroundColor: colors.danger }]} /> : null}
           </Pressable>
         </View>
       </View>
@@ -73,7 +73,7 @@ function ShelfTabBar({
             <View>
               <Icon name={spec?.icon ?? "more"} size={24} color={color} filled={focused} />
               {route.name === "activity" && reviewCount > 0 ? (
-                <View style={badge}>
+                <View style={[badge, { backgroundColor: colors.danger }]}>
                   <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{reviewCount > 99 ? "99+" : reviewCount}</Text>
                 </View>
               ) : null}
@@ -87,7 +87,7 @@ function ShelfTabBar({
 }
 
 const barButton = { width: 40, height: 40, alignItems: "center" as const, justifyContent: "center" as const };
-const unreadDot = { position: "absolute" as const, right: 10, top: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger };
+const unreadDot = { position: "absolute" as const, right: 10, top: 10, width: 8, height: 8, borderRadius: 4 };
 const badge = {
   position: "absolute" as const,
   top: -4,
@@ -95,7 +95,6 @@ const badge = {
   minWidth: 16,
   height: 16,
   borderRadius: 8,
-  backgroundColor: colors.danger,
   alignItems: "center" as const,
   justifyContent: "center" as const,
   paddingHorizontal: 4,
@@ -120,7 +119,22 @@ export default function AppTabs() {
           setSyncLabel(err instanceof ApiError && err.status === 403 ? "Up to date" : "Sync failed");
         });
     };
-    tick(false);
+    const now = new Date();
+    const firstPaint = Promise.all(
+      [
+        "/api/dashboard",
+        "/api/accounts",
+        "/api/categories",
+        "/api/transactions?",
+        `/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`,
+        "/api/transactions?countOnly=1",
+        "/api/notifications",
+      ].map((path) => load(path).catch(() => undefined)),
+    );
+    const gate = Promise.race([firstPaint, new Promise((resolve) => setTimeout(resolve, 4000))]);
+    void gate.then(() => {
+      if (alive) tick(false);
+    });
     const focus = AppState.addEventListener("change", (state) => {
       if (state === "active") tick(true);
     });
@@ -135,10 +149,14 @@ export default function AppTabs() {
   }, []);
 
   useEffect(() => {
-    void api<{ unreviewed: number }>("/api/transactions?countOnly=1")
+    const counted = peek<{ unreviewed: number }>("/api/transactions?countOnly=1");
+    if (counted) setReviewCount(counted.unreviewed);
+    const notes = peek<{ unread: number }>("/api/notifications");
+    if (notes) setUnread(notes.unread);
+    void load<{ unreviewed: number }>("/api/transactions?countOnly=1")
       .then((res) => setReviewCount(res.unreviewed))
       .catch(() => undefined);
-    void api<{ unread: number }>("/api/notifications")
+    void load<{ notifications: unknown[]; unread: number }>("/api/notifications")
       .then((res) => setUnread(res.unread))
       .catch(() => undefined);
   }, [path]);
