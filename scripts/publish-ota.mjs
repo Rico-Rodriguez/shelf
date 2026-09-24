@@ -27,9 +27,10 @@ const ios = metadata.fileMetadata.ios;
 
 function asset(path, contentType, extension) {
   const bytes = readFileSync(join(exported, path));
+  const hash = createHash("sha256").update(bytes).digest("base64url");
   return {
-    hash: createHash("sha256").update(bytes).digest("base64url"),
-    key: path,
+    hash,
+    key: hash,
     contentType,
     fileExtension: extension,
     url: `${origin}/ota/${path}`,
@@ -43,10 +44,10 @@ const assets = ios.assets.map((file) => asset(file.path, file.ext === "ttf" ? "f
 const manifestPath = join(destination, "manifest.json");
 try {
   const previous = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const sameLaunch = previous.launchAsset?.hash === launch.hash;
+  const sameLaunch = previous.launchAsset?.hash === launch.hash && previous.launchAsset?.key === launch.key;
   const sameAssets =
     previous.assets?.length === assets.length &&
-    previous.assets.every((item, index) => item.hash === assets[index]?.hash);
+    previous.assets.every((item, index) => item.hash === assets[index]?.hash && item.key === assets[index]?.key);
   if (sameLaunch && sameAssets && previous.runtimeVersion === "1.0.0") {
     rmSync(exported, { recursive: true, force: true });
     console.log("Phone bundle is unchanged");
