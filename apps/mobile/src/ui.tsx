@@ -775,12 +775,15 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const translateY = useSharedValue(0);
   const isClosing = useRef(false);
 
-  function dismiss() {
+  const dismiss = useCallback(() => {
     if (isClosing.current) return;
     isClosing.current = true;
     tapPress();
-    onClose();
-  }
+    translateY.value = withTiming(750, { duration: 180 });
+    setTimeout(() => {
+      onClose();
+    }, 180);
+  }, [onClose, translateY]);
 
   const panGesture = Gesture.Pan()
     .activeOffsetY([-6, 6])
@@ -792,10 +795,8 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       }
     })
     .onEnd((event) => {
-      if (event.translationY > 90 || event.velocityY > 500) {
-        translateY.value = withTiming(650, { duration: 160, easing: Easing.out(Easing.quad) }, () => {
-          runOnJS(dismiss)();
-        });
+      if (event.translationY > 80 || event.velocityY > 450) {
+        runOnJS(dismiss)();
       } else {
         translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
       }

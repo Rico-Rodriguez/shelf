@@ -194,6 +194,44 @@ function MonthHero({ data }: { data: Dash }) {
       live={scrub != null}
       status={heroStatus}
     >
+      <View style={{ flexDirection: "row", gap: 6, marginTop: 12, marginBottom: 4 }}>
+        <SpringPressable
+          onPress={() => {
+            if (viewMode !== "spent") {
+              tapSelect();
+              setViewMode("spent");
+            }
+          }}
+          style={{
+            paddingHorizontal: 13,
+            paddingVertical: 6,
+            borderRadius: 999,
+            backgroundColor: !isLeftMode ? colors.ink : colors.fill,
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "700", color: !isLeftMode ? colors.controlInk : colors.muted }}>
+            Spent
+          </Text>
+        </SpringPressable>
+        <SpringPressable
+          onPress={() => {
+            if (viewMode !== "left") {
+              tapSelect();
+              setViewMode("left");
+            }
+          }}
+          style={{
+            paddingHorizontal: 13,
+            paddingVertical: 6,
+            borderRadius: 999,
+            backgroundColor: isLeftMode ? colors.ink : colors.fill,
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "700", color: isLeftMode ? colors.controlInk : colors.muted }}>
+            Left to spend
+          </Text>
+        </SpringPressable>
+      </View>
       <Facts items={facts} />
     </Hero>
   );
