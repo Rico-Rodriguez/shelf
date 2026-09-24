@@ -26,6 +26,18 @@ docker compose up -d
 DATABASE_URL=postgresql://shelf:shelf@localhost:5432/shelf
 ```
 
+## Installing and updating the iPhone app
+
+The copy installed on the phone updates its own screens. A push that changes `apps/mobile`, `scripts/publish-ota.mjs`, or the update workflow exports the JavaScript bundle and commits it to `master`. Vercel deploys `master` to [https://shelf-xi-hazel.vercel.app](https://shelf-xi-hazel.vercel.app). The next time the installed app opens, it downloads that bundle from `/api/ota` and reloads. Closing it fully and opening it again always checks. After an update is already running, bringing Shelf back to the foreground checks again.
+
+That download replaces screens and images. It does not replace the iOS app itself. A new native module, the app icon, a permission, the URL scheme, or `runtimeVersion` in `apps/mobile/app.json` needs a new install file. Bump `runtimeVersion` when the native app changes so an older install does not load a bundle it cannot run. The current value is `1.0.0`.
+
+GitHub Actions builds that install file on a Mac when `apps/mobile` or `.github/workflows/ios-ipa.yml` changes on `master` or `cursor/native-parity-08b4`. The run uploads an artifact named **Shelf**. Unzip it and sideload `Shelf.ipa`. The file is unsigned. The download link lasts about ten minutes. The Actions page for this private repo is only visible in a browser signed in as the account that owns the repository.
+
+The phone must already contain `expo-updates` for a later screen change to arrive on its own. The install built before that package was added cannot download an update. One sideload of an IPA that includes it is enough.
+
+`scripts/publish-ota.mjs` is what the GitHub job runs. It exports the iOS bundle with `EXPO_PUBLIC_API_URL` set to the live server, names each file by its hash, and stores the Expo app config in the update, including the `shelf` URL scheme. A missing scheme makes the first open of an update crash. The next open then uses the copy that was installed. Asset names cannot contain a slash, or the phone refuses to store the update.
+
 ## Phone app
 
 ```bash
