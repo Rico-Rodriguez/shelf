@@ -11,9 +11,11 @@ const exported = join(root, "tmp-ota");
 const destination = join(root, "public/ota");
 const origin = "https://shelf-xi-hazel.vercel.app";
 
-execFileSync("npx", ["expo", "export", "--platform", "ios", "--output-dir", exported], {
+const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+execFileSync(npx, ["expo", "export", "--platform", "ios", "--output-dir", exported], {
   cwd: mobile,
   stdio: "inherit",
+  shell: process.platform === "win32",
   env: {
     ...process.env,
     CI: "1",
