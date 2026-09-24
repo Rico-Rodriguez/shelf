@@ -61,6 +61,7 @@ export function Screen({
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} /> : undefined}
       >
         {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
@@ -156,6 +157,7 @@ export function Button({
   }
   return (
     <Pressable
+      accessibilityRole="button"
       onPress={() => {
         tapPress();
         onPress();
@@ -325,9 +327,10 @@ function Skeleton() {
   }, [opacity]);
   return (
     <Animated.View style={{ gap: 16, opacity }}>
-      <View style={[styles.card, { height: 176 }]} />
-      <View style={[styles.card, { height: 52 }]} />
-      <View style={[styles.card, { height: 168 }]} />
+      <View style={[styles.hero, { height: 228 }]} />
+      <View style={[styles.card, { height: 84 }]} />
+      <View style={[styles.card, { height: 64 }]} />
+      <View style={[styles.card, { height: 220 }]} />
     </Animated.View>
   );
 }
@@ -523,6 +526,7 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
       <Pressable
         accessibilityLabel="Previous month"
         onPress={() => {
+          tapSelect();
           const next = shiftMonth(year, month, -1);
           onChange(next.year, next.month);
         }}
@@ -535,6 +539,7 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
       <Pressable
         accessibilityLabel="Next month"
         onPress={() => {
+          tapSelect();
           const next = shiftMonth(year, month, 1);
           onChange(next.year, next.month);
         }}
@@ -597,21 +602,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-function easeOut(t: number) {
-  const x1 = 0.22;
-  const y1 = 1;
-  const x2 = 0.36;
-  const y2 = 1;
-  const sample = (a: number, b: number, u: number) => 3 * (1 - u) * (1 - u) * u * a + 3 * (1 - u) * u * u * b + u * u * u;
-  let u = t;
-  for (let i = 0; i < 5; i++) {
-    const x = sample(x1, x2, u) - t;
-    const dx = 3 * (1 - u) * (1 - u) * x1 + 6 * (1 - u) * u * (x2 - x1) + 3 * u * u * (1 - x2);
-    if (Math.abs(dx) < 1e-4) break;
-    u = Math.min(1, Math.max(0, u - x / dx));
-  }
-  return sample(y1, y2, u);
-}
+const ROLL = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
 function RollingMoney({
   cents,
@@ -629,40 +620,30 @@ function RollingMoney({
   const text = blank ? blank : signed && cents < 0 ? `−${money(Math.abs(cents))}` : money(cents);
   const fromRef = useRef(text);
   const [from, setFrom] = useState(text);
-  const [progress, setProgress] = useState(1);
+  const progress = useRef(new Animated.Value(1)).current;
   const [box, setBox] = useState({ w: 0, h: 0 });
 
   useEffect(() => {
     if (live || blank || fromRef.current === text) {
       fromRef.current = text;
       setFrom(text);
-      setProgress(1);
+      progress.setValue(1);
       return;
     }
-    const startText = fromRef.current;
-    setFrom(startText);
-    setProgress(0);
-    const started = Date.now();
-    let frame = 0;
-    const tick = () => {
-      const t = Math.min(1, (Date.now() - started) / 520);
-      setProgress(easeOut(t));
-      if (t < 1) frame = requestAnimationFrame(tick);
-      else {
-        fromRef.current = text;
-        setFrom(text);
-        setProgress(1);
-      }
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [text, live, blank]);
+    setFrom(fromRef.current);
+    progress.setValue(0);
+    const anim = Animated.timing(progress, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    anim.start(({ finished }) => {
+      if (finished) fromRef.current = text;
+    });
+    return () => anim.stop();
+  }, [text, live, blank, progress]);
 
   if (blank) return <Text style={style}>{text}</Text>;
   if (box.h === 0) {
     return (
       <View>
-        <Text style={[style, box.h === 0 ? { position: "absolute", opacity: 0 } : null]} onLayout={(event) => setBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
+        <Text style={[style, { position: "absolute", opacity: 0 }]} onLayout={(event) => setBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
           8
         </Text>
         <Text style={style}>{text}</Text>
@@ -676,7 +657,7 @@ function RollingMoney({
   return (
     <View style={{ flexDirection: "row", alignItems: "center", height: box.h, marginTop: 2 }}>
       {right.split("").map((glyph, index) => (
-        <Digit key={len - index} from={left[index]} to={glyph} progress={progress} width={box.w} height={box.h} style={style} />
+        <Digit key={`${len - index}-${glyph}`} from={left[index]} to={glyph} progress={progress} width={box.w} height={box.h} style={style} />
       ))}
     </View>
   );
@@ -692,7 +673,7 @@ function Digit({
 }: {
   from: string;
   to: string;
-  progress: number;
+  progress: Animated.Value;
   width: number;
   height: number;
   style: StyleProp<TextStyle>;
@@ -705,17 +686,22 @@ function Digit({
   let delta = toDigit - fromDigit;
   if (delta > 5) delta -= 10;
   if (delta < -5) delta += 10;
-  const offset = (((fromDigit + delta * progress) % 10) + 10) % 10;
-  const glyphs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+  let start = fromDigit;
+  let end = fromDigit + delta;
+  if (end < 0) {
+    start += 10;
+    end += 10;
+  }
+  const shift = progress.interpolate({ inputRange: [0, 1], outputRange: [-start * height, -end * height] });
   return (
     <View style={{ width, height, overflow: "hidden" }}>
-      <View style={{ transform: [{ translateY: -offset * height }] }}>
-        {glyphs.map((glyph, index) => (
+      <Animated.View style={{ transform: [{ translateY: shift }] }}>
+        {ROLL.map((glyph, index) => (
           <Text key={index} style={[style, { height, lineHeight: height, width, marginTop: 0 }]}>
             {glyph}
           </Text>
         ))}
-      </View>
+      </Animated.View>
     </View>
   );
 }

@@ -1,8 +1,10 @@
-import { ReactNode } from "react";
-import { Text, View, ViewStyle } from "react-native";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { Text, View } from "react-native";
 import { shelfColor } from "./format";
 
 type Mark = { size: number; color: string; filled: boolean };
+
+const STROKE = 1.75;
 
 export function Icon({
   name,
@@ -21,246 +23,138 @@ export function Icon({
   if (name === "chart") return <Chart {...mark} />;
   if (name === "wallet") return <Wallet {...mark} />;
   if (name === "more") return <More {...mark} />;
-  if (name === "chevron") return <StrokeIcon size={size}>{lines(size, color, [[9, 6, 15, 12], [15, 12, 9, 18]])}</StrokeIcon>;
+  if (name === "chevron") return <Glyph size={size} color={color} d="M9 6.5 15 12 9 17.5" />;
   if (name === "search") {
     return (
-      <StrokeIcon size={size}>
-        <Ring size={size} cx={11} cy={11} r={6} color={color} />
-        {lines(size, color, [[16.2, 16.2, 20, 20]])}
-      </StrokeIcon>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx={11} cy={11} r={6.25} stroke={color} strokeWidth={STROKE} fill="none" />
+        <Path d="M15.8 15.8 20 20" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
+      </Svg>
     );
   }
-  if (name === "gear") {
-    return (
-      <StrokeIcon size={size}>
-        <Ring size={size} cx={12} cy={12} r={3} color={color} />
-        {lines(size, color, [
-          [12, 3, 12, 5],
-          [12, 19, 12, 21],
-          [3, 12, 5, 12],
-          [19, 12, 21, 12],
-          [6.2, 6.2, 7.6, 7.6],
-          [16.4, 16.4, 17.8, 17.8],
-          [17.8, 6.2, 16.4, 7.6],
-          [7.6, 16.4, 6.2, 17.8],
-        ])}
-      </StrokeIcon>
-    );
-  }
-  if (name === "bell") {
-    return (
-      <StrokeIcon size={size}>
-        <View style={frame(size, 6, 4, 12, 12, color, { borderTopLeftRadius: size * 0.28, borderTopRightRadius: size * 0.28, borderBottomWidth: 0 })} />
-        {lines(size, color, [[4, 16, 20, 16]])}
-        <View style={frame(size, 10, 17.2, 4, 2.4, color, { borderRadius: size })} />
-      </StrokeIcon>
-    );
-  }
-  if (name === "calendar") {
-    return (
-      <StrokeIcon size={size}>
-        <View style={frame(size, 4, 6, 16, 14, color, { borderRadius: size * 0.08 })} />
-        {lines(size, color, [
-          [7, 4, 7, 7],
-          [17, 4, 17, 7],
-          [4, 10, 20, 10],
-        ])}
-      </StrokeIcon>
-    );
-  }
-  if (name === "flag") {
-    return <StrokeIcon size={size}>{lines(size, color, [[6, 21, 6, 4], [6, 4, 17, 4], [17, 4, 14.5, 8], [14.5, 8, 17, 12], [17, 12, 6, 12]])}</StrokeIcon>;
-  }
-  if (name === "spark") return <StrokeIcon size={size}>{lines(size, color, [[4, 16.5, 9, 11], [9, 11, 12.2, 14], [12.2, 14, 20, 6.5]])}</StrokeIcon>;
+  if (name === "gear") return <Gear size={size} color={color} />;
+  if (name === "bell") return <Bell size={size} color={color} />;
+  if (name === "calendar") return <Calendar size={size} color={color} />;
+  if (name === "flag") return <Glyph size={size} color={color} d="M6 20.5V4.5h11l-2.6 4 2.6 4H6" />;
+  if (name === "spark") return <Glyph size={size} color={color} d="M4 16.5 9 11l3.2 3L20 6.5" />;
   if (name === "flow") {
     return (
-      <StrokeIcon size={size}>
-        {lines(size, color, [
-          [4, 8, 15, 8],
-          [4, 16, 15, 16],
-          [15, 8, 18, 5],
-          [18, 5, 21, 8],
-          [15, 16, 18, 19],
-          [18, 19, 21, 16],
-        ])}
-      </StrokeIcon>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M4 8h11M15 8l3-3 3 3M4 16h11M15 16l3 3 3-3" stroke={color} strokeWidth={STROKE} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
     );
   }
-  return <Ring size={size} cx={12} cy={12} r={8} color={color} />;
-}
-
-function StrokeIcon({ size, children }: { size: number; children: ReactNode }) {
-  return <View style={{ width: size, height: size }}>{children}</View>;
-}
-
-function lines(size: number, color: string, segments: number[][]) {
-  return segments.map(([x1, y1, x2, y2], index) => <View key={index} style={stroke(size, x1, y1, x2, y2, color)} />);
-}
-
-function stroke(size: number, x1: number, y1: number, x2: number, y2: number, color: string): ViewStyle {
-  const scale = size / 24;
-  const dx = (x2 - x1) * scale;
-  const dy = (y2 - y1) * scale;
-  const length = Math.hypot(dx, dy);
-  const weight = Math.max(1.6, size * 0.075);
-  return {
-    position: "absolute",
-    left: ((x1 + x2) / 2) * scale - length / 2,
-    top: ((y1 + y2) / 2) * scale - weight / 2,
-    width: length,
-    height: weight,
-    borderRadius: weight,
-    backgroundColor: color,
-    transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
-  };
-}
-
-function Ring({ size, cx, cy, r, color, fill = false }: { size: number; cx: number; cy: number; r: number; color: string; fill?: boolean }) {
-  const scale = size / 24;
-  const diameter = r * 2 * scale;
-  const weight = Math.max(1.6, size * 0.075);
   return (
-    <View
-      style={{
-        position: "absolute",
-        left: (cx - r) * scale,
-        top: (cy - r) * scale,
-        width: diameter,
-        height: diameter,
-        borderRadius: diameter / 2,
-        borderWidth: fill ? 0 : weight,
-        borderColor: color,
-        backgroundColor: fill ? color : "transparent",
-      }}
-    />
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={8} stroke={color} strokeWidth={STROKE} fill="none" />
+    </Svg>
   );
 }
 
-function frame(size: number, x: number, y: number, width: number, height: number, color: string, extra: ViewStyle): ViewStyle {
-  const scale = size / 24;
-  const weight = Math.max(1.6, size * 0.075);
-  return {
-    position: "absolute",
-    left: x * scale,
-    top: y * scale,
-    width: width * scale,
-    height: height * scale,
-    borderWidth: weight,
-    borderColor: color,
-    backgroundColor: "transparent",
-    ...extra,
-  };
+function Glyph({ size, color, d }: { size: number; color: string; d: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d={d} stroke={color} strokeWidth={STROKE} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
 }
 
 function Home({ size, color, filled }: Mark) {
-  if (!filled) {
-    return (
-      <StrokeIcon size={size}>
-        {lines(size, color, [
-          [4, 10.5, 12, 4],
-          [12, 4, 20, 10.5],
-          [20, 10.5, 20, 20],
-          [20, 20, 14, 20],
-          [14, 20, 14, 14],
-          [14, 14, 10, 14],
-          [10, 14, 10, 20],
-          [10, 20, 4, 20],
-          [4, 20, 4, 10.5],
-        ])}
-      </StrokeIcon>
-    );
-  }
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "flex-end" }}>
-      <View
-        style={{
-          width: 0,
-          height: 0,
-          borderLeftWidth: size * 0.42,
-          borderRightWidth: size * 0.42,
-          borderBottomWidth: size * 0.32,
-          borderLeftColor: "transparent",
-          borderRightColor: "transparent",
-          borderBottomColor: color,
-        }}
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M4 10.6 12 4l8 6.6V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.4Z"
+        stroke={filled ? "none" : color}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+        fill={filled ? color : "none"}
       />
-      <View style={{ width: size * 0.62, height: size * 0.4, marginTop: -1, backgroundColor: color }} />
-    </View>
+    </Svg>
   );
 }
 
 function List({ size, color, filled }: Mark) {
+  const sw = filled ? 2.25 : STROKE;
   return (
-    <View style={{ width: size, height: size, justifyContent: "center", gap: size * 0.16 }}>
-      {[0, 1, 2].map((row) => (
-        <View key={row} style={{ flexDirection: "row", alignItems: "center", gap: size * 0.14 }}>
-          <View style={{ width: size * 0.12, height: size * 0.12, borderRadius: size, backgroundColor: color }} />
-          <View style={{ flex: 1, height: filled ? size * 0.1 : 1.7, borderRadius: 2, backgroundColor: color }} />
-        </View>
-      ))}
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M9 7h11M9 12h11M9 17h11" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+      <Circle cx={5} cy={7} r={filled ? 1.5 : 1.15} fill={color} />
+      <Circle cx={5} cy={12} r={filled ? 1.5 : 1.15} fill={color} />
+      <Circle cx={5} cy={17} r={filled ? 1.5 : 1.15} fill={color} />
+    </Svg>
   );
 }
 
 function Chart({ size, color, filled }: Mark) {
-  const heights = [0.45, 0.78, 0.58];
   return (
-    <View style={{ width: size, height: size, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
-      {heights.map((height, index) => (
-        <View
-          key={index}
-          style={{
-            width: size * 0.2,
-            height: size * height,
-            borderRadius: 2,
-            backgroundColor: filled ? color : "transparent",
-            borderWidth: filled ? 0 : 1.6,
-            borderColor: color,
-          }}
-        />
-      ))}
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x={4} y={12} width={4} height={8} rx={1.2} fill={filled ? color : "none"} stroke={color} strokeWidth={filled ? 0 : STROKE} />
+      <Rect x={10} y={6} width={4} height={14} rx={1.2} fill={filled ? color : "none"} stroke={color} strokeWidth={filled ? 0 : STROKE} />
+      <Rect x={16} y={9} width={4} height={11} rx={1.2} fill={filled ? color : "none"} stroke={color} strokeWidth={filled ? 0 : STROKE} />
+    </Svg>
   );
 }
 
 function Wallet({ size, color, filled }: Mark) {
   return (
-    <View
-      style={{
-        width: size,
-        height: size * 0.72,
-        marginTop: size * 0.14,
-        borderRadius: size * 0.16,
-        borderWidth: filled ? 0 : 1.6,
-        borderColor: color,
-        backgroundColor: filled ? color : "transparent",
-        justifyContent: "center",
-        alignItems: "flex-end",
-        paddingRight: size * 0.16,
-      }}
-    >
-      <View style={{ width: size * 0.14, height: size * 0.14, borderRadius: size, backgroundColor: filled ? "#fff" : color }} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M4 8.5A2.5 2.5 0 0 1 6.5 6H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 17.5v-9Z"
+        fill={filled ? color : "none"}
+        stroke={color}
+        strokeWidth={filled ? 0 : STROKE}
+        strokeLinejoin="round"
+      />
+      <Circle cx={16.5} cy={13} r={1.15} fill={filled ? "#fff" : color} />
+    </Svg>
   );
 }
 
 function More({ size, color, filled }: Mark) {
+  const cells = [
+    [4, 4],
+    [13, 4],
+    [4, 13],
+    [13, 13],
+  ];
   return (
-    <View style={{ width: size, height: size, flexDirection: "row", flexWrap: "wrap", gap: size * 0.1, alignContent: "center", justifyContent: "center" }}>
-      {[0, 1, 2, 3].map((cell) => (
-        <View
-          key={cell}
-          style={{
-            width: size * 0.36,
-            height: size * 0.36,
-            borderRadius: size * 0.1,
-            borderWidth: filled ? 0 : 1.6,
-            borderColor: color,
-            backgroundColor: filled ? color : "transparent",
-          }}
-        />
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {cells.map(([x, y]) => (
+        <Rect key={`${x}-${y}`} x={x} y={y} width={7} height={7} rx={2} fill={filled ? color : "none"} stroke={color} strokeWidth={filled ? 0 : STROKE} />
       ))}
-    </View>
+    </Svg>
+  );
+}
+
+function Gear({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={STROKE} fill="none" />
+      <Path
+        d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"
+        stroke={color}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function Bell({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M6 16V11a6 6 0 1 1 12 0v5l1.2 1.6H4.8L6 16Z" stroke={color} strokeWidth={STROKE} fill="none" strokeLinejoin="round" />
+      <Path d="M10 19.2a2 2 0 0 0 4 0" stroke={color} strokeWidth={STROKE} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function Calendar({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x={4} y={5.5} width={16} height={14.5} rx={2.5} stroke={color} strokeWidth={STROKE} fill="none" />
+      <Path d="M8 3.8v3.2M16 3.8v3.2M4 10h16" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
+    </Svg>
   );
 }
 
@@ -278,7 +172,7 @@ export function MerchantMark({ name, color }: { name: string; color?: string | n
       style={{
         width: 36,
         height: 36,
-        borderRadius: 11,
+        borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: tint ? `${tint}22` : "#e8ecf0",
