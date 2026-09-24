@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { goalPace, mediumDate, money } from "../src/format";
+import { celebrate } from "../src/toast";
 import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
@@ -93,6 +94,7 @@ export default function GoalsScreen() {
       await api("/api/goals", { method: "POST", body: JSON.stringify(body) });
     }
     setEditing(null);
+    celebrate("Saved");
     load();
   }
 

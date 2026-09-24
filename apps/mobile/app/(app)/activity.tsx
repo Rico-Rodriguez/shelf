@@ -5,7 +5,7 @@ import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
-import { celebrate } from "../../src/toast";
+import { celebrate, SuccessMark } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
 import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
 
@@ -141,8 +141,16 @@ export default function ActivityScreen() {
 
   async function confirmReview() {
     if (!currentReview) return;
+    const id = currentReview.id;
     celebrate("Categorized");
-    await patch(currentReview.id, { categoryId: reviewCategory || null, reviewed: true });
+    setRows((current) => (current ?? []).filter((row) => row.id !== id));
+    setUnreviewed((count) => Math.max(0, count - 1));
+    try {
+      await patch(id, { categoryId: reviewCategory || null, reviewed: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not categorize");
+      load();
+    }
     if (reviewAlways && reviewCategory) {
       const merchant = currentReview.merchantName || currentReview.name;
       await api("/api/rules", {
@@ -189,7 +197,13 @@ export default function ActivityScreen() {
     return (
       <Screen title="Review" framed onRefresh={load} action={<Pressable onPress={() => setReviewing(false)}><Text style={{ color: colors.accentInk, fontWeight: "600" }}>Close</Text></Pressable>}>
         {error ? <Note>{error}</Note> : null}
-        {!currentReview ? <Note>You’re caught up</Note> : null}
+        {!currentReview ? (
+          <View style={{ alignItems: "center", gap: 16, paddingTop: 48 }}>
+            <SuccessMark />
+            <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.4, color: colors.ink }}>You’re caught up</Text>
+            <Text style={{ fontSize: 15, color: colors.muted, textAlign: "center" }}>Every charge has a category.</Text>
+          </View>
+        ) : null}
         {currentReview ? (
           <ReviewSlide key={currentReview.id}>
             <Note>{`${reviewRows.length} left${faces[currentReview.merchantName || currentReview.name]?.monthCents ? ` · ${money(faces[currentReview.merchantName || currentReview.name].monthCents)} this month` : ""}`}</Note>

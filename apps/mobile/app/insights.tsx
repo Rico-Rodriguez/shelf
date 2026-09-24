@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { addDays, money, monthLabel, monthRange, shelfColor, shortDate, todayISO, versusShort } from "../src/format";
-import { Back, Card, colors, Hero, Loading, MonthNav, Note, Screen, Section, Segment, SpendMix } from "../src/ui";
+import { Back, Card, colors, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Segment, SpendMix } from "../src/ui";
 
 type Report = {
   year: number;
@@ -104,9 +104,7 @@ export default function InsightsScreen() {
                   </View>
                   <Text style={{ fontWeight: "600", color: colors.ink }}>{money(category.cents)}</Text>
                 </View>
-                <View style={{ height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" }}>
-                  <View style={{ width: `${Math.max(2, Math.min(100, Math.round((category.cents / total) * 100)))}%`, height: "100%", backgroundColor: shelfColor(category.color) }} />
-                </View>
+                <Progress value={category.cents} max={total} color={shelfColor(category.color)} />
               </Pressable>
             ))}
           </Card>

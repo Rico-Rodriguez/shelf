@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, daysLeftInMonth, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
-import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, Progress, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
+import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
 
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
@@ -27,30 +27,57 @@ type Dash = {
 
 function MonthHero({ data }: { data: Dash }) {
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
-  const showCash = data.cashFlow.incomeCents !== 0 || data.cashFlow.spendingCents !== 0;
   const planned = data.budget.plannedCents > 0;
-  const overPlan = planned && data.budget.remainingCents < 0;
+  const left = data.budget.remainingCents;
+  const overPlan = planned && left < 0;
   const daysLeft = daysLeftInMonth();
-  const pace = planned ? (overPlan ? "Over the plan" : `${money(Math.round(data.budget.remainingCents / daysLeft))} a day left`) : null;
+  const allowance = planned && !overPlan ? `${money(Math.round(left / daysLeft))} a day` : null;
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const expected = planned ? Math.round(data.budget.plannedCents * (now.getDate() / daysInMonth)) : 0;
+  const paceDelta = expected - data.budget.spentCents;
+  const pace = !planned
+    ? null
+    : overPlan
+      ? `${money(Math.abs(left))} over`
+      : Math.abs(paceDelta) < 100
+        ? "On pace"
+        : paceDelta > 0
+          ? `${money(paceDelta)} under pace`
+          : `${money(-paceDelta)} over pace`;
+  const status = allowance && pace && pace !== "On pace" ? `${pace} · ${allowance}` : allowance || pace;
   return (
     <Hero
-      label={scrub ? dayLabel(scrub.date) : "Spent this month"}
-      cents={scrub?.cents ?? data.cashFlow.spendingCents}
+      label={scrub ? dayLabel(scrub.date) : planned ? (overPlan ? "Over the plan" : "Left to spend") : "Spent this month"}
+      cents={scrub ? scrub.cents : planned ? Math.abs(left) : data.cashFlow.spendingCents}
+      tone={scrub ? undefined : planned ? (overPlan ? "bad" : "good") : undefined}
       points={data.spendSeries}
       onScrub={setScrub}
       live={scrub != null}
-      status={pace && !scrub ? { label: pace, tone: overPlan ? "bad" : "good" } : null}
+      status={!scrub && status ? { label: status, tone: overPlan || (pace?.includes("over") ?? false) ? "bad" : "good" } : null}
     >
-      {scrub || !showCash ? null : (
+      {scrub ? null : (
         <Facts
-          items={[
-            { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-            {
-              kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-              value: money(Math.abs(data.cashFlow.savedCents)),
-              color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-            },
-          ]}
+          items={
+            planned
+              ? [
+                  { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
+                  { kicker: "Plan", value: money(data.budget.plannedCents) },
+                  {
+                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
+                    value: money(Math.abs(data.cashFlow.savedCents)),
+                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+                  },
+                ]
+              : [
+                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
+                  {
+                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
+                    value: money(Math.abs(data.cashFlow.savedCents)),
+                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+                  },
+                ]
+          }
         />
       )}
     </Hero>
@@ -119,27 +146,46 @@ export default function HomeScreen() {
               onPress={() => router.push("/(app)/budget")}
               style={({ pressed }) => [
                 {
+                  minHeight: 52,
                   paddingHorizontal: 16,
-                  paddingVertical: 14,
                   borderRadius: 20,
                   backgroundColor: colors.card,
                   borderWidth: 1,
                   borderColor: colors.line,
-                  gap: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
                 },
                 pressed ? { backgroundColor: colors.fill } : null,
               ]}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over the plan" : "Left to spend"}</Text>
-                  <Text style={{ fontSize: 13, color: colors.muted }}>
-                    {overPlan ? `${daysLeft} ${dayWord} left in the month` : `${money(Math.round(left / daysLeft))} a day · ${daysLeft} ${dayWord} left`}
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: overPlan ? colors.danger : colors.positive }}>{money(Math.abs(left))}</Text>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>This month’s plan</Text>
+                <Text style={{ fontSize: 13, color: colors.muted }}>
+                  {overPlan ? `${money(Math.abs(left))} over · ${daysLeft} ${dayWord} left` : `${money(data.budget.spentCents)} of ${money(data.budget.plannedCents)}`}
+                </Text>
               </View>
-              <Progress value={data.budget.spentCents} max={data.budget.plannedCents} />
+              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>Open</Text>
+            </Pressable>
+          ) : data.transactions.length > 0 ? (
+            <Pressable
+              onPress={() => router.push("/(app)/budget")}
+              style={({ pressed }) => [
+                {
+                  minHeight: 56,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  borderRadius: 20,
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  gap: 2,
+                },
+                pressed ? { backgroundColor: colors.fill } : null,
+              ]}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>Set a monthly plan</Text>
+              <Text style={{ fontSize: 13, color: colors.muted }}>Then home can tell you what’s left to spend.</Text>
             </Pressable>
           ) : null}
 

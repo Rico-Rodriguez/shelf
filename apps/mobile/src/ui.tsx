@@ -230,8 +230,22 @@ export function LedgerRow({
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { backgroundColor: colors.fill } : null)}>
+    <PressScale onPress={onPress} pressedStyle={{ backgroundColor: colors.fill }}>
       {body}
+    </PressScale>
+  );
+}
+
+function PressScale({ children, onPress, pressedStyle }: { children: ReactNode; onPress: () => void; pressedStyle?: object }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
+      style={({ pressed }) => (pressed ? pressedStyle : null)}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
     </Pressable>
   );
 }

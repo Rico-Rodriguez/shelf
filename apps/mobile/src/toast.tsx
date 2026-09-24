@@ -9,6 +9,7 @@ let listener: Listener | null = null;
 
 const CHECK = 22;
 const CHECK_LENGTH = 16;
+const SPARKS = [0, 45, 90, 135, 180, 225, 270, 315];
 
 /** A short confirmation that springs in, draws a check, then leaves. Haptic included. */
 export function celebrate(message: string) {
@@ -16,57 +17,89 @@ export function celebrate(message: string) {
   listener?.(message);
 }
 
-function DrawnCheck() {
+/** The same check, large enough to be the whole moment — used when a queue clears. */
+export function SuccessMark({ size = 72 }: { size?: number }) {
+  return <DrawnCheck size={size} />;
+}
+
+function DrawnCheck({ size = CHECK }: { size?: number }) {
   const pathRef = useRef<Path>(null);
-  const ring = useRef(new Animated.Value(0.72)).current;
-  const ringOpacity = useRef(new Animated.Value(0.55)).current;
+  const pop = useRef(new Animated.Value(0.4)).current;
+  const ring = useRef(new Animated.Value(0.7)).current;
+  const ringOpacity = useRef(new Animated.Value(0.7)).current;
+  const spark = useRef(new Animated.Value(0)).current;
+  const length = CHECK_LENGTH * (size / CHECK);
 
   useEffect(() => {
+    Animated.spring(pop, { toValue: 1, useNativeDriver: true, stiffness: 420, damping: 14, mass: 0.55 }).start();
     Animated.parallel([
-      Animated.timing(ring, { toValue: 1.7, duration: 560, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(ringOpacity, { toValue: 0, duration: 560, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(ring, { toValue: 1.85, duration: 640, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(ringOpacity, { toValue: 0, duration: 640, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(spark, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
     let frame = 0;
     const started = Date.now();
     const tick = () => {
-      const t = Math.min(1, (Date.now() - started) / 320);
+      const t = Math.min(1, (Date.now() - started) / 340);
       const eased = 1 - Math.pow(1 - t, 3);
-      pathRef.current?.setNativeProps?.({ strokeDashoffset: CHECK_LENGTH * (1 - eased) });
+      pathRef.current?.setNativeProps?.({ strokeDashoffset: length * (1 - eased) });
       if (t < 1) frame = requestAnimationFrame(tick);
     };
-    pathRef.current?.setNativeProps?.({ strokeDashoffset: CHECK_LENGTH });
+    pathRef.current?.setNativeProps?.({ strokeDashoffset: length });
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [ring, ringOpacity]);
+  }, [length, pop, ring, ringOpacity, spark]);
 
+  const reach = size * 0.72;
   return (
-    <View style={{ width: CHECK, height: CHECK, alignItems: "center", justifyContent: "center" }}>
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      {SPARKS.map((deg) => {
+        const rad = (deg * Math.PI) / 180;
+        const translateX = spark.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(rad) * reach] });
+        const translateY = spark.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(rad) * reach] });
+        return (
+          <Animated.View
+            key={deg}
+            style={{
+              position: "absolute",
+              width: Math.max(4, size * 0.08),
+              height: Math.max(4, size * 0.08),
+              borderRadius: 99,
+              backgroundColor: deg % 90 === 0 ? "#7dffa8" : "#3dbe9a",
+              opacity: spark.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }),
+              transform: [{ translateX }, { translateY }, { scale: spark.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
+            }}
+          />
+        );
+      })}
       <Animated.View
         style={{
           position: "absolute",
-          width: CHECK,
-          height: CHECK,
-          borderRadius: CHECK / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
           borderWidth: 1.5,
           borderColor: "#7dffa8",
           opacity: ringOpacity,
           transform: [{ scale: ring }],
         }}
       />
-      <Svg width={CHECK} height={CHECK}>
-        <Circle cx={CHECK / 2} cy={CHECK / 2} r={10} fill="#3dbe9a" />
-        <Path
-          ref={pathRef}
-          d="M6.2 11.3 L9.3 14.3 L15.8 7.6"
-          stroke="#ffffff"
-          strokeWidth={2}
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeDasharray={CHECK_LENGTH}
-          strokeDashoffset={CHECK_LENGTH}
-        />
-      </Svg>
+      <Animated.View style={{ transform: [{ scale: pop }] }}>
+        <Svg width={size} height={size}>
+          <Circle cx={size / 2} cy={size / 2} r={size * 0.45} fill="#3dbe9a" />
+          <Path
+            ref={pathRef}
+            d={`M${size * 0.28} ${size * 0.51} L${size * 0.42} ${size * 0.65} L${size * 0.72} ${size * 0.34}`}
+            stroke="#ffffff"
+            strokeWidth={Math.max(2, size * 0.09)}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={length}
+            strokeDashoffset={length}
+          />
+        </Svg>
+      </Animated.View>
     </View>
   );
 }
@@ -128,7 +161,7 @@ export function ToastHost() {
           shadowOffset: { width: 0, height: 8 },
         }}
       >
-        <DrawnCheck key={tick} />
+        <DrawnCheck key={tick} size={CHECK} />
         <Text style={{ color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 }}>{message}</Text>
       </Animated.View>
     </View>
