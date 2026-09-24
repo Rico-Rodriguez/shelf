@@ -1,8 +1,9 @@
 import { Platform } from "react-native";
-import { create, open, type LinkExit, type LinkSuccess } from "react-native-plaid-link-sdk";
+import type { LinkExit, LinkSuccess } from "react-native-plaid-link-sdk";
 import { api } from "./api";
 
 export async function connectBank(itemId?: string): Promise<void> {
+  const { create, open } = await import("react-native-plaid-link-sdk");
   const { linkToken } = await api<{ linkToken: string }>("/api/plaid/link-token", {
     method: "POST",
     body: JSON.stringify({

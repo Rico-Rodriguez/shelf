@@ -54,7 +54,7 @@ try {
     previous.assets?.length === assets.length &&
     previous.assets.every((item, index) => item.hash === assets[index]?.hash && item.key === assets[index]?.key);
   const sameExtra = JSON.stringify(previous.extra) === JSON.stringify(extra);
-  if (sameLaunch && sameAssets && sameExtra && previous.runtimeVersion === "1.0.0") {
+  if (sameLaunch && sameAssets && sameExtra && previous.runtimeVersion === exp.runtimeVersion) {
     rmSync(exported, { recursive: true, force: true });
     console.log("Phone bundle is unchanged");
     process.exit(0);
@@ -72,7 +72,7 @@ writeFileSync(
   JSON.stringify({
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
-    runtimeVersion: "1.0.0",
+    runtimeVersion: exp.runtimeVersion,
     launchAsset: launch,
     assets,
     metadata: {},
