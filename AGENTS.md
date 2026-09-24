@@ -20,7 +20,11 @@ macOS runners on GitHub Actions consume runner minutes at a **10× rate**, so au
 **YOU MUST EXPLICITLY NOTIFY THE USER:**
 > "⚠️ **Manual IPA Build Required**: These changes modify native iOS capabilities or `runtimeVersion`. OTA updates are not sufficient for this change. Please manually trigger the **Shelf IPA** workflow in GitHub Actions (or run `gh workflow run ios-ipa.yml`) and install the new IPA."
 
-### 2. Regular Updates (OTA)
-For all standard UI, screens, styling, React components, state, copy, and API integrations:
-- Do **not** ask the user to rebuild the IPA.
-- Confirm that the automatic OTA pipeline (`publish-ota.yml`) will update the app over-the-air hands-off upon push to master.
+### 2. Regular Updates (OTA Updates are Automated & Free)
+Because GitHub Actions quotas on private repositories can be exhausted, **do not rely solely on GitHub Actions cloud runners for OTA**.
+
+Whenever making or committing changes to `apps/mobile/**`, `scripts/publish-ota.mjs`, or `src/app/api/ota/**`:
+1. The AI / local git hook (`.githooks/pre-commit`) automatically executes `node scripts/publish-ota.mjs`.
+2. The compiled bundle in `public/ota/` MUST be staged and committed alongside the code changes (`git add public/ota`).
+3. When pushed to GitHub, Vercel automatically deploys `public/ota` live to the phone at `https://shelf-xi-hazel.vercel.app/api/ota`.
+4. This costs **0 GitHub Actions minutes** and requires **zero manual steps** from the user. Confirm to the user that the phone app updates seamlessly on its next launch.

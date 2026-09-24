@@ -1,0 +1,17 @@
+#!/bin/sh
+# Check if staged files include changes to mobile or OTA files
+CHANGES=$(git diff --cached --name-only | grep -E '^(apps/mobile/|scripts/publish-ota\.mjs|src/app/api/ota/)')
+
+if [ -n "$CHANGES" ]; then
+  echo ""
+  echo "📱 Mobile changes detected in commit. Bundling OTA update for phone..."
+  node scripts/publish-ota.mjs
+  if [ $? -eq 0 ]; then
+    git add public/ota
+    echo "✅ OTA bundle successfully built and added to commit."
+    echo ""
+  else
+    echo "❌ Failed to bundle OTA update. Aborting commit."
+    exit 1
+  fi
+fi
