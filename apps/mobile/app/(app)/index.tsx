@@ -275,8 +275,10 @@ export default function HomeScreen() {
               }}
               style={styles.actionBtn}
             >
-              <Icon name="pencil" size={16} color={colors.ink} />
-              <Text style={styles.actionBtnText}>Add Expense</Text>
+              <View style={styles.actionBtnInner}>
+                <Icon name="plus" size={15} color={colors.ink} />
+                <Text style={styles.actionBtnText}>Add Expense</Text>
+              </View>
             </SpringPressable>
 
             <SpringPressable
@@ -290,10 +292,12 @@ export default function HomeScreen() {
               }}
               style={styles.actionBtn}
             >
-              <Icon name="check" size={16} color={colors.ink} />
-              <Text style={styles.actionBtnText}>
-                {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
-              </Text>
+              <View style={styles.actionBtnInner}>
+                <Icon name="check" size={15} color={colors.ink} />
+                <Text style={styles.actionBtnText}>
+                  {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
+                </Text>
+              </View>
             </SpringPressable>
           </View>
 
@@ -529,19 +533,26 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
     minHeight: 46,
     borderRadius: 14,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
+    justifyContent: "center",
+    alignItems: "center",
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
+  },
+  actionBtnInner: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
   },
   actionBtnText: {
     fontSize: 14,

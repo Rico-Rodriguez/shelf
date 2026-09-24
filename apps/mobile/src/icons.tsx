@@ -44,6 +44,13 @@ export function Icon({
       </Svg>
     );
   }
+  if (name === "plus" || name === "add") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    );
+  }
   if (name === "pencil" || name === "edit") {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
