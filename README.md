@@ -30,7 +30,17 @@ DATABASE_URL=postgresql://shelf:shelf@localhost:5432/shelf
 
 The copy installed on the phone updates its own screens. A push that changes `apps/mobile`, `scripts/publish-ota.mjs`, or the update workflow exports the JavaScript bundle and commits it to `master`. Vercel deploys `master` to [https://shelf-xi-hazel.vercel.app](https://shelf-xi-hazel.vercel.app). The next time the installed app opens, it downloads that bundle from `/api/ota` and reloads. Closing it fully and opening it again always checks. After an update is already running, bringing Shelf back to the foreground checks again.
 
-That download replaces screens and images. It does not replace the iOS app itself. A new native module, the app icon, a permission, the URL scheme, or `runtimeVersion` in `apps/mobile/app.json` needs a new install file. Bump `runtimeVersion` when the native app changes so an older install does not load a bundle it cannot run. The current value is `1.0.0`.
+The download replaces the JavaScript and the pictures and fonts that JavaScript loads. The header change from Shelf to Belf was that kind of change. So is a new screen, a color, copy, a chart, a form, or the address the screens call, because that address is written into the bundle when it is exported.
+
+These changes are inside the installed iOS app, so they need a new `Shelf.ipa`:
+
+- A new native module, or a newer Expo or React Native. JavaScript-only packages can go out in an update. A package with iOS code is compiled into the install.
+- The icon, the name under the icon, or the splash screen.
+- A new iOS permission, such as the camera or photo prompt.
+- The `shelf` URL scheme as iOS has it registered. The update also carries a copy of that scheme so linking can start. iOS still only opens URLs the installed app registered.
+- `runtimeVersion` or the update address in `apps/mobile/app.json`. Both are stored in the installed app. The current runtime is `1.0.0`. Bump it in the same change as the new install, so an older phone does not load a bundle that calls native code it does not have.
+
+Server changes, such as an API route or the database, deploy with the website. The phone does not need an update for those unless its screens have to change too.
 
 GitHub Actions builds that install file on a Mac when `apps/mobile` or `.github/workflows/ios-ipa.yml` changes on `master` or `cursor/native-parity-08b4`. The run uploads an artifact named **Shelf**. Unzip it and sideload `Shelf.ipa`. The file is unsigned. The download link lasts about ten minutes. The Actions page for this private repo is only visible in a browser signed in as the account that owns the repository.
 
