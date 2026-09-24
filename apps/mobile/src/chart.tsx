@@ -47,7 +47,6 @@ export function SpendChart({
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
   const lineRef = useRef<Path>(null);
-  const ringRef = useRef<Circle>(null);
   const lastIndex = useRef<number | null>(null);
   const setScrollLocked = useScrollLock();
   const height = 160;
@@ -113,43 +112,35 @@ export function SpendChart({
   }, [lineLength, signature]);
 
   useEffect(() => {
-    if (active != null || !lineLength) return;
-    let frame = 0;
-    const started = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - started;
-      if (elapsed > 1400) {
-        ringRef.current?.setNativeProps?.({ r: 6, opacity: 0 });
-        return;
-      }
-      const wave = (Math.sin(elapsed / 180) + 1) / 2;
-      ringRef.current?.setNativeProps?.({ r: 6 + wave * 6, opacity: 0.22 * (1 - wave) });
-      frame = requestAnimationFrame(tick);
+    return () => {
+      setScrollLocked(false);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [active, lineLength, signature]);
+  }, [setScrollLocked]);
 
   function pick(x: number) {
-    if (!width || !onScrub || series.length < 2) return;
+    if (!width || series.length < 2) return;
     const index = Math.round(Math.min(1, Math.max(0, x / width)) * (series.length - 1));
     if (lastIndex.current !== index) {
       lastIndex.current = index;
       tapTick();
     }
     setActive(index);
-    onScrub(series[index] ?? null);
+    onScrub?.(series[index] ?? null);
   }
 
   function endScrub() {
     lastIndex.current = null;
     setActive(null);
-    onScrub?.(null);
-    setScrollLocked(false);
+    try {
+      onScrub?.(null);
+    } finally {
+      setScrollLocked(false);
+    }
   }
 
   const scrub = Gesture.Pan()
     .activeOffsetX([-6, 6])
+    .failOffsetY([-12, 12])
     .onStart((event) => {
       runOnJS(setScrollLocked)(true);
       runOnJS(pick)(event.x);
@@ -163,7 +154,7 @@ export function SpendChart({
 
   if (series.length < 2) return null;
 
-  const dot = geometry?.coords[active ?? geometry.coords.length - 1];
+  const dot = geometry && active != null ? geometry.coords[active] : null;
   const activePoint = active != null ? series[active] : null;
   const gradientId = `wash-${color.replace("#", "")}`;
 
@@ -237,18 +228,17 @@ export function SpendChart({
                 y1={10}
                 y2={height - 4}
                 stroke={colors.ink}
-                strokeOpacity={0.3}
+                strokeOpacity={0.25}
                 strokeWidth={1.25}
                 strokeDasharray="2 3"
               />
             ) : null}
 
-            {/* Glow Point / Indicator on curve */}
-            {dot ? (
+            {/* Scrubber Point on curve when actively scrubbing */}
+            {active != null && dot ? (
               <>
-                {active == null ? <Circle ref={ringRef} cx={dot.x} cy={dot.y} r={6} fill={color} opacity={0.2} /> : null}
-                <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 7} fill={color} />
-                <Circle cx={dot.x} cy={dot.y} r={active == null ? 2.2 : 3.2} fill={colors.card} />
+                <Circle cx={dot.x} cy={dot.y} r={7} fill={color} />
+                <Circle cx={dot.x} cy={dot.y} r={3} fill={colors.card} />
               </>
             ) : null}
           </Svg>

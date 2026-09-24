@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
@@ -54,13 +54,16 @@ export function Screen({
   const wordmark = useWordmark();
   const [refreshing, setRefreshing] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const setScrollLocked = useCallback((locked: boolean) => {
+    setScrollEnabled(!locked);
+  }, []);
   function pull() {
     setRefreshing(true);
     Promise.resolve(onRefresh?.()).finally(() => setRefreshing(false));
   }
   const body = (
     <>
-      <ScrollLockProvider value={setScrollEnabled}>
+      <ScrollLockProvider value={setScrollLocked}>
       <ScrollView
         scrollEnabled={scrollEnabled}
         contentContainerStyle={styles.scroll}
@@ -441,7 +444,6 @@ export function Hero({
   const charting = (points?.length ?? 0) >= 2;
   return (
     <View style={styles.hero}>
-      <View pointerEvents="none" style={styles.heroWash} />
       <View style={styles.heroTop}>
         <Text style={styles.heroLabel}>{label}</Text>
         {status?.label ? (
@@ -871,15 +873,6 @@ function makeStyles(colors: Palette) {
     shadowOpacity: 0.05,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
-  },
-  heroWash: {
-    position: "absolute",
-    right: -30,
-    top: -60,
-    width: 200,
-    height: 160,
-    borderRadius: 100,
-    backgroundColor: colors.accentSoft,
   },
   heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   heroLabel: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
