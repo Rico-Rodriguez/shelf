@@ -2,8 +2,9 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Share, View } from "react-native";
 import { api, apiText } from "../src/api";
-import { Back, Button, Card, Field, MenuRow, Note, Screen, Section } from "../src/ui";
+import { Back, Button, Card, Field, MenuRow, Note, Screen, Section, Segment } from "../src/ui";
 import { useSession } from "../src/session";
+import { useTheme } from "../src/theme";
 
 type Household = {
   role: string;
@@ -12,6 +13,7 @@ type Household = {
 
 export default function SettingsScreen() {
   const { state, signOut, refresh } = useSession();
+  const { mode, setMode } = useTheme();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [csv, setCsv] = useState("");
@@ -38,6 +40,21 @@ export default function SettingsScreen() {
   return (
     <Screen title="Settings" refresh={<Back />}>
       {message ? <Note>{message}</Note> : null}
+
+      <Section title="Appearance" />
+      <Card>
+        <View style={{ padding: 12 }}>
+          <Segment
+            value={mode}
+            onChange={(next) => setMode(next as "system" | "light" | "dark")}
+            options={[
+              { value: "system", label: "System" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ]}
+          />
+        </View>
+      </Card>
 
       <Section title="Household" />
       <Card>

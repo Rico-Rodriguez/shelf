@@ -1,10 +1,12 @@
+import { colors } from "./theme";
+
 export function money(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
 export function flowMoney(cents: number): { text: string; color: string } {
-  if (cents < 0) return { text: `+${money(Math.abs(cents))}`, color: "#1b7a62" };
-  return { text: money(cents), color: "#14181f" };
+  if (cents < 0) return { text: `+${money(Math.abs(cents))}`, color: colors.positive };
+  return { text: money(cents), color: colors.ink };
 }
 
 export function shelfColor(hex: string | null | undefined): string {

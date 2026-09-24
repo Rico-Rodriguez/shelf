@@ -1,30 +1,21 @@
 import { router } from "expo-router";
-import { ReactNode, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { flowMoney, money, shiftMonth } from "./format";
 import { Icon, MerchantMark } from "./icons";
+import { colors, useTheme, type Palette } from "./theme";
 
-export const colors = {
-  bg: "#f3f5f7",
-  card: "#ffffff",
-  fill: "#e8ecf0",
-  fillStrong: "#d5dbe3",
-  ink: "#14181f",
-  accentInk: "#0f5241",
-  muted: "#5c6570",
-  tertiary: "#8b939e",
-  line: "rgba(20, 24, 31, 0.08)",
-  lineStrong: "rgba(20, 24, 31, 0.14)",
-  positive: "#1b7a62",
-  danger: "#d94a2e",
-  accent: "#1b7a62",
-  accentSoft: "rgba(27, 122, 98, 0.12)",
-  warn: "#c47a1a",
-};
+export { colors };
+
+function useStyles() {
+  const { palette } = useTheme();
+  return useMemo(() => makeStyles(palette), [palette]);
+}
 
 export function Back() {
+  const styles = useStyles();
   return (
     <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
       <View style={{ transform: [{ rotate: "180deg" }] }}>
@@ -52,10 +43,12 @@ export function Screen({
   action?: ReactNode;
   framed?: boolean;
 }) {
+  const styles = useStyles();
   const wordmark = useWordmark();
   const body = (
     <>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
         {title ? (
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
@@ -63,7 +56,6 @@ export function Screen({
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
             {action}
-            {refresh}
           </View>
         ) : null}
         {children}
@@ -80,6 +72,7 @@ export function Screen({
 }
 
 export function Card({ children }: { children: ReactNode }) {
+  const styles = useStyles();
   return <View style={styles.card}>{children}</View>;
 }
 
@@ -103,6 +96,7 @@ export function Field({
   keyboardType?: "default" | "numeric" | "email-address" | "number-pad" | "decimal-pad";
   multiline?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -140,6 +134,7 @@ export function Button({
   tone?: "primary" | "quiet" | "danger";
   block?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -156,6 +151,7 @@ export function Button({
 }
 
 export function Section({ title, action, onAction, trailing }: { title: string; action?: string; onAction?: () => void; trailing?: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -188,6 +184,7 @@ export function LedgerRow({
   onPress?: () => void;
   divided?: boolean;
 }) {
+  const styles = useStyles();
   const body = (
     <View style={[styles.ledger, divided ? styles.divided : null]}>
       <MerchantMark name={name} color={color} />
@@ -213,11 +210,13 @@ export function LedgerRow({
 }
 
 export function FlowAmount({ cents, size = 15 }: { cents: number; size?: number }) {
+  const styles = useStyles();
   const flow = flowMoney(cents);
   return <Text style={[styles.amount, { fontSize: size, color: flow.color }]}>{flow.text}</Text>;
 }
 
 export function Row({ title, detail, icon, onPress }: { title: string; detail?: string; icon?: string; onPress?: () => void }) {
+  const styles = useStyles();
   const body = (
     <View style={styles.row}>
       {icon ? <Icon name={icon} size={18} color={colors.ink} /> : null}
@@ -230,6 +229,7 @@ export function Row({ title, detail, icon, onPress }: { title: string; detail?: 
 }
 
 export function Switch({ on }: { on: boolean }) {
+  const styles = useStyles();
   return (
     <View style={[styles.switch, on ? styles.switchOn : null]}>
       <View style={[styles.knob, on ? styles.knobOn : null]} />
@@ -238,6 +238,7 @@ export function Switch({ on }: { on: boolean }) {
 }
 
 export function ToggleRow({ label, detail, on, onPress, divided }: { label: string; detail?: string; on: boolean; onPress: () => void; divided?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
       <View style={styles.ledgerCopy}>
@@ -250,6 +251,7 @@ export function ToggleRow({ label, detail, on, onPress, divided }: { label: stri
 }
 
 export function MenuRow({ title, icon, onPress, divided, danger, active }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean; active?: boolean }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
       {icon ? (
@@ -264,10 +266,12 @@ export function MenuRow({ title, icon, onPress, divided, danger, active }: { tit
 }
 
 export function Note({ children }: { children: string }) {
+  const styles = useStyles();
   return <Text style={styles.note}>{children}</Text>;
 }
 
 export function Loading({ label = "Loading" }: { label?: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.loading}>
       <ActivityIndicator color={colors.ink} />
@@ -285,6 +289,7 @@ export function Segment({
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 }) {
+  const styles = useStyles();
   const index = Math.max(0, options.findIndex((option) => option.value === value));
   return (
     <View style={styles.segment}>
@@ -341,6 +346,7 @@ export function Hero({
   footer?: string;
   children?: ReactNode;
 }) {
+  const styles = useStyles();
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
   const live = (points?.length ?? 0) >= 2;
   const figure = empty ? empty : signed ? (cents < 0 ? `−${money(Math.abs(cents))}` : money(cents)) : money(cents);
@@ -388,6 +394,7 @@ export function Hero({
 }
 
 export function Facts({ items }: { items: { kicker: string; value: string; color?: string }[] }) {
+  const styles = useStyles();
   return (
     <View style={styles.facts}>
       {items.map((item) => (
@@ -401,6 +408,7 @@ export function Facts({ items }: { items: { kicker: string; value: string; color
 }
 
 export function SpendMix({ rows }: { rows: { key: string; cents: number; color: string }[] }) {
+  const styles = useStyles();
   const shown = rows.filter((row) => row.cents > 0);
   if (shown.length < 2) return null;
   return (
@@ -413,6 +421,7 @@ export function SpendMix({ rows }: { rows: { key: string; cents: number; color: 
 }
 
 export function Progress({ value, max, color = colors.positive }: { value: number; max: number; color?: string }) {
+  const styles = useStyles();
   const ratio = max <= 0 ? (value > 0 ? 1 : 0) : Math.min(1, value / max);
   const over = max > 0 ? value > max : value > 0;
   return (
@@ -423,6 +432,7 @@ export function Progress({ value, max, color = colors.positive }: { value: numbe
 }
 
 export function MonthNav({ year, month, label, onChange }: { year: number; month: number; label: string; onChange: (year: number, month: number) => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.monthNav}>
       <Pressable
@@ -453,6 +463,7 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
 }
 
 export function ReviewBanner({ label, onPress }: { label: string; onPress: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.banner, pressed ? { backgroundColor: colors.fill } : null]}>
       <Text style={styles.bannerText}>{label}</Text>
@@ -462,6 +473,7 @@ export function ReviewBanner({ label, onPress }: { label: string; onPress: () =>
 }
 
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {
+  const styles = useStyles();
   return (
     <TextInput
       value={value}
@@ -476,6 +488,7 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
 }
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const styles = useStyles();
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.sheetWrap}>
@@ -537,6 +550,7 @@ export function SpendChart({
   caption?: string;
   color?: string;
 }) {
+  const styles = useStyles();
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
@@ -643,7 +657,7 @@ export function SpendChart({
           borderRadius: dotSize / 2,
           backgroundColor: color,
           borderWidth: 3,
-          borderColor: "#fff",
+          borderColor: colors.card,
         }}
       />
       {refY != null ? (
@@ -674,6 +688,7 @@ export function GroupedBars({
   series: BarSeries[];
   onPress?: (label: string) => void;
 }) {
+  const styles = useStyles();
   const max = Math.max(1, ...points.flatMap((point) => series.map((item) => point.values[item.key] ?? 0)));
   return (
     <View style={{ gap: 10 }}>
@@ -706,7 +721,8 @@ export function GroupedBars({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Palette) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 16, paddingBottom: 36, gap: 24 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
@@ -738,11 +754,11 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   multiline: { minHeight: 120, textAlignVertical: "top" },
-  button: { alignSelf: "flex-start", backgroundColor: colors.ink, borderRadius: 999, minHeight: 44, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
+  button: { alignSelf: "flex-start", backgroundColor: colors.control, borderRadius: 999, minHeight: 44, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
   buttonBlock: { alignSelf: "stretch" },
   quiet: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.lineStrong },
   danger: { backgroundColor: colors.danger },
-  buttonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  buttonText: { color: colors.controlInk, fontSize: 15, fontWeight: "600" },
   quietText: { color: colors.ink },
   row: {
     backgroundColor: colors.card,
@@ -790,7 +806,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 160,
     borderRadius: 100,
-    backgroundColor: "rgba(27, 122, 98, 0.14)",
+    backgroundColor: colors.accentSoft,
   },
   heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   heroLabel: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
@@ -825,8 +841,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(27, 122, 98, 0.28)",
-    backgroundColor: "#e7f3ef",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -870,4 +886,5 @@ const styles = StyleSheet.create({
   segmentThumb: { position: "absolute", top: 3, bottom: 3, borderRadius: 999, backgroundColor: colors.card },
   segmentItem: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center" },
   segmentLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
-});
+  });
+}
