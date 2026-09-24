@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import * as SecureStore from "expo-secure-store";
 import { api, ApiError, getToken, setToken } from "./api";
 
 export type ShelfState = {
@@ -22,10 +23,32 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+const SESSION_STATE_KEY = "shelf.session.state";
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<ShelfState | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [token, cached] = await Promise.all([
+          getToken(),
+          SecureStore.getItemAsync(SESSION_STATE_KEY),
+        ]);
+        if (token && cached) {
+          const parsed = JSON.parse(cached) as ShelfState;
+          if (parsed && parsed.unlocked && !parsed.needsGoogle && !parsed.needsSetup && !parsed.needsEnroll) {
+            setState(parsed);
+            setReady(true);
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    })();
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -37,9 +60,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ]);
       setState(next);
       setError(null);
+      void SecureStore.setItemAsync(SESSION_STATE_KEY, JSON.stringify(next)).catch(() => undefined);
       return next;
     } catch (err) {
-      setState(null);
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        setState(null);
+        void SecureStore.deleteItemAsync(SESSION_STATE_KEY).catch(() => undefined);
+      }
       setError(err instanceof ApiError ? err.message : "Could not reach Shelf.");
       return null;
     } finally {
@@ -58,6 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // The local token is cleared either way.
     }
     await setToken(null);
+    void SecureStore.deleteItemAsync(SESSION_STATE_KEY).catch(() => undefined);
     await refresh();
   }, [refresh]);
 

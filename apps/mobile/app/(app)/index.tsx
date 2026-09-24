@@ -62,6 +62,7 @@ type Dash = {
 };
 
 function MonthHero({ data }: { data: Dash }) {
+  const [viewMode, setViewMode] = useState<"spent" | "left">("spent");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const planned = data.budget.plannedCents > 0;
   const left = data.budget.remainingCents;
@@ -81,6 +82,11 @@ function MonthHero({ data }: { data: Dash }) {
         ]
       : undefined;
 
+  function toggleMode() {
+    tapSelect();
+    setViewMode((prev) => (prev === "spent" ? "left" : "spent"));
+  }
+
   let heroStatus: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null = null;
   if (!scrub) {
     if (overPlan) {
@@ -94,7 +100,42 @@ function MonthHero({ data }: { data: Dash }) {
     }
   }
 
-  const facts = planned
+  const isLeftMode = viewMode === "left";
+  const displayCents = scrub
+    ? scrub.cents
+    : isLeftMode
+    ? overPlan
+      ? Math.abs(left)
+      : Math.max(0, left)
+    : data.cashFlow.spendingCents;
+
+  const heroLabel = scrub
+    ? dayLabel(scrub.date)
+    : isLeftMode
+    ? overPlan
+      ? "Over plan this month"
+      : "Left to spend this month"
+    : "Spent this month";
+
+  const heroTone: "good" | "bad" | undefined = isLeftMode ? (overPlan ? "bad" : "good") : undefined;
+
+  const facts = isLeftMode
+    ? [
+        {
+          kicker: "Spent so far",
+          value: money(data.cashFlow.spendingCents),
+        },
+        {
+          kicker: "Daily safe",
+          value: dailyPace != null ? `${money(dailyPace)}/d` : "—",
+          color: overPlan ? colors.danger : colors.positive,
+        },
+        {
+          kicker: "Planned budget",
+          value: money(data.budget.plannedCents),
+        },
+      ]
+    : planned
     ? [
         {
           kicker: overPlan ? "Over plan" : "Left to spend",
@@ -120,10 +161,33 @@ function MonthHero({ data }: { data: Dash }) {
         },
       ];
 
+  const togglePill = (
+    <SpringPressable
+      onPress={toggleMode}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: colors.fill,
+      }}
+    >
+      <Icon name="more" size={13} color={colors.muted} />
+      <Text style={{ fontSize: 11, fontWeight: "600", color: colors.ink }}>
+        {isLeftMode ? "Show Spent" : "Show Left"}
+      </Text>
+    </SpringPressable>
+  );
+
   return (
     <Hero
-      label={scrub ? dayLabel(scrub.date) : "Spent this month"}
-      cents={scrub ? scrub.cents : data.cashFlow.spendingCents}
+      label={heroLabel}
+      cents={displayCents}
+      tone={heroTone}
+      topRight={togglePill}
+      onPressFigure={toggleMode}
       points={data.spendSeries}
       baselinePoints={baselinePoints}
       onScrub={setScrub}

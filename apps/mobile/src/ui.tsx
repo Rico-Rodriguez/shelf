@@ -49,6 +49,7 @@ export function Screen({
   refresh,
   action,
   framed = false,
+  scrollable = true,
   onRefresh,
 }: {
   title?: string;
@@ -58,6 +59,7 @@ export function Screen({
   refresh?: ReactNode;
   action?: ReactNode;
   framed?: boolean;
+  scrollable?: boolean;
   onRefresh?: () => Promise<unknown> | void;
 }) {
   const styles = useStyles();
@@ -71,6 +73,34 @@ export function Screen({
     setRefreshing(true);
     Promise.resolve(onRefresh?.()).finally(() => setRefreshing(false));
   }
+
+  if (!scrollable) {
+    const rawBody = (
+      <ScrollLockProvider value={setScrollLocked}>
+        <View style={{ flex: 1 }}>
+          {refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
+          {title ? (
+            <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
+                {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              </View>
+              {action}
+            </View>
+          ) : null}
+          {children}
+        </View>
+        {footer}
+      </ScrollLockProvider>
+    );
+    if (framed) return <View style={styles.safe}>{rawBody}</View>;
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+        {rawBody}
+      </SafeAreaView>
+    );
+  }
+
   const body = (
     <>
       <ScrollLockProvider value={setScrollLocked}>
@@ -460,6 +490,7 @@ export function Hero({
   signed = false,
   empty,
   status,
+  topRight,
   points,
   baselinePoints,
   reference,
@@ -470,6 +501,7 @@ export function Hero({
   meter,
   shares,
   footer,
+  onPressFigure,
   children,
 }: {
   label: string;
@@ -478,6 +510,7 @@ export function Hero({
   signed?: boolean;
   empty?: string;
   status?: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null;
+  topRight?: ReactNode;
   points?: { date: string; cents: number }[];
   baselinePoints?: { date: string; cents: number }[];
   reference?: { cents: number; label: string };
@@ -489,6 +522,7 @@ export function Hero({
   meter?: { value: number; max: number; color?: string };
   shares?: { label: string; cents: number; color: string }[];
   footer?: string;
+  onPressFigure?: () => void;
   children?: ReactNode;
 }) {
   const styles = useStyles();
@@ -497,20 +531,35 @@ export function Hero({
   return (
     <View style={styles.hero}>
       <View style={styles.heroTop}>
-        <Text style={styles.heroLabel}>{label}</Text>
-        {status?.label ? (
-          <Text style={[styles.status, status.tone === "good" ? { color: colors.positive } : null, status.tone === "bad" ? { color: colors.danger } : null, status.tone === "warn" ? { color: colors.warn } : null]}>
-            {status.label}
-          </Text>
-        ) : null}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}>
+          <Text style={styles.heroLabel}>{label}</Text>
+          {status?.label ? (
+            <Text style={[styles.status, status.tone === "good" ? { color: colors.positive } : null, status.tone === "bad" ? { color: colors.danger } : null, status.tone === "warn" ? { color: colors.warn } : null]}>
+              {status.label}
+            </Text>
+          ) : null}
+        </View>
+        {topRight}
       </View>
-      <RollingMoney
-        cents={cents}
-        signed={signed}
-        blank={empty}
-        live={live}
-        style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
-      />
+      {onPressFigure ? (
+        <Pressable onPress={onPressFigure} hitSlop={8}>
+          <RollingMoney
+            cents={cents}
+            signed={signed}
+            blank={empty}
+            live={live}
+            style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
+          />
+        </Pressable>
+      ) : (
+        <RollingMoney
+          cents={cents}
+          signed={signed}
+          blank={empty}
+          live={live}
+          style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
+        />
+      )}
       {charting && points ? (
         <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} baselinePoints={baselinePoints} />
       ) : shownShares.length ? (

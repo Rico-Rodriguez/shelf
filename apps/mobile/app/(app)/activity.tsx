@@ -1,7 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { api, load as read, peek } from "../../src/api";
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
 import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
@@ -152,17 +152,42 @@ export default function ActivityScreen() {
 
   const month = range ? { year: Number(range.start.slice(0, 4)), month: Number(range.start.slice(5, 7)) } : null;
 
-  return (
-    <Screen
-      title="Activity"
-      framed
-      onRefresh={load}
-      action={
-        <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
-        </Pressable>
-      }
-    >
+  const [refreshing, setRefreshing] = useState(false);
+  const pull = useCallback(() => {
+    setRefreshing(true);
+    load().finally(() => setRefreshing(false));
+  }, [load]);
+
+  type ListItem =
+    | { type: "header"; id: string; title: string; flowText: string }
+    | { type: "tx"; id: string; tx: Tx; isFirst: boolean; isLast: boolean };
+
+  const flatData = useMemo<ListItem[]>(() => {
+    const list: ListItem[] = [];
+    for (const [date, items] of grouped) {
+      const dayNet = items.reduce((sum, tx) => sum + tx.amountCents, 0);
+      const flow = flowMoney(dayNet);
+      list.push({
+        type: "header",
+        id: `head-${date}`,
+        title: dayLabel(date),
+        flowText: flow.text,
+      });
+      items.forEach((tx, idx) => {
+        list.push({
+          type: "tx",
+          id: tx.id,
+          tx,
+          isFirst: idx === 0,
+          isLast: idx === items.length - 1,
+        });
+      });
+    }
+    return list;
+  }, [grouped]);
+
+  const listHeader = (
+    <View style={{ gap: 12, paddingBottom: 8 }}>
       {error ? <Note>{error}</Note> : null}
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <View style={{ flex: 1 }}>
@@ -256,57 +281,88 @@ export default function ActivityScreen() {
       {selecting ? <Button label="Cancel select" tone="quiet" onPress={() => { setSelecting(false); setSelectedIds([]); }} /> : null}
       {rows === null && !error ? <Loading /> : null}
       {rows && grouped.length === 0 ? <Note>No matches. Try another search or clear a filter.</Note> : null}
-      {grouped.map(([date, items]) => {
-        const dayNet = items.reduce((sum, tx) => sum + tx.amountCents, 0);
-        const flow = flowMoney(dayNet);
-        return (
-          <View key={date} style={{ gap: 8 }}>
-            <Section title={dayLabel(date)} trailing={flow.text} />
-            <Card>
-              {items.map((tx, index) => {
-                const amount = flowMoney(tx.amountCents);
-                return (
-                  <SwipeRow
-                    key={tx.id}
-                    divided={index > 0}
-                    peek={!tx.reviewed}
-                    onSwipeRight={
-                      !tx.reviewed
-                        ? () => {
-                            celebrate("Reviewed");
-                            void patch(tx.id, { reviewed: true });
-                          }
-                        : undefined
-                    }
-                    swipeRightLabel="Approve"
-                    onPress={() => {
-                      if (!selecting) {
-                        setSelected(tx);
-                        return;
+    </View>
+  );
+
+  return (
+    <Screen
+      title="Activity"
+      framed
+      scrollable={false}
+      action={
+        <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
+        </Pressable>
+      }
+    >
+      <FlatList
+        data={flatData}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={listHeader}
+        keyboardShouldPersistTaps="handled"
+        removeClippedSubviews
+        maxToRenderPerBatch={14}
+        windowSize={7}
+        initialNumToRender={14}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} />}
+        renderItem={({ item }) => {
+          if (item.type === "header") {
+            return (
+              <View style={{ paddingTop: 16, paddingBottom: 8 }}>
+                <Section title={item.title} trailing={item.flowText} />
+              </View>
+            );
+          }
+          const tx = item.tx;
+          const amount = flowMoney(tx.amountCents);
+          return (
+            <View
+              style={[
+                rowStyle.wrapper,
+                item.isFirst && rowStyle.first,
+                item.isLast && rowStyle.last,
+              ]}
+            >
+              <SwipeRow
+                key={tx.id}
+                divided={!item.isFirst}
+                peek={!tx.reviewed}
+                onSwipeRight={
+                  !tx.reviewed
+                    ? () => {
+                        celebrate("Reviewed");
+                        void patch(tx.id, { reviewed: true });
                       }
-                      setSelectedIds((current) => (current.includes(tx.id) ? current.filter((id) => id !== tx.id) : [...current, tx.id]));
-                    }}
-                    actions={[
-                      { label: "Hide", tone: "danger", onPress: () => void patch(tx.id, { hidden: true }) },
-                      tx.reviewed
-                        ? { label: "Edit", tone: "ink", onPress: () => setSelected(tx) }
-                        : { label: "Done", tone: "accent", onPress: () => { celebrate("Reviewed"); void patch(tx.id, { reviewed: true }); } },
-                    ]}
-                  >
-                    <LedgerRow
-                      name={`${selecting && selectedIds.includes(tx.id) ? "✓ " : ""}${tx.name}`}
-                      color={tx.category?.color}
-                      meta={[tx.category?.name ?? "Uncategorized", tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
-                      amount={amount.text}
-                      amountColor={amount.color}
-                    />
-                  </SwipeRow>
-                );
-              })}
-            </Card>
-          </View>
-        );
-      })}
+                    : undefined
+                }
+                swipeRightLabel="Approve"
+                onPress={() => {
+                  if (!selecting) {
+                    setSelected(tx);
+                    return;
+                  }
+                  setSelectedIds((current) => (current.includes(tx.id) ? current.filter((id) => id !== tx.id) : [...current, tx.id]));
+                }}
+                actions={[
+                  { label: "Hide", tone: "danger", onPress: () => void patch(tx.id, { hidden: true }) },
+                  tx.reviewed
+                    ? { label: "Edit", tone: "ink", onPress: () => setSelected(tx) }
+                    : { label: "Done", tone: "accent", onPress: () => { celebrate("Reviewed"); void patch(tx.id, { reviewed: true }); } },
+                ]}
+              >
+                <LedgerRow
+                  name={`${selecting && selectedIds.includes(tx.id) ? "✓ " : ""}${tx.name}`}
+                  color={tx.category?.color}
+                  meta={[tx.category?.name ?? "Uncategorized", tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                  amount={amount.text}
+                  amountColor={amount.color}
+                />
+              </SwipeRow>
+            </View>
+          );
+        }}
+      />
 
       {selected ? (
         <ChargeSheet
@@ -479,4 +535,28 @@ const chipTextActive = {
   color: colors.accentInk,
   fontWeight: "700" as const,
 };
+
+const rowStyle = StyleSheet.create({
+  wrapper: {
+    backgroundColor: colors.card,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.line,
+    overflow: "hidden",
+  },
+  first: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+  },
+  last: {
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    borderBottomWidth: 1,
+    shadowColor: "#14181f",
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+});
 

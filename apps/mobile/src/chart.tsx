@@ -138,8 +138,8 @@ export function SpendChart({
     }
   }
 
-  const scrub = Gesture.Pan()
-    .activeOffsetX([-6, 6])
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-3, 3])
     .failOffsetY([-12, 12])
     .onStart((event) => {
       runOnJS(setScrollLocked)(true);
@@ -152,6 +152,17 @@ export function SpendChart({
       runOnJS(endScrub)();
     });
 
+  const tapGesture = Gesture.Tap()
+    .onStart((event) => {
+      runOnJS(setScrollLocked)(true);
+      runOnJS(pick)(event.x);
+    })
+    .onEnd(() => {
+      runOnJS(endScrub)();
+    });
+
+  const combinedGesture = Gesture.Simultaneous(panGesture, tapGesture);
+
   if (series.length < 2) return null;
 
   const dot = geometry && active != null ? geometry.coords[active] : null;
@@ -163,7 +174,7 @@ export function SpendChart({
   const pillLeft = dot ? Math.max(6, Math.min(width - pillWidth - 6, dot.x - pillWidth / 2)) : 0;
 
   return (
-    <GestureDetector gesture={scrub}>
+    <GestureDetector gesture={combinedGesture}>
       <View
         style={{ height, marginHorizontal: -18, marginTop: 4, position: "relative" }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}

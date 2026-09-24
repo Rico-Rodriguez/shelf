@@ -31,6 +31,48 @@ const listeners = new Map<string, Set<CacheListener>>();
 
 let tokenPromise: Promise<string | null> | undefined;
 
+const PERSIST_PREFIX = "shelf.c.";
+const PERSISTED_PATHS = [
+  "/api/dashboard",
+  "/api/accounts",
+  "/api/categories",
+  "/api/transactions?countOnly=1",
+];
+
+function persistKey(path: string): string {
+  return `${PERSIST_PREFIX}${path.replace(/[^a-zA-Z0-9]/g, "_")}`.slice(0, 64);
+}
+
+async function persistItem(path: string, data: unknown) {
+  if (!PERSISTED_PATHS.some((p) => path.startsWith(p))) return;
+  try {
+    const raw = JSON.stringify(data);
+    if (raw.length < 64000) {
+      await SecureStore.setItemAsync(persistKey(path), raw);
+    }
+  } catch {
+    // Ignore storage limits
+  }
+}
+
+// Immediately initiate hydration from disk so memory is primed as early as possible
+export const cacheHydrationPromise = (async () => {
+  for (const path of PERSISTED_PATHS) {
+    try {
+      const raw = await SecureStore.getItemAsync(persistKey(path));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (!memory.has(path)) {
+          memory.set(path, parsed);
+          notifyCache(path, parsed);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+})();
+
 export function getToken(): Promise<string | null> {
   if (!tokenPromise) {
     tokenPromise = SecureStore.getItemAsync(TOKEN_KEY).catch(() => null);
@@ -46,6 +88,9 @@ export async function setToken(token: string | null): Promise<void> {
       flight.clear();
       listeners.clear();
       await SecureStore.deleteItemAsync(TOKEN_KEY);
+      for (const path of PERSISTED_PATHS) {
+        SecureStore.deleteItemAsync(persistKey(path)).catch(() => undefined);
+      }
       return;
     }
     await SecureStore.setItemAsync(TOKEN_KEY, token);
@@ -83,6 +128,7 @@ function notifyCache(path: string, data: unknown) {
 export function writeCache<T>(path: string, data: T): void {
   memory.set(path, data);
   notifyCache(path, data);
+  void persistItem(path, data);
 }
 
 /** Optimistically update cached data and notify UI immediately. */
@@ -102,6 +148,7 @@ export function load<T>(path: string): Promise<T> {
       memory.set(path, data);
       flight.delete(path);
       notifyCache(path, data);
+      void persistItem(path, data);
       return data;
     })
     .catch((err: unknown) => {
