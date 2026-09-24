@@ -68,7 +68,6 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -arch arm64 \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/Shelf.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
