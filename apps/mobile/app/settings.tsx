@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Share } from "react-native";
 import { api, apiText } from "../src/api";
@@ -17,7 +18,6 @@ export default function SettingsScreen() {
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [home, setHome] = useState<Household | null>(null);
-  const [inviteRole, setInviteRole] = useState("member");
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,11 +36,19 @@ export default function SettingsScreen() {
   return (
     <Screen title="Settings" refresh={<Back />}>
       {message ? <Note>{message}</Note> : null}
-      <Note>{state?.demoLoaded ? "Sample data is loaded." : "Sample data is not loaded."}</Note>
-      <Button
-        label="Load sample data"
-        onPress={() => void api("/api/demo/seed", { method: "POST" }).then(() => refresh()).then(() => setMessage("Sample data is ready."))}
-      />
+      {state?.demoLoaded ? null : (
+        <Button
+          label="Load sample data"
+          onPress={() =>
+            void api<{ already?: boolean }>("/api/demo/seed", { method: "POST" })
+              .then((res) => {
+                setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
+                return refresh();
+              })
+          }
+        />
+      )}
+      <Row title="Manage rules" onPress={() => router.push("/rules")} />
       <Field label="Current Shelf key" value={current} onChangeText={setCurrent} shelfKey />
       <Field label="New Shelf key" value={next} onChangeText={setNext} shelfKey />
       <Button
@@ -59,6 +67,7 @@ export default function SettingsScreen() {
       <Button label="Export JSON" tone="quiet" onPress={() => void shareExport("json")} />
       <Button label="Export CSV" tone="quiet" onPress={() => void shareExport("csv")} />
       <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
+      <Note>Positive amounts are money out.</Note>
       {accounts.map((account) => (
         <Row key={account.id} title={accountId === account.id ? `Import into ${account.name}` : account.name} onPress={() => setAccountId(account.id)} />
       ))}
@@ -74,19 +83,25 @@ export default function SettingsScreen() {
       {(home?.members ?? []).map((member) => (
         <Row
           key={member.userId}
-          title={`${member.name} · ${member.role}`}
-          onPress={() => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))}
+          title={home && home.members.length > 1 ? `${member.name} · ${member.role}` : member.name}
+          detail={home?.role === "owner" && member.role !== "owner" ? "Remove" : undefined}
+          onPress={
+            home?.role === "owner" && member.role !== "owner"
+              ? () => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))
+              : undefined
+          }
         />
       ))}
-      <Button label={`Invite as ${inviteRole}`} tone="quiet" onPress={() => setInviteRole(inviteRole === "member" ? "advisor" : "member")} />
-      <Button
-        label="Create invite"
-        onPress={() =>
-          void api<{ code: string }>("/api/household/invites", { method: "POST", body: JSON.stringify({ role: inviteRole }) }).then((res) =>
-            setMessage(`Invite code: ${res.code}`),
-          )
-        }
-      />
+      {home?.role === "owner" ? (
+        <Button
+          label="Invite someone"
+          onPress={() =>
+            void api<{ code: string }>("/api/household/invites", { method: "POST", body: JSON.stringify({ role: "member" }) }).then((res) =>
+              setMessage(`Share this code once. ${res.code}`),
+            )
+          }
+        />
+      ) : null}
       <Button label="Sign out" tone="danger" onPress={() => void signOut()} />
     </Screen>
   );

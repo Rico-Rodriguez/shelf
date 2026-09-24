@@ -1,8 +1,9 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { money, monthLabel } from "../src/format";
-import { Back, Card, colors, Facts, Hero, Loading, MonthNav, Note, Screen } from "../src/ui";
+import { money, monthLabel, monthRange, shelfColor, shortDate, versusShort } from "../src/format";
+import { Back, Card, colors, Hero, Loading, MonthNav, Note, Screen, Section, SpendMix } from "../src/ui";
 
 type Report = {
   year: number;
@@ -10,9 +11,10 @@ type Report = {
   incomeCents: number;
   spendingCents: number;
   usualSpentCents?: number | null;
-  byCategory: { id: string; name: string; cents: number; color?: string }[];
+  byCategory: { id: string; name: string; cents: number; color?: string; avgCents?: number }[];
   byMerchant?: { name: string; cents: number }[];
   netWorth: { netWorthCents: number };
+  snapshots?: { date: string; netWorthCents: number }[];
 };
 
 export default function InsightsScreen() {
@@ -20,6 +22,7 @@ export default function InsightsScreen() {
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [data, setData] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   useEffect(() => {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`)
@@ -30,49 +33,82 @@ export default function InsightsScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load insights"));
   }, [cursor]);
 
-  const categories = (data?.byCategory ?? []).filter((row) => row.cents > 0);
-  const max = categories[0]?.cents ?? 1;
+  const points = (data?.snapshots ?? []).map((row) => ({ date: row.date, cents: row.netWorthCents }));
+  const latest = points.length ? points[points.length - 1] : null;
+  const shown = scrub?.cents ?? latest?.cents ?? data?.netWorth.netWorthCents ?? 0;
+  const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
+  const movedStatus = moved == null || Math.abs(moved) < 100 ? null : moved > 0 ? `Up ${money(moved)}` : `Down ${money(-moved)}`;
+  const range = data ? monthRange(data.year, data.month) : null;
+  const total = (data?.byCategory ?? []).reduce((sum, row) => sum + row.cents, 0) || 1;
+  const note = data ? versusShort(data.spendingCents, data.usualSpentCents ?? null) : null;
 
   return (
     <Screen title="Insights" refresh={<Back />}>
-      <MonthNav year={cursor.year} month={cursor.month} label={monthLabel(cursor.year, cursor.month)} onChange={(year, month) => setCursor({ year, month })} />
+      <MonthNav
+        year={cursor.year}
+        month={cursor.month}
+        label={monthLabel(cursor.year, cursor.month)}
+        onChange={(year, month) => {
+          setScrub(null);
+          setCursor({ year, month });
+        }}
+      />
       {error ? <Note>{error}</Note> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
         <>
-          <Hero label="Spent" cents={data.spendingCents}>
-            <Facts
-              items={[
-                { kicker: "Usual month", value: data.usualSpentCents == null ? "—" : money(data.usualSpentCents) },
-                { kicker: "Income", value: money(data.incomeCents), color: colors.positive },
-              ]}
-            />
+          <Hero
+            label={scrub ? shortDate(scrub.date) : "Net worth"}
+            cents={shown}
+            tone={shown < 0 ? "bad" : undefined}
+            points={points.length > 1 ? points : undefined}
+            onScrub={setScrub}
+          >
+            {!scrub && movedStatus ? <Note>{movedStatus}</Note> : null}
           </Hero>
-          <Hero label="Net worth" cents={data.netWorth.netWorthCents} tone={data.netWorth.netWorthCents < 0 ? "bad" : undefined} />
-          {categories.length ? (
-            <Card>
-              {categories.map((row, index) => (
-                <View key={row.id} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
-                    <Text style={{ fontWeight: "600", color: colors.ink }}>{money(row.cents)}</Text>
+          <Section title="Spending" trailing={`${money(data.spendingCents)}${note ? ` · ${note}` : ""}`} />
+          <Card>
+            <SpendMix rows={data.byCategory.map((category) => ({ key: category.id || category.name, cents: category.cents, color: shelfColor(category.color) }))} />
+            {data.byCategory.length === 0 ? <Note>Nothing this month.</Note> : null}
+            {data.byCategory.map((category, index) => (
+              <Pressable
+                key={category.id || category.name}
+                onPress={() =>
+                  range
+                    ? router.push({ pathname: "/(app)/activity", params: { categoryId: category.id, start: range.start, end: range.end } })
+                    : undefined
+                }
+                style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 16, color: colors.ink }}>{category.name}</Text>
+                    {category.avgCents ? <Text style={{ fontSize: 12, color: colors.muted }}>{`Usual ${money(category.avgCents)}`}</Text> : null}
                   </View>
-                  <View style={{ height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" }}>
-                    <View style={{ width: `${Math.max(4, Math.round((row.cents / max) * 100))}%`, height: "100%", backgroundColor: colors.accent }} />
-                  </View>
+                  <Text style={{ fontWeight: "600", color: colors.ink }}>{money(category.cents)}</Text>
                 </View>
-              ))}
-            </Card>
-          ) : null}
+                <View style={{ height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" }}>
+                  <View style={{ width: `${Math.max(2, Math.min(100, Math.round((category.cents / total) * 100)))}%`, height: "100%", backgroundColor: shelfColor(category.color) }} />
+                </View>
+              </Pressable>
+            ))}
+          </Card>
           {(data.byMerchant ?? []).length ? (
-            <Card>
-              {(data.byMerchant ?? []).slice(0, 8).map((row, index) => (
-                <View key={row.name} style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
-                  <Text style={{ fontWeight: "600" }}>{money(row.cents)}</Text>
-                </View>
-              ))}
-            </Card>
+            <View style={{ gap: 8 }}>
+              <Section title="Merchants" />
+              <Card>
+                {(data.byMerchant ?? []).map((row, index) => (
+                  <Pressable
+                    key={row.name}
+                    onPress={() => router.push({ pathname: "/merchant", params: { name: row.name } })}
+                    style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
+                  >
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
+                    <Text style={{ fontWeight: "600" }}>{money(row.cents)}</Text>
+                  </Pressable>
+                ))}
+              </Card>
+            </View>
           ) : null}
         </>
       ) : null}

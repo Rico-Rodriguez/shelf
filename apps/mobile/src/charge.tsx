@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "./api";
-import { dayLabel } from "./format";
+import { dayLabel, merchantMatchKey } from "./format";
 import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet } from "./ui";
 
 export type ChargeGroup = { name: string; categories: { id: string; name: string }[] };
@@ -97,7 +97,7 @@ export function ChargeSheet({
           method: "POST",
           body: JSON.stringify({
             name: merchant,
-            matchMerchant: merchant,
+            matchMerchant: merchantMatchKey(merchant),
             actionCategoryId: categoryId,
             actionRename: name !== tx.name ? name : undefined,
             enabled: true,
