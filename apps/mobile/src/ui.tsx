@@ -1,6 +1,16 @@
 import { router } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { ScrollLockProvider } from "./scroll";
@@ -336,24 +346,66 @@ export function Loading({ label = "Loading" }: { label?: string }) {
 
 function Skeleton() {
   const styles = useStyles();
-  const opacity = useRef(new Animated.Value(0.4)).current;
+  const opacity = useSharedValue(0.35);
+
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 680, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4, duration: 680, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
+    opacity.value = withTiming(0.85, { duration: 750 }, () => {
+      // Loop with sinusoidal pulse
+      const pulse = () => {
+        opacity.value = withTiming(0.35, { duration: 750 }, () => {
+          opacity.value = withTiming(0.85, { duration: 750 }, pulse);
+        });
+      };
+      pulse();
+    });
   }, [opacity]);
+
+  const shimmerStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
+
   return (
-    <Animated.View style={{ gap: 16, opacity }}>
-      <View style={[styles.hero, { height: 228 }]} />
-      <View style={[styles.card, { height: 84 }]} />
-      <View style={[styles.card, { height: 64 }]} />
-      <View style={[styles.card, { height: 220 }]} />
-    </Animated.View>
+    <Reanimated.View style={[{ gap: 16 }, shimmerStyle]}>
+      {/* Hero Skeleton Card */}
+      <View style={[styles.hero, { gap: 14, paddingBottom: 20 }]}>
+        <View style={{ width: 100, height: 13, borderRadius: 6, backgroundColor: colors.fillStrong }} />
+        <View style={{ width: 190, height: 42, borderRadius: 10, backgroundColor: colors.fillStrong }} />
+        <View style={{ height: 80, borderRadius: 12, backgroundColor: colors.fill, marginTop: 4 }} />
+        <View style={{ flexDirection: "row", gap: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14 }}>
+          <View style={{ flex: 1, height: 28, borderRadius: 6, backgroundColor: colors.fill }} />
+          <View style={{ flex: 1, height: 28, borderRadius: 6, backgroundColor: colors.fill }} />
+          <View style={{ flex: 1, height: 28, borderRadius: 6, backgroundColor: colors.fill }} />
+        </View>
+      </View>
+
+      {/* Pill Actions Strip Skeleton */}
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ width: 100, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
+        <View style={{ width: 120, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
+        <View style={{ width: 90, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
+      </View>
+
+      {/* Rows Card Skeleton */}
+      <View style={styles.card}>
+        {[0, 1, 2].map((i) => (
+          <View
+            key={i}
+            style={[
+              styles.ledger,
+              i > 0 && styles.divided,
+              { alignItems: "center", gap: 12, paddingVertical: 14 },
+            ]}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.fillStrong }} />
+            <View style={{ flex: 1, gap: 6 }}>
+              <View style={{ width: "55%", height: 14, borderRadius: 5, backgroundColor: colors.fillStrong }} />
+              <View style={{ width: "35%", height: 11, borderRadius: 4, backgroundColor: colors.fill }} />
+            </View>
+            <View style={{ width: 56, height: 16, borderRadius: 5, backgroundColor: colors.fillStrong }} />
+          </View>
+        ))}
+      </View>
+    </Reanimated.View>
   );
 }
 
@@ -577,16 +629,21 @@ export function Progress({
   const ratio = max <= 0 ? (value > 0 ? 1 : 0) : Math.min(1, value / max);
   const over = max > 0 ? value > max : value > 0;
   const [width, setWidth] = useState(0);
-  const fill = useRef(new Animated.Value(0)).current;
+  const fillWidth = useSharedValue(0);
+
   useEffect(() => {
-    Animated.timing(fill, { toValue: width * ratio, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [fill, ratio, width]);
+    fillWidth.value = withTiming(width * ratio, { duration: 420 });
+  }, [fillWidth, ratio, width]);
+
+  const fillAnimatedStyle = useAnimatedStyle(() => ({
+    width: fillWidth.value,
+  }));
 
   const markerX = markerRatio != null && width > 0 ? Math.min(width, Math.max(0, width * markerRatio)) : null;
 
   return (
     <View style={styles.track} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-      <Animated.View style={{ width: fill, height: "100%", backgroundColor: over ? colors.danger : color, borderRadius: 99 }} />
+      <Reanimated.View style={[{ height: "100%", backgroundColor: over ? colors.danger : color, borderRadius: 99 }, fillAnimatedStyle]} />
       {markerX != null ? (
         <View
           pointerEvents="none"
@@ -666,24 +723,73 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const styles = useStyles();
+  const translateY = useSharedValue(0);
+  const isClosing = useRef(false);
+
+  function dismiss() {
+    if (isClosing.current) return;
+    isClosing.current = true;
+    tapPress();
+    onClose();
+  }
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetY([-6, 6])
+    .onUpdate((event) => {
+      if (event.translationY > 0) {
+        translateY.value = event.translationY;
+      } else {
+        translateY.value = -Math.pow(Math.abs(event.translationY), 0.72);
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY > 110 || event.velocityY > 600) {
+        translateY.value = withSpring(800, { damping: 26, stiffness: 360 }, () => {
+          runOnJS(dismiss)();
+        });
+      } else {
+        translateY.value = withSpring(0, { damping: 26, stiffness: 420 });
+      }
+    });
+
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateY.value,
+      [0, 240],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    return { opacity };
+  });
+
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible animationType="fade" transparent onRequestClose={dismiss}>
       <View style={styles.sheetWrap}>
-        <Pressable style={styles.sheetBackdrop} onPress={onClose} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <View style={styles.sheetHead}>
-            <Text style={styles.sheetTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <Text style={styles.sectionAction}>Done</Text>
-            </Pressable>
-          </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 28, gap: 12 }}>
+        <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
+        </Reanimated.View>
+        <Reanimated.View style={[styles.sheet, sheetAnimatedStyle]}>
+          <GestureDetector gesture={panGesture}>
+            <View style={{ paddingTop: 8, paddingBottom: 6 }}>
+              <View style={styles.handle} />
+              <View style={styles.sheetHead}>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                <Pressable onPress={dismiss} hitSlop={12} style={{ padding: 4 }}>
+                  <Text style={styles.sectionAction}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          </GestureDetector>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 12 }}>
             {children}
           </ScrollView>
-        </View>
+        </Reanimated.View>
       </View>
     </Modal>
   );

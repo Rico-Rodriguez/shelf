@@ -101,23 +101,47 @@ export default function BudgetScreen() {
 
   async function saveCategory() {
     if (!data || !editing) return;
-    const jobs: Promise<unknown>[] = [];
     const nextPlanned = Math.round(Number(planned || 0) * 100);
-    if (nextPlanned !== editing.plannedCents) {
-      jobs.push(
-        api("/api/budget", {
-          method: "PUT",
-          body: JSON.stringify({ year: data.year, month: data.month, items: [{ categoryId: editing.category.id, plannedCents: nextPlanned }] }),
-        }),
+    const catId = editing.category.id;
+    const nextName = catName.trim() || editing.category.name;
+
+    // Optimistic update for instant UI feedback
+    setData((current) => {
+      if (!current) return current;
+      const nextRows = current.rows.map((r) =>
+        r.category.id === catId
+          ? {
+              ...r,
+              plannedCents: nextPlanned,
+              remainingCents: nextPlanned - r.spentCents,
+              category: { ...r.category, name: nextName },
+            }
+          : r
       );
-    }
-    if (catName.trim() && catName.trim() !== editing.category.name) {
-      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: editing.category.id, name: catName.trim() }) }));
-    }
-    await Promise.all(jobs);
+      const newExpensePlanned = nextRows.reduce((sum, r) => sum + r.plannedCents, 0);
+      return { ...current, rows: nextRows, expensePlannedCents: newExpensePlanned };
+    });
     setEditing(null);
     celebrate("Saved");
-    load();
+
+    try {
+      const jobs: Promise<unknown>[] = [];
+      if (nextPlanned !== editing.plannedCents) {
+        jobs.push(
+          api("/api/budget", {
+            method: "PUT",
+            body: JSON.stringify({ year: data.year, month: data.month, items: [{ categoryId: catId, plannedCents: nextPlanned }] }),
+          }),
+        );
+      }
+      if (catName.trim() && catName.trim() !== editing.category.name) {
+        jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: catId, name: catName.trim() }) }));
+      }
+      await Promise.all(jobs);
+      load();
+    } catch {
+      load();
+    }
   }
 
   async function reassign(tx: MonthTx, nextId: string) {

@@ -108,9 +108,20 @@ export default function ActivityScreen() {
   const categories = groups.flatMap((group) => group.categories);
 
   async function patch(id: string, body: Record<string, unknown>) {
-    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-    setSelected(null);
-    load();
+    // Optimistic update for instant UI feedback
+    setRows((current) =>
+      (current ?? []).map((t) => (t.id === id ? { ...t, ...body } : t))
+    );
+    if ("reviewed" in body && body.reviewed === true) {
+      setUnreviewed((u) => Math.max(0, u - 1));
+    }
+    try {
+      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      setSelected(null);
+      load();
+    } catch {
+      load();
+    }
   }
 
   async function add() {
@@ -267,6 +278,15 @@ export default function ActivityScreen() {
                     key={tx.id}
                     divided={index > 0}
                     peek={!tx.reviewed}
+                    onSwipeRight={
+                      !tx.reviewed
+                        ? () => {
+                            celebrate("Reviewed");
+                            void patch(tx.id, { reviewed: true });
+                          }
+                        : undefined
+                    }
+                    swipeRightLabel="Approve"
                     onPress={() => {
                       if (!selecting) {
                         setSelected(tx);

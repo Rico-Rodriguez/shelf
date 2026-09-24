@@ -26,6 +26,8 @@ export function apiBase(): string {
 
 const memory = new Map<string, unknown>();
 const flight = new Map<string, Promise<unknown>>();
+type CacheListener = (data: unknown) => void;
+const listeners = new Map<string, Set<CacheListener>>();
 
 let tokenPromise: Promise<string | null> | undefined;
 
@@ -42,6 +44,7 @@ export async function setToken(token: string | null): Promise<void> {
     if (!token) {
       memory.clear();
       flight.clear();
+      listeners.clear();
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       return;
     }
@@ -55,6 +58,41 @@ export function peek<T>(path: string): T | undefined {
   return memory.get(path) as T | undefined;
 }
 
+/** Subscribe to updates for a specific cache key/path. */
+export function subscribeCache<T>(path: string, callback: (data: T) => void): () => void {
+  let set = listeners.get(path);
+  if (!set) {
+    set = new Set();
+    listeners.set(path, set);
+  }
+  set.add(callback as CacheListener);
+  return () => {
+    set?.delete(callback as CacheListener);
+    if (set && set.size === 0) listeners.delete(path);
+  };
+}
+
+function notifyCache(path: string, data: unknown) {
+  const set = listeners.get(path);
+  if (set) {
+    for (const cb of set) cb(data);
+  }
+}
+
+/** Directly write to in-memory cache and notify all active listeners immediately. */
+export function writeCache<T>(path: string, data: T): void {
+  memory.set(path, data);
+  notifyCache(path, data);
+}
+
+/** Optimistically update cached data and notify UI immediately. */
+export function mutateCache<T>(path: string, updater: (current: T | undefined) => T): T {
+  const current = memory.get(path) as T | undefined;
+  const next = updater(current);
+  writeCache(path, next);
+  return next;
+}
+
 /** Reads a GET through a shared in-memory cache so tabs can show the last answer immediately. */
 export function load<T>(path: string): Promise<T> {
   const pending = flight.get(path);
@@ -63,6 +101,7 @@ export function load<T>(path: string): Promise<T> {
     .then((data) => {
       memory.set(path, data);
       flight.delete(path);
+      notifyCache(path, data);
       return data;
     })
     .catch((err: unknown) => {

@@ -2,7 +2,7 @@ import { router, Tabs, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Easing, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ApiError, api, load, peek } from "../../src/api";
+import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
@@ -227,6 +227,17 @@ export default function AppTabs() {
     void load<{ notifications: unknown[]; unread: number }>("/api/notifications")
       .then((res) => setUnread(res.unread))
       .catch(() => undefined);
+
+    const unsubCount = subscribeCache<{ unreviewed: number }>("/api/transactions?countOnly=1", (res) => {
+      if (res && typeof res.unreviewed === "number") setReviewCount(res.unreviewed);
+    });
+    const unsubNotes = subscribeCache<{ unread: number }>("/api/notifications", (res) => {
+      if (res && typeof res.unread === "number") setUnread(res.unread);
+    });
+    return () => {
+      unsubCount();
+      unsubNotes();
+    };
   }, [path]);
 
   return (
