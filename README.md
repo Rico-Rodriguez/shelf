@@ -42,7 +42,7 @@ These changes are inside the installed iOS app, so they need a new `Shelf.ipa`:
 
 Server changes, such as an API route or the database, deploy with the website. The phone does not need an update for those unless its screens have to change too.
 
-GitHub Actions builds that install file on a Mac when `apps/mobile` or `.github/workflows/ios-ipa.yml` changes on `master` or `cursor/native-parity-08b4`. The run uploads an artifact named **Shelf**. Unzip it and sideload `Shelf.ipa`. The file is unsigned. The download link lasts about ten minutes. The Actions page for this private repo is only visible in a browser signed in as the account that owns the repository.
+GitHub Actions builds that install file on a Mac when `apps/mobile` or `.github/workflows/ios-ipa.yml` changes on `master` or `cursor/native-parity-08b4`. The run summary prints a direct download for `Shelf.ipa`. That link lasts about ten minutes. After it expires, the same file stays at the `ipa` release: `https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf.ipa`. Sideload that file. Do not unzip it. The Actions artifact named Shelf is a zip around the IPA, and macOS will not open that zip. The IPA has an ad-hoc signature so the package is valid. Your sideload tool still signs it with your Apple ID. The Actions page for this private repo is only visible in a browser signed in as the account that owns the repository.
 
 The phone must already contain `expo-updates` for a later screen change to arrive on its own. The install built before that package was added cannot download an update. One sideload of an IPA that includes it is enough.
 
