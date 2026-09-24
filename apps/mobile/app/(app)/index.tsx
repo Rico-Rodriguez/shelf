@@ -221,6 +221,16 @@ export default function HomeScreen() {
   }
 
   async function patchTx(id: string, body: Record<string, unknown>) {
+    // Optimistic update for instant UI response
+    setData((current) => {
+      if (!current) return current;
+      const nextTx = current.transactions.map((t) => (t.id === id ? { ...t, ...body } : t));
+      const nextUnreviewed =
+        "reviewed" in body && body.reviewed === true
+          ? { count: Math.max(0, current.unreviewed.count - 1) }
+          : current.unreviewed;
+      return { ...current, transactions: nextTx, unreviewed: nextUnreviewed };
+    });
     try {
       await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
       celebrate("Updated");
@@ -376,6 +386,15 @@ export default function HomeScreen() {
                           key={tx.id}
                           divided={index > 0}
                           peek={!tx.reviewed}
+                          onSwipeRight={
+                            !tx.reviewed
+                              ? () => {
+                                  celebrate("Reviewed");
+                                  void patchTx(tx.id, { reviewed: true });
+                                }
+                              : undefined
+                          }
+                          swipeRightLabel="Approve"
                           onPress={() => setSelectedTx(tx)}
                           actions={[
                             {

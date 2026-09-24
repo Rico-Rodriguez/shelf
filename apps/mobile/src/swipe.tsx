@@ -38,30 +38,51 @@ export function SwipeRow({
   peek = false,
   divided = false,
   onPress,
+  onSwipeRight,
+  swipeRightLabel = "Review",
 }: {
   children: ReactNode;
   actions: SwipeAction[];
   peek?: boolean;
   divided?: boolean;
   onPress?: () => void;
+  onSwipeRight?: () => void;
+  swipeRightLabel?: string;
 }) {
   const totalActionsWidth = Math.max(BUTTON_WIDTH, actions.length * BUTTON_WIDTH);
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
-  const hasTriggeredHaptic = useSharedValue(false);
+  const hasTriggeredRightHaptic = useSharedValue(false);
+  const hasTriggeredLeftHaptic = useSharedValue(false);
+
+  const RIGHT_THRESHOLD = 80;
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-12, 12])
     .failOffsetY([-12, 12])
     .onStart(() => {
       startX.value = translateX.value;
-      hasTriggeredHaptic.value = false;
+      hasTriggeredRightHaptic.value = false;
+      hasTriggeredLeftHaptic.value = false;
     })
     .onUpdate((event) => {
       const raw = startX.value + event.translationX;
       if (raw > 0) {
-        // Rubberband resistance when swiping right
-        translateX.value = Math.pow(raw, 0.75);
+        if (onSwipeRight) {
+          // Responsive pull with progressive spring resistance beyond threshold
+          if (raw <= RIGHT_THRESHOLD) {
+            translateX.value = raw;
+          } else {
+            translateX.value = RIGHT_THRESHOLD + Math.pow(raw - RIGHT_THRESHOLD, 0.72);
+          }
+          if (translateX.value >= RIGHT_THRESHOLD && !hasTriggeredRightHaptic.value) {
+            hasTriggeredRightHaptic.value = true;
+            runOnJS(tapMedium)();
+          }
+        } else {
+          // Rubberband resistance when no right action
+          translateX.value = Math.pow(raw, 0.75);
+        }
       } else if (raw < -totalActionsWidth) {
         // Rubberband resistance past actions width
         const overflow = raw + totalActionsWidth;
@@ -70,19 +91,29 @@ export function SwipeRow({
         translateX.value = raw;
       }
 
-      if (translateX.value < -totalActionsWidth * 0.75 && !hasTriggeredHaptic.value) {
-        hasTriggeredHaptic.value = true;
+      if (translateX.value < -totalActionsWidth * 0.75 && !hasTriggeredLeftHaptic.value) {
+        hasTriggeredLeftHaptic.value = true;
         runOnJS(tapMedium)();
       }
     })
     .onEnd((event) => {
-      const shouldOpen =
-        translateX.value < -totalActionsWidth * 0.4 || event.velocityX < -400;
-
-      if (shouldOpen) {
-        translateX.value = withSpring(-totalActionsWidth, SPRING_CONFIG);
+      if (translateX.value > 0 && onSwipeRight) {
+        const shouldTrigger = translateX.value >= RIGHT_THRESHOLD || event.velocityX > 500;
+        if (shouldTrigger) {
+          translateX.value = withSpring(0, SPRING_CONFIG);
+          runOnJS(onSwipeRight)();
+        } else {
+          translateX.value = withSpring(0, SPRING_CONFIG);
+        }
       } else {
-        translateX.value = withSpring(0, SPRING_CONFIG);
+        const shouldOpen =
+          translateX.value < -totalActionsWidth * 0.4 || event.velocityX < -400;
+
+        if (shouldOpen) {
+          translateX.value = withSpring(-totalActionsWidth, SPRING_CONFIG);
+        } else {
+          translateX.value = withSpring(0, SPRING_CONFIG);
+        }
       }
     });
 
@@ -98,6 +129,25 @@ export function SwipeRow({
       Extrapolation.CLAMP,
     );
     return { opacity };
+  });
+
+  const leadingContainerStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateX.value,
+      [0, 20, RIGHT_THRESHOLD],
+      [0, 0.6, 1],
+      Extrapolation.CLAMP,
+    );
+    const scale = interpolate(
+      translateX.value,
+      [0, 30, RIGHT_THRESHOLD],
+      [0.5, 0.85, 1.05],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
   });
 
   function closeRow() {
@@ -124,7 +174,19 @@ export function SwipeRow({
 
   return (
     <View style={[styles.wrapper, divided && styles.divided]}>
-      {/* Action Buttons Revealed from the Right */}
+      {/* Leading Action Revealed from the Left (Swipe Right) */}
+      {onSwipeRight ? (
+        <View style={styles.leadingContainer}>
+          <Animated.View style={[styles.leadingContent, leadingContainerStyle]}>
+            <View style={styles.leadingIconWrap}>
+              <Icon name="check" size={20} color="#ffffff" filled />
+            </View>
+            <Text style={styles.leadingLabel}>{swipeRightLabel}</Text>
+          </Animated.View>
+        </View>
+      ) : null}
+
+      {/* Action Buttons Revealed from the Right (Swipe Left) */}
       <Animated.View
         style={[
           styles.actionsContainer,
@@ -210,6 +272,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: -0.1,
+  },
+  leadingContainer: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.positive,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 20,
+  },
+  leadingContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  leadingIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leadingLabel: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.2,
   },
   frontRow: {
     backgroundColor: colors.card,

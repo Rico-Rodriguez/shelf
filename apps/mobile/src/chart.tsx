@@ -237,8 +237,34 @@ export function SpendChart({
             {/* Scrubber Point on curve when actively scrubbing */}
             {active != null && dot ? (
               <>
-                <Circle cx={dot.x} cy={dot.y} r={7} fill={color} />
-                <Circle cx={dot.x} cy={dot.y} r={3} fill={colors.card} />
+                <Circle cx={dot.x} cy={dot.y} r={9} fill={color} fillOpacity={0.25} />
+                <Circle cx={dot.x} cy={dot.y} r={6} fill={color} />
+                <Circle cx={dot.x} cy={dot.y} r={2.5} fill={colors.card} />
+              </>
+            ) : null}
+
+            {/* Live endpoint pulsing beacon when idle */}
+            {active == null && geometry.coords.length > 0 ? (
+              <>
+                <Circle
+                  cx={geometry.coords[geometry.coords.length - 1].x}
+                  cy={geometry.coords[geometry.coords.length - 1].y}
+                  r={8}
+                  fill={color}
+                  fillOpacity={0.22}
+                />
+                <Circle
+                  cx={geometry.coords[geometry.coords.length - 1].x}
+                  cy={geometry.coords[geometry.coords.length - 1].y}
+                  r={4.5}
+                  fill={color}
+                />
+                <Circle
+                  cx={geometry.coords[geometry.coords.length - 1].x}
+                  cy={geometry.coords[geometry.coords.length - 1].y}
+                  r={1.8}
+                  fill={colors.card}
+                />
               </>
             ) : null}
           </Svg>
