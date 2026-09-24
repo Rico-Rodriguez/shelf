@@ -1,8 +1,10 @@
+import "react-native-gesture-handler";
 import { Stack } from "expo-router";
 import * as Updates from "expo-updates";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useShelfType } from "../src/brand";
 import { SessionProvider } from "../src/session";
@@ -52,13 +54,15 @@ export default function RootLayout() {
   useShelfType();
   useOverTheAirUpdate();
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <SessionProvider>
-          <RootStack />
-          <ToastHost />
-        </SessionProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <SessionProvider>
+            <RootStack />
+            <ToastHost />
+          </SessionProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

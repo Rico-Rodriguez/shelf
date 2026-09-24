@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
+import LottieView from "lottie-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
+import success from "./success.json";
 import { tapSuccess } from "./haptic";
 import { colors } from "./theme";
 
@@ -18,8 +20,8 @@ export function celebrate(message: string) {
 }
 
 /** The same check, large enough to be the whole moment — used when a queue clears. */
-export function SuccessMark({ size = 72 }: { size?: number }) {
-  return <DrawnCheck size={size} />;
+export function SuccessMark({ size = 120 }: { size?: number }) {
+  return <LottieView source={success} autoPlay loop={false} style={{ width: size, height: size }} />;
 }
 
 function DrawnCheck({ size = CHECK }: { size?: number }) {

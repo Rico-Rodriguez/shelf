@@ -38,7 +38,7 @@ These changes are inside the installed iOS app, so they need a new `Shelf.ipa`:
 - The icon, the name under the icon, or the splash screen.
 - A new iOS permission, such as the camera or photo prompt.
 - The `shelf` URL scheme as iOS has it registered. The update also carries a copy of that scheme so linking can start. iOS still only opens URLs the installed app registered.
-- `runtimeVersion` or the update address in `apps/mobile/app.json`. Both are stored in the installed app. The current runtime is `1.1.0`. Bump it in the same change as the new install, so an older phone does not load a bundle that calls native code it does not have. `1.1.0` adds `react-native-svg` (charts) and `expo-haptics`. Phones still on `1.0.0` keep the previous screens until they install the new IPA.
+- `runtimeVersion` or the update address in `apps/mobile/app.json`. Both are stored in the installed app. The current runtime is `1.2.0`. Bump it in the same change as the new install, so an older phone does not load a bundle that calls native code it does not have. `1.1.0` adds `react-native-svg` (charts) and `expo-haptics`. `1.2.0` adds Reanimated, Gesture Handler, and Lottie. Phones still on an older runtime keep the previous screens until they install the new IPA.
 
 Server changes, such as an API route or the database, deploy with the website. The phone does not need an update for those unless its screens have to change too.
 
