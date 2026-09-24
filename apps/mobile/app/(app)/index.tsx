@@ -266,19 +266,17 @@ export default function HomeScreen() {
         <>
           <MonthHero data={data} />
 
-          {/* Streamlined Quick-Action Dock */}
-          <View style={styles.actionStrip}>
+          {/* Quick Actions */}
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
             <SpringPressable
               onPress={() => {
                 tapSelect();
                 setAdding(true);
               }}
-              style={styles.actionBtn}
+              style={[styles.pillButton, { flex: 1, justifyContent: "center" }]}
             >
-              <View style={styles.actionBtnInner}>
-                <Icon name="plus" size={15} color={colors.ink} />
-                <Text style={styles.actionBtnText}>Add Expense</Text>
-              </View>
+              <Icon name="pencil" size={16} color={colors.ink} />
+              <Text style={styles.pillText}>Add Expense</Text>
             </SpringPressable>
 
             <SpringPressable
@@ -290,14 +288,12 @@ export default function HomeScreen() {
                   router.push("/(app)/activity");
                 }
               }}
-              style={styles.actionBtn}
+              style={[styles.pillButton, { flex: 1, justifyContent: "center" }]}
             >
-              <View style={styles.actionBtnInner}>
-                <Icon name="check" size={15} color={colors.ink} />
-                <Text style={styles.actionBtnText}>
-                  {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
-                </Text>
-              </View>
+              <Icon name="check" size={16} color={colors.ink} />
+              <Text style={styles.pillText}>
+                {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
+              </Text>
             </SpringPressable>
           </View>
 
@@ -526,39 +522,26 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  actionStrip: {
+  pillButton: {
     flexDirection: "row",
-    gap: 10,
     alignItems: "center",
-  },
-  actionBtn: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 14,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
-    justifyContent: "center",
-    alignItems: "center",
     shadowColor: "#000",
     shadowOpacity: 0.04,
-    shadowRadius: 2,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
-  actionBtnInner: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  actionBtnText: {
-    fontSize: 14,
+  pillText: {
+    fontSize: 13,
     fontWeight: "600",
     color: colors.ink,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   cardButton: {
     minHeight: 52,

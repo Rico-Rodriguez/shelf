@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   Extrapolation,
@@ -633,12 +633,14 @@ export function SpringPressable({
   children,
   onPress,
   style,
+  contentStyle,
   disabled,
   scaleTo = 0.97,
 }: {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<TextStyle | View["props"]["style"]>;
+  contentStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
   scaleTo?: number;
 }) {
@@ -658,7 +660,20 @@ export function SpringPressable({
       }
       style={style as never}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
+      <Animated.View
+        style={[
+          {
+            transform: [{ scale }],
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          },
+          contentStyle,
+        ]}
+      >
+        {children}
+      </Animated.View>
     </Pressable>
   );
 }
