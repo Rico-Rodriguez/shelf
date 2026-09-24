@@ -42,7 +42,7 @@ export default function AccountsScreen() {
   const [type, setType] = useState("depository");
 
   const load = useCallback(() => {
-    void read<AccountsPayload>("/api/accounts")
+    return read<AccountsPayload>("/api/accounts")
       .then((res) => {
         setAccounts(res.accounts.filter((account) => !account.isHidden));
         setItems(res.items ?? []);
@@ -52,7 +52,11 @@ export default function AccountsScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load accounts"));
   }, []);
 
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const visible = accounts ?? [];
   const assets = visible.filter((account) => !isLiability(account.type));
@@ -118,6 +122,7 @@ export default function AccountsScreen() {
     <Screen
       title="Accounts"
       framed
+      onRefresh={load}
       action={
         <Pressable onPress={() => setOpen(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>

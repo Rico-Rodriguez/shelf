@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useShelfType } from "../src/brand";
 import { SessionProvider } from "../src/session";
 import { ThemeProvider, useTheme } from "../src/theme";
+import { ToastHost } from "../src/toast";
 
 function useOverTheAirUpdate() {
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <SessionProvider>
           <RootStack />
+          <ToastHost />
         </SessionProvider>
       </ThemeProvider>
     </SafeAreaProvider>

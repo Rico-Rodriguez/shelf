@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { GroupedBars, SpendChart } from "./chart";
@@ -38,6 +38,7 @@ export function Screen({
   refresh,
   action,
   framed = false,
+  onRefresh,
 }: {
   title?: string;
   subtitle?: string;
@@ -46,12 +47,22 @@ export function Screen({
   refresh?: ReactNode;
   action?: ReactNode;
   framed?: boolean;
+  onRefresh?: () => Promise<unknown> | void;
 }) {
   const styles = useStyles();
   const wordmark = useWordmark();
+  const [refreshing, setRefreshing] = useState(false);
+  function pull() {
+    setRefreshing(true);
+    Promise.resolve(onRefresh?.()).finally(() => setRefreshing(false));
+  }
   const body = (
     <>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} /> : undefined}
+      >
         {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
         {title ? (
           <View style={styles.header}>
@@ -290,11 +301,34 @@ export function Note({ children }: { children: string }) {
 
 export function Loading({ label = "Loading" }: { label?: string }) {
   const styles = useStyles();
+  if (label === "Loading") return <Skeleton />;
   return (
     <View style={styles.loading}>
       <ActivityIndicator color={colors.ink} />
       <Text style={styles.note}>{label}</Text>
     </View>
+  );
+}
+
+function Skeleton() {
+  const styles = useStyles();
+  const opacity = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 680, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 680, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return (
+    <Animated.View style={{ gap: 16, opacity }}>
+      <View style={[styles.card, { height: 176 }]} />
+      <View style={[styles.card, { height: 52 }]} />
+      <View style={[styles.card, { height: 168 }]} />
+    </Animated.View>
   );
 }
 
@@ -443,11 +477,24 @@ export function Facts({ items }: { items: { kicker: string; value: string; color
 export function SpendMix({ rows }: { rows: { key: string; cents: number; color: string }[] }) {
   const styles = useStyles();
   const shown = rows.filter((row) => row.cents > 0);
+  const signature = shown.map((row) => row.cents).join(",");
+  const grow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    grow.setValue(0);
+    Animated.timing(grow, { toValue: 1, duration: 560, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+  }, [grow, signature]);
   if (shown.length < 2) return null;
   return (
     <View style={styles.mix}>
       {shown.map((row) => (
-        <View key={row.key} style={{ flexGrow: row.cents, flexBasis: 4, backgroundColor: row.color }} />
+        <Animated.View
+          key={row.key}
+          style={{
+            flexGrow: grow.interpolate({ inputRange: [0, 1], outputRange: [0.01, row.cents] }),
+            flexBasis: 4,
+            backgroundColor: row.color,
+          }}
+        />
       ))}
     </View>
   );

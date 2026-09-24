@@ -2,7 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { categorizeLabel, dayLabel, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
+import { categorizeLabel, dayLabel, daysLeftInMonth, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
 import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
 
 type Dash = {
@@ -32,7 +32,7 @@ export default function HomeScreen() {
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
-    void read<Dash>("/api/dashboard")
+    return read<Dash>("/api/dashboard")
       .then((next) => {
         setData(next);
         setError(null);
@@ -40,7 +40,11 @@ export default function HomeScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
   }, []);
 
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   async function sample() {
     setBusy(true);
@@ -68,11 +72,13 @@ export default function HomeScreen() {
   const suggestions = data?.suggestedSubscriptions?.length ?? 0;
   const left = data?.budget.remainingCents ?? 0;
   const overPlan = Boolean(data && data.budget.plannedCents > 0 && left < 0);
+  const daysLeft = daysLeftInMonth();
+  const dayWord = daysLeft === 1 ? "day" : "days";
   const showCash = Boolean(data && (data.cashFlow.incomeCents !== 0 || data.cashFlow.spendingCents !== 0));
   const shown = scrub?.cents ?? data?.cashFlow.spendingCents ?? 0;
 
   return (
-    <Screen framed>
+    <Screen framed onRefresh={load}>
       {error ? <Note>{error}</Note> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
@@ -115,7 +121,12 @@ export default function HomeScreen() {
                 pressed ? { backgroundColor: colors.fill } : null,
               ]}
             >
-              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over this month" : "Left this month"}</Text>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over this month" : "Left this month"}</Text>
+                <Text style={{ fontSize: 12, color: colors.muted }}>
+                  {overPlan ? `${daysLeft} ${dayWord} left` : `${money(Math.round(left / daysLeft))} a day · ${daysLeft} ${dayWord} left`}
+                </Text>
+              </View>
               <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: overPlan ? colors.danger : colors.positive }}>{money(Math.abs(left))}</Text>
             </Pressable>
           ) : null}

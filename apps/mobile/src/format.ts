@@ -36,6 +36,11 @@ export function outflow(cents: number): string {
   return signed(-cents);
 }
 
+export function daysLeftInMonth(now = new Date()): number {
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.max(1, last - now.getDate() + 1);
+}
+
 export function todayISO(): string {
   const date = new Date();
   const month = String(date.getMonth() + 1).padStart(2, "0");
