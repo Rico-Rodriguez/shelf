@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { api } from "../../src/api";
 import { isLiability, money, outflow, payoffMonths, shortDate } from "../../src/format";
 import { connectBank } from "../../src/plaid";
-import { Back, Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, SpendMix } from "../../src/ui";
+import { Back, Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
 
 type Liability = { apr: number | null; minimumCents: number | null; due: string | null };
 type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
@@ -117,14 +117,8 @@ export default function AccountScreen() {
           </Hero>
           {item && item.status !== "ok" ? <Button label="Reconnect" onPress={() => void connectBank(item.id).then(load)} /> : null}
           <Card>
-            <Pressable onPress={() => void toggle({ includeInNetWorth: !account.includeInNetWorth })} style={row}>
-              <Text style={{ fontSize: 16, color: colors.ink }}>Include in net worth</Text>
-              <Text style={{ fontWeight: "600", color: account.includeInNetWorth ? colors.accentInk : colors.muted }}>{account.includeInNetWorth ? "On" : "Off"}</Text>
-            </Pressable>
-            <Pressable onPress={() => void toggle({ isHidden: !account.isHidden })} style={row}>
-              <Text style={{ fontSize: 16, color: colors.ink }}>Hidden</Text>
-              <Text style={{ fontWeight: "600", color: account.isHidden ? colors.accentInk : colors.muted }}>{account.isHidden ? "On" : "Off"}</Text>
-            </Pressable>
+            <ToggleRow label="Include in net worth" on={account.includeInNetWorth} onPress={() => void toggle({ includeInNetWorth: !account.includeInNetWorth })} />
+            <ToggleRow label="Hidden" on={account.isHidden} divided onPress={() => void toggle({ isHidden: !account.isHidden })} />
             {account.plaidItemId ? (
               <Pressable onPress={() => void disconnect()} style={row}>
                 <Text style={{ fontSize: 16, color: colors.danger }}>Disconnect bank</Text>

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AppState } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useShelfType } from "../src/brand";
 import { SessionProvider } from "../src/session";
 
 function useOverTheAirUpdate() {
@@ -36,6 +37,7 @@ function useOverTheAirUpdate() {
 }
 
 export default function RootLayout() {
+  useShelfType();
   useOverTheAirUpdate();
   return (
     <SafeAreaProvider>

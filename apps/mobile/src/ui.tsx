@@ -26,7 +26,10 @@ export const colors = {
 
 export function Back() {
   return (
-    <Pressable onPress={() => router.back()} hitSlop={8}>
+    <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
+      <View style={{ transform: [{ rotate: "180deg" }] }}>
+        <Icon name="chevron" size={18} color={colors.ink} />
+      </View>
       <Text style={styles.back}>Back</Text>
     </Pressable>
   );
@@ -129,17 +132,19 @@ export function Button({
   onPress,
   busy,
   tone = "primary",
+  block,
 }: {
   label: string;
   onPress: () => void;
   busy?: boolean;
   tone?: "primary" | "quiet" | "danger";
+  block?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
       disabled={busy}
-      style={[styles.button, tone === "quiet" && styles.quiet, tone === "danger" && styles.danger]}
+      style={[styles.button, tone === "quiet" && styles.quiet, tone === "danger" && styles.danger, block && styles.buttonBlock]}
     >
       {busy ? (
         <ActivityIndicator color={tone === "primary" ? "#fff" : colors.ink} />
@@ -224,12 +229,47 @@ export function Row({ title, detail, icon, onPress }: { title: string; detail?: 
   return <Pressable onPress={onPress}>{body}</Pressable>;
 }
 
-export function MenuRow({ title, icon, onPress, divided }: { title: string; icon?: string; onPress: () => void; divided?: boolean }) {
+export function Switch({ on }: { on: boolean }) {
+  return (
+    <View style={[styles.switch, on ? styles.switchOn : null]}>
+      <View style={[styles.knob, on ? styles.knobOn : null]} />
+    </View>
+  );
+}
+
+export function ToggleRow({ label, detail, on, onPress, divided }: { label: string; detail?: string; on: boolean; onPress: () => void; divided?: boolean }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
+      <View style={styles.ledgerCopy}>
+        <Text style={styles.rowTitle}>{label}</Text>
+        {detail ? <Text style={styles.meta}>{detail}</Text> : null}
+      </View>
+      <Switch on={on} />
+    </Pressable>
+  );
+}
+
+export function Segment({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
+  return (
+    <View style={styles.segment}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable key={option.value} onPress={() => onChange(option.value)} style={[styles.segmentItem, selected ? styles.segmentOn : null]}>
+            <Text style={[styles.segmentText, selected ? { color: colors.ink } : null]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function MenuRow({ title, icon, onPress, divided, danger }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
       {icon ? <Icon name={icon} size={18} color={colors.ink} /> : null}
-      <Text style={[styles.rowTitle, { fontWeight: "500" }]}>{title}</Text>
-      <Icon name="chevron" size={16} color={colors.tertiary} />
+      <Text style={[styles.rowTitle, { fontWeight: "500", color: danger ? colors.danger : colors.ink }]}>{title}</Text>
+      {danger ? null : <Icon name="chevron" size={16} color={colors.tertiary} />}
     </Pressable>
   );
 }
@@ -561,7 +601,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 16, paddingBottom: 36, gap: 24 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
-  back: { color: colors.ink, fontSize: 16, fontWeight: "500" },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 32, marginLeft: -2 },
+  back: { color: colors.ink, fontSize: 15, fontWeight: "500", letterSpacing: -0.15 },
   title: { fontSize: 32, fontWeight: "600", letterSpacing: -1.3, color: colors.ink },
   subtitle: { marginTop: 4, fontSize: 15, lineHeight: 21, color: colors.muted },
   card: {
@@ -570,6 +611,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     overflow: "hidden",
+    shadowColor: "#14181f",
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: "500", color: colors.muted },
@@ -584,7 +629,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   multiline: { minHeight: 120, textAlignVertical: "top" },
-  button: { backgroundColor: colors.ink, borderRadius: 999, minHeight: 44, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
+  button: { alignSelf: "flex-start", backgroundColor: colors.ink, borderRadius: 999, minHeight: 44, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
+  buttonBlock: { alignSelf: "stretch" },
   quiet: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.lineStrong },
   danger: { backgroundColor: colors.danger },
   buttonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
@@ -609,7 +655,7 @@ const styles = StyleSheet.create({
   divided: { borderTopWidth: 1, borderTopColor: colors.line },
   ledgerCopy: { flex: 1, gap: 2 },
   meta: { fontSize: 12, color: colors.tertiary },
-  amount: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3 },
+  amount: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
   rowTitle: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink, letterSpacing: -0.2 },
   rowDetail: { fontSize: 15, color: colors.muted },
   note: { color: colors.muted, fontSize: 15, lineHeight: 21 },
@@ -622,6 +668,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingTop: 18,
     paddingHorizontal: 18,
+    shadowColor: "#14181f",
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
   },
   heroWash: {
     position: "absolute",
@@ -633,7 +683,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(27, 122, 98, 0.14)",
   },
   heroLabel: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
-  heroFigure: { marginTop: 2, fontSize: 48, fontWeight: "600", letterSpacing: -2, color: colors.ink },
+  heroFigure: { marginTop: 2, fontSize: 48, fontWeight: "600", letterSpacing: -2, color: colors.ink, fontVariant: ["tabular-nums"] },
   facts: {
     marginHorizontal: -18,
     marginTop: 2,
@@ -681,4 +731,28 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 5, borderRadius: 99, backgroundColor: colors.fillStrong, alignSelf: "center", marginTop: 8 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
   sheetTitle: { flex: 1, fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
+  switch: {
+    width: 51,
+    height: 31,
+    borderRadius: 999,
+    backgroundColor: "rgba(120, 120, 128, 0.16)",
+    padding: 2,
+    justifyContent: "center",
+  },
+  switchOn: { backgroundColor: colors.positive },
+  knob: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  knobOn: { transform: [{ translateX: 20 }] },
+  segment: { flexDirection: "row", backgroundColor: colors.fill, borderRadius: 12, padding: 2, gap: 2 },
+  segmentItem: { flex: 1, minHeight: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  segmentOn: { backgroundColor: colors.card },
+  segmentText: { fontSize: 14, fontWeight: "600", color: colors.muted },
 });

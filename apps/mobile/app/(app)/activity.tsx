@@ -5,7 +5,7 @@ import { api } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Sheet, Switch } from "../../src/ui";
 
 type Tx = Charge;
 
@@ -203,9 +203,12 @@ export default function ActivityScreen() {
                 </Card>
               </View>
             ))}
-            <Pressable onPress={() => setReviewAlways((value) => !value)} style={{ minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, justifyContent: "center" }}>
-              <Text style={{ fontSize: 16, color: colors.ink }}>{`Always categorize ${currentReview.merchantName || currentReview.name} this way`}</Text>
-              <Text style={{ fontSize: 13, color: reviewAlways ? colors.accentInk : colors.muted }}>{reviewAlways ? (similar ? `On · Clears ${similar} more` : "On") : "Off"}</Text>
+            <Pressable onPress={() => setReviewAlways((value) => !value)} style={{ minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, color: colors.ink }}>{`Always categorize ${currentReview.merchantName || currentReview.name} this way`}</Text>
+                {reviewAlways && similar ? <Text style={{ fontSize: 13, color: colors.muted }}>{`Clears ${similar} more`}</Text> : null}
+              </View>
+              <Switch on={reviewAlways} />
             </Pressable>
             <Button label="Skip" tone="quiet" onPress={() => setRows((current) => {
               const list = current ?? [];

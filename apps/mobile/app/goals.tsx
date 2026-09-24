@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { goalPace, mediumDate, money } from "../src/format";
-import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Sheet } from "../src/ui";
+import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
   id: string;
@@ -154,14 +154,11 @@ export default function GoalsScreen() {
 
       {editing ? (
         <Sheet title={editing === "new" ? "New goal" : "Edit goal"} onClose={() => setEditing(null)}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <Button label="Save up" tone={form.kind === "save_up" ? "primary" : "quiet"} onPress={() => setForm({ ...form, kind: "save_up" })} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="Pay down" tone={form.kind === "pay_down" ? "primary" : "quiet"} onPress={() => setForm({ ...form, kind: "pay_down" })} />
-            </View>
-          </View>
+          <Segment
+            value={form.kind}
+            onChange={(kind) => setForm({ ...form, kind: kind as "save_up" | "pay_down" })}
+            options={[{ value: "save_up", label: "Save up" }, { value: "pay_down", label: "Pay down" }]}
+          />
           <Field label="Target" value={form.target} onChangeText={(target) => setForm({ ...form, target })} keyboardType="decimal-pad" />
           <Field label="Name" value={form.name} onChangeText={(name) => setForm({ ...form, name })} />
           <Field label="Target date" value={form.targetDate} onChangeText={(targetDate) => setForm({ ...form, targetDate })} placeholder="YYYY-MM-DD" />
@@ -177,7 +174,7 @@ export default function GoalsScreen() {
                   style={{ minHeight: 48, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
                 >
                   <Text style={{ fontSize: 16, color: colors.ink }}>{account.name}</Text>
-                  <Text style={{ fontWeight: "600", color: on ? colors.accentInk : colors.muted }}>{on ? "On" : "Off"}</Text>
+                  <Switch on={on} />
                 </Pressable>
               );
             })}
