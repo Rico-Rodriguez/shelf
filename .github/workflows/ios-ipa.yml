@@ -114,13 +114,17 @@ jobs:
           set -euo pipefail
           # The Actions artifact is a zip around the IPA. macOS will not
           # open that wrapper. The release asset is Shelf.ipa itself.
+          version=$(node -p "require('./apps/mobile/app.json').expo.version")
+          build=$(node -p "require('./apps/mobile/app.json').expo.ios.buildNumber")
+          named="Shelf-${version}-${build}.ipa"
+          cp dist/Shelf.ipa "dist/${named}"
           gh release delete ipa --yes --cleanup-tag || true
-          gh release create ipa dist/Shelf.ipa \
+          gh release create ipa "dist/${named}" \
             --target "$GITHUB_SHA" \
-            --title "Shelf IPA" \
-            --notes "Shelf.ipa for sideload. Download this file. Do not unzip it, and do not use the Actions artifact zip." \
+            --title "Shelf ${version} (${build})" \
+            --notes "Shelf ${version} (${build}). Download ${named}. Do not unzip it, and do not use the Actions artifact zip. The copy inside the app is version ${version}." \
             --latest=false
-          asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/ipa" --jq '.assets[] | select(.name=="Shelf.ipa") | .id')
+          asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/ipa" --jq ".assets[] | select(.name==\"${named}\") | .id")
           url=$(curl -sI \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/octet-stream" \
@@ -128,10 +132,10 @@ jobs:
             | awk 'tolower($1)=="location:" { print $2 }' | tr -d '\r')
           test -n "$url"
           {
-            echo "### Shelf.ipa"
-            echo "This link is the app file. It lasts about ten minutes."
+            echo "### ${named}"
+            echo "Version ${version}, build ${build}. This link is the app file. It lasts about ten minutes."
             echo ""
             echo "$url"
             echo ""
-            echo "After it expires, download [Shelf.ipa](https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/Shelf.ipa) while signed in to GitHub. Sideload that file. Do not unzip it, and do not download the Actions artifact named Shelf."
+            echo "After it expires, download [${named}](https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/${named}) while signed in to GitHub. Sideload that file. Do not unzip it, and do not download the Actions artifact named Shelf."
           } >> "$GITHUB_STEP_SUMMARY"
