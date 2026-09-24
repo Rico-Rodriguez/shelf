@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "./api";
 import { dayLabel, merchantMatchKey } from "./format";
-import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet } from "./ui";
+import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet, Switch } from "./ui";
 
 export type ChargeGroup = { name: string; categories: { id: string; name: string }[] };
 
@@ -140,7 +140,7 @@ export function ChargeSheet({
       </Card>
       <Pressable onPress={() => setAlways((value) => !value)} style={toggle}>
         <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Always categorize this merchant this way</Text>
-        <Text style={{ fontWeight: "600", color: always ? colors.accentInk : colors.muted }}>{always ? "On" : "Off"}</Text>
+        <Switch on={always} />
       </Pressable>
       <Button label={more ? "Less" : "More"} tone="quiet" onPress={() => setMore((value) => !value)} />
       {more ? (
@@ -232,11 +232,11 @@ export function ChargeSheet({
           <Button label="Add split" tone="quiet" onPress={() => setSplits([...splits, { categoryId: "", amount: "" }])} />
           <Pressable onPress={() => setHidden((value) => !value)} style={toggle}>
             <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Hide from budget</Text>
-            <Text style={{ fontWeight: "600", color: hidden ? colors.accentInk : colors.muted }}>{hidden ? "On" : "Off"}</Text>
+            <Switch on={hidden} />
           </Pressable>
           <Pressable onPress={() => setIsTransfer((value) => !value)} style={toggle}>
             <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Count as transfer</Text>
-            <Text style={{ fontWeight: "600", color: isTransfer ? colors.accentInk : colors.muted }}>{isTransfer ? "On" : "Off"}</Text>
+            <Switch on={isTransfer} />
           </Pressable>
         </>
       ) : null}
