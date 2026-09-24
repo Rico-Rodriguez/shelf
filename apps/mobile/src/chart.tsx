@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 import { tapSelect } from "./haptic";
+import { useScrollLock } from "./scroll";
 import { colors } from "./theme";
 
 function smoothLine(coords: { x: number; y: number }[]) {
@@ -43,6 +46,7 @@ export function SpendChart({
   const lineRef = useRef<Path>(null);
   const ringRef = useRef<Circle>(null);
   const lastIndex = useRef<number | null>(null);
+  const setScrollLocked = useScrollLock();
   const height = 156;
   const signature = series.map((point) => point.cents).join(",");
 
@@ -102,8 +106,6 @@ export function SpendChart({
     return () => cancelAnimationFrame(frame);
   }, [active, lineLength, signature]);
 
-  if (series.length < 2) return null;
-
   function pick(x: number) {
     if (!width || !onScrub) return;
     const index = Math.round(Math.min(1, Math.max(0, x / width)) * (series.length - 1));
@@ -115,28 +117,36 @@ export function SpendChart({
     onScrub(series[index] ?? null);
   }
 
+  function endScrub() {
+    lastIndex.current = null;
+    setActive(null);
+    onScrub?.(null);
+    setScrollLocked(false);
+  }
+
+  const scrub = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .onStart((event) => {
+      runOnJS(setScrollLocked)(true);
+      runOnJS(pick)(event.x);
+    })
+    .onUpdate((event) => {
+      runOnJS(pick)(event.x);
+    })
+    .onFinalize(() => {
+      runOnJS(endScrub)();
+    });
+
+  if (series.length < 2) return null;
+
   const dot = geometry?.coords[active ?? geometry.coords.length - 1];
   const gradientId = `wash-${color.replace("#", "")}`;
 
   return (
+    <GestureDetector gesture={scrub}>
     <View
       style={{ height, marginHorizontal: -18, marginTop: 6 }}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      onStartShouldSetResponder={() => Boolean(onScrub)}
-      onMoveShouldSetResponder={() => Boolean(onScrub)}
-      onResponderTerminationRequest={() => false}
-      onResponderGrant={(event) => pick(event.nativeEvent.locationX)}
-      onResponderMove={(event) => pick(event.nativeEvent.locationX)}
-      onResponderRelease={() => {
-        lastIndex.current = null;
-        setActive(null);
-        onScrub?.(null);
-      }}
-      onResponderTerminate={() => {
-        lastIndex.current = null;
-        setActive(null);
-        onScrub?.(null);
-      }}
     >
       {geometry && width > 0 ? (
         <Svg width={width} height={height}>
@@ -183,6 +193,7 @@ export function SpendChart({
         </Text>
       ) : null}
     </View>
+    </GestureDetector>
   );
 }
 

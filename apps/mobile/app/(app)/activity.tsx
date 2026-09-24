@@ -5,6 +5,7 @@ import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
+import { DecideCard } from "../../src/decide";
 import { celebrate, SuccessMark } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
 import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
@@ -161,6 +162,20 @@ export default function ActivityScreen() {
     }
   }
 
+  async function hideReview() {
+    if (!currentReview) return;
+    const id = currentReview.id;
+    celebrate("Hidden");
+    setRows((current) => (current ?? []).filter((row) => row.id !== id));
+    setUnreviewed((count) => Math.max(0, count - 1));
+    try {
+      await patch(id, { hidden: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not hide");
+      load();
+    }
+  }
+
   async function patch(id: string, body: Record<string, unknown>) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
     setSelected(null);
@@ -206,14 +221,18 @@ export default function ActivityScreen() {
         ) : null}
         {currentReview ? (
           <ReviewSlide key={currentReview.id}>
-            <Note>{`${reviewRows.length} left${faces[currentReview.merchantName || currentReview.name]?.monthCents ? ` · ${money(faces[currentReview.merchantName || currentReview.name].monthCents)} this month` : ""}`}</Note>
-            <Card>
-              <View style={{ padding: 16, gap: 6 }}>
+            <Note>{`${reviewRows.length} left · swipe right to accept, left to hide`}</Note>
+            <DecideCard id={currentReview.id} onAccept={() => void confirmReview()} onHide={() => void hideReview()}>
+              <View style={{ padding: 20, paddingTop: 56, gap: 8 }}>
                 <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(currentReview.date)}{currentReview.account?.name ? ` · ${currentReview.account.name}` : ""}{currentReview.pending ? " · Pending" : ""}</Text>
                 <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.4, color: colors.ink }}>{currentReview.name}</Text>
                 <FlowAmount cents={currentReview.amountCents} size={32} />
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>{categories.find((category) => category.id === reviewCategory)?.name ?? "Uncategorized"}</Text>
+                {faces[currentReview.merchantName || currentReview.name]?.monthCents ? (
+                  <Text style={{ fontSize: 13, color: colors.muted }}>{money(faces[currentReview.merchantName || currentReview.name].monthCents)} this month</Text>
+                ) : null}
               </View>
-            </Card>
+            </DecideCard>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {quick.map((category, index) => (
                 <Pressable key={category.id} onPress={() => { if (category.id !== reviewCategory) tapSelect(); setReviewCategory(category.id); }} style={[chip, reviewCategory === category.id ? { backgroundColor: colors.accentSoft } : null]}>

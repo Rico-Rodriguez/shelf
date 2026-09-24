@@ -30,8 +30,6 @@ function MonthHero({ data }: { data: Dash }) {
   const planned = data.budget.plannedCents > 0;
   const left = data.budget.remainingCents;
   const overPlan = planned && left < 0;
-  const daysLeft = daysLeftInMonth();
-  const allowance = planned && !overPlan ? `${money(Math.round(left / daysLeft))} a day` : null;
   const now = new Date();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const expected = planned ? Math.round(data.budget.plannedCents * (now.getDate() / daysInMonth)) : 0;
@@ -45,7 +43,24 @@ function MonthHero({ data }: { data: Dash }) {
         : paceDelta > 0
           ? `${money(paceDelta)} under pace`
           : `${money(-paceDelta)} over pace`;
-  const status = allowance && pace && pace !== "On pace" ? `${pace} · ${allowance}` : allowance || pace;
+  const facts = planned
+    ? [
+        { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
+        { kicker: "Plan", value: money(data.budget.plannedCents) },
+        {
+          kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
+          value: money(Math.abs(data.cashFlow.savedCents)),
+          color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+        },
+      ]
+    : [
+        { kicker: "Income", value: money(data.cashFlow.incomeCents) },
+        {
+          kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
+          value: money(Math.abs(data.cashFlow.savedCents)),
+          color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+        },
+      ];
   return (
     <Hero
       label={scrub ? dayLabel(scrub.date) : planned ? (overPlan ? "Over the plan" : "Left to spend") : "Spent this month"}
@@ -54,32 +69,9 @@ function MonthHero({ data }: { data: Dash }) {
       points={data.spendSeries}
       onScrub={setScrub}
       live={scrub != null}
-      status={!scrub && status ? { label: status, tone: overPlan || (pace?.includes("over") ?? false) ? "bad" : "good" } : null}
+      status={pace ? { label: pace, tone: overPlan || pace.includes("over") ? "bad" : "good" } : null}
     >
-      {scrub ? null : (
-        <Facts
-          items={
-            planned
-              ? [
-                  { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
-                  { kicker: "Plan", value: money(data.budget.plannedCents) },
-                  {
-                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-                    value: money(Math.abs(data.cashFlow.savedCents)),
-                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-                  },
-                ]
-              : [
-                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-                  {
-                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-                    value: money(Math.abs(data.cashFlow.savedCents)),
-                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-                  },
-                ]
-          }
-        />
-      )}
+      <Facts items={facts} />
     </Hero>
   );
 }

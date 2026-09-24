@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
+import { ScrollLockProvider } from "./scroll";
 import { GroupedBars, SpendChart } from "./chart";
 import { flowMoney, money, shiftMonth } from "./format";
 import { tapPress, tapSelect } from "./haptic";
@@ -52,13 +53,16 @@ export function Screen({
   const styles = useStyles();
   const wordmark = useWordmark();
   const [refreshing, setRefreshing] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   function pull() {
     setRefreshing(true);
     Promise.resolve(onRefresh?.()).finally(() => setRefreshing(false));
   }
   const body = (
     <>
+      <ScrollLockProvider value={setScrollEnabled}>
       <ScrollView
+        scrollEnabled={scrollEnabled}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews
@@ -76,6 +80,7 @@ export function Screen({
         ) : null}
         {children}
       </ScrollView>
+      </ScrollLockProvider>
       {footer}
     </>
   );
