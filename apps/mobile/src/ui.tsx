@@ -868,27 +868,45 @@ function RollingMoney({
   signed,
   blank,
   live,
+  animateOnMount = true,
   style,
 }: {
   cents: number;
   signed?: boolean;
   blank?: string;
   live?: boolean;
+  animateOnMount?: boolean;
   style: StyleProp<TextStyle>;
 }) {
   const text = blank ? blank : signed && cents < 0 ? `−${money(Math.abs(cents))}` : money(cents);
-  const fromRef = useRef(text);
-  const [from, setFrom] = useState(text);
-  const progress = useRef(new Animated.Value(1)).current;
+  const mountInitial = animateOnMount ? money(0) : text;
+  const fromRef = useRef(mountInitial);
+  const [from, setFrom] = useState(mountInitial);
+  const progress = useRef(new Animated.Value(animateOnMount ? 0 : 1)).current;
   const [box, setBox] = useState({ w: 26, h: 54 });
+  const hasMounted = useRef(false);
 
   useEffect(() => {
-    if (live || blank || fromRef.current === text) {
+    if (!hasMounted.current && animateOnMount && !blank && !live) {
+      hasMounted.current = true;
+      setFrom(mountInitial);
+      progress.setValue(0);
+      const anim = Animated.timing(progress, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+      anim.start(({ finished }) => {
+        if (finished) fromRef.current = text;
+      });
+      return () => anim.stop();
+    }
+    
+    if (live || blank || (fromRef.current === text && hasMounted.current)) {
       fromRef.current = text;
       setFrom(text);
       progress.setValue(1);
+      hasMounted.current = true;
       return;
     }
+    
+    hasMounted.current = true;
     setFrom(fromRef.current);
     progress.setValue(0);
     const anim = Animated.timing(progress, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true });
@@ -896,7 +914,7 @@ function RollingMoney({
       if (finished) fromRef.current = text;
     });
     return () => anim.stop();
-  }, [text, live, blank, progress]);
+  }, [text, live, blank, progress, mountInitial, animateOnMount]);
 
   if (blank || live) return <Text style={style}>{text}</Text>;
 

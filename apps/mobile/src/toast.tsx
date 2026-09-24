@@ -234,7 +234,9 @@ export function ToastHost() {
 
   if (!message) return null;
   return (
-    <View
+    <>
+      <CelebrationBurst key={tick} />
+      <View
       pointerEvents="none"
       style={{
         position: "absolute",
@@ -268,5 +270,6 @@ export function ToastHost() {
         <Text style={{ color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 }}>{message}</Text>
       </Animated.View>
     </View>
+    </>
   );
 }
