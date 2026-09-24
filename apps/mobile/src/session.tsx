@@ -29,7 +29,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await api<ShelfState>("/api/auth/session");
+      const next = await Promise.race([
+        api<ShelfState>("/api/auth/session"),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Shelf took too long to answer. Check the connection and open the app again.")), 12000);
+        }),
+      ]);
       setState(next);
       setError(null);
       return next;

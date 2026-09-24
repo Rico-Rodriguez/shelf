@@ -15,6 +15,8 @@ function useOverTheAirUpdate() {
       try {
         const result = await Updates.checkForUpdateAsync();
         if (cancelled || !result.isAvailable) return;
+        const offered = "id" in result.manifest ? result.manifest.id : null;
+        if (offered && offered.toLowerCase() === Updates.updateId?.toLowerCase()) return;
         await Updates.fetchUpdateAsync();
         if (!cancelled) await Updates.reloadAsync();
       } catch {
