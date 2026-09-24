@@ -249,26 +249,15 @@ export function ToggleRow({ label, detail, on, onPress, divided }: { label: stri
   );
 }
 
-export function Segment({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
-  return (
-    <View style={styles.segment}>
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <Pressable key={option.value} onPress={() => onChange(option.value)} style={[styles.segmentItem, selected ? styles.segmentOn : null]}>
-            <Text style={[styles.segmentText, selected ? { color: colors.ink } : null]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-export function MenuRow({ title, icon, onPress, divided, danger }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean }) {
+export function MenuRow({ title, icon, onPress, divided, danger, active }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean; active?: boolean }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
-      {icon ? <Icon name={icon} size={18} color={colors.ink} /> : null}
-      <Text style={[styles.rowTitle, { fontWeight: "500", color: danger ? colors.danger : colors.ink }]}>{title}</Text>
+      {icon ? (
+        <View style={[styles.menuGlyph, active ? { backgroundColor: colors.accentSoft } : null]}>
+          <Icon name={icon} size={18} color={danger ? colors.danger : active ? colors.accentInk : colors.ink} />
+        </View>
+      ) : null}
+      <Text style={[styles.rowTitle, { fontWeight: "500", color: danger ? colors.danger : active ? colors.accentInk : colors.ink }]}>{title}</Text>
       {danger ? null : <Icon name="chevron" size={16} color={colors.tertiary} />}
     </Pressable>
   );
@@ -287,47 +276,98 @@ export function Loading({ label = "Loading" }: { label?: string }) {
   );
 }
 
+export function Segment({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const index = Math.max(0, options.findIndex((option) => option.value === value));
+  return (
+    <View style={styles.segment}>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.segmentThumb,
+          {
+            width: `${100 / options.length}%`,
+            left: `${(index * 100) / options.length}%`,
+          },
+        ]}
+      />
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable key={option.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => onChange(option.value)} style={styles.segmentItem}>
+            <Text style={[styles.segmentLabel, selected ? { color: colors.ink } : null]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function Hero({
   label,
   cents,
   tone,
+  signed = false,
+  empty,
+  status,
   points,
+  reference,
+  caption,
   onScrub,
   meter,
   shares,
+  footer,
   children,
 }: {
   label: string;
   cents: number;
   tone?: "good" | "bad";
+  signed?: boolean;
+  empty?: string;
+  status?: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null;
   points?: { date: string; cents: number }[];
+  reference?: { cents: number; label: string };
+  caption?: string;
   onScrub?: (point: { date: string; cents: number } | null) => void;
   meter?: { value: number; max: number; color?: string };
   shares?: { label: string; cents: number; color: string }[];
+  footer?: string;
   children?: ReactNode;
 }) {
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
+  const live = (points?.length ?? 0) >= 2;
+  const figure = empty ? empty : signed ? (cents < 0 ? `−${money(Math.abs(cents))}` : money(cents)) : money(cents);
   return (
     <View style={styles.hero}>
       <View pointerEvents="none" style={styles.heroWash} />
-      <Text style={styles.heroLabel}>{label}</Text>
-      <Text style={[styles.heroFigure, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}>
-        {money(cents)}
+      <View style={styles.heroTop}>
+        <Text style={styles.heroLabel}>{label}</Text>
+        {status?.label ? (
+          <Text style={[styles.status, status.tone === "good" ? { color: colors.positive } : null, status.tone === "bad" ? { color: colors.danger } : null, status.tone === "warn" ? { color: colors.warn } : null]}>
+            {status.label}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}>
+        {figure}
       </Text>
-      {points && points.length >= 1 ? <SpendChart points={points} onScrub={onScrub} /> : null}
-      {meter ? (
-        <View style={{ marginTop: 14, marginBottom: children ? 0 : 16 }}>
-          <Progress value={meter.value} max={meter.max} color={meter.color} />
-        </View>
-      ) : null}
-      {shownShares.length >= 2 ? (
-        <View style={{ marginTop: 14, marginBottom: 16, gap: 8 }}>
-          <View style={styles.mix}>
+      {live && points ? (
+        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} />
+      ) : shownShares.length ? (
+        <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16, gap: 8 }}>
+          <View style={[styles.mix, { borderRadius: 99, overflow: "hidden" }]}>
             {shownShares.map((share) => (
-              <View key={share.label} style={{ flexGrow: share.cents, flexBasis: 4, backgroundColor: share.color }} />
+              <View key={share.label} style={{ flexGrow: share.cents, flexBasis: 6, backgroundColor: share.color, borderRadius: 99 }} />
             ))}
           </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 6 }}>
             {shownShares.map((share) => (
               <Text key={share.label} style={styles.kicker}>
                 {share.label} {money(share.cents)}
@@ -335,9 +375,14 @@ export function Hero({
             ))}
           </View>
         </View>
+      ) : meter ? (
+        <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16 }}>
+          <Progress value={meter.value} max={meter.max} color={meter.color} />
+        </View>
       ) : null}
       {children}
-      {!children && shownShares.length < 2 && !meter && !(points && points.length >= 1) ? <View style={{ height: 18 }} /> : null}
+      {footer ? <Text style={styles.heroFooter}>{footer}</Text> : null}
+      {!children && !footer && !live && !shownShares.length && !meter ? <View style={{ height: 18 }} /> : null}
     </View>
   );
 }
@@ -482,9 +527,15 @@ function smoothSamples(coords: { x: number; y: number }[], step: number) {
 export function SpendChart({
   points,
   onScrub,
+  reference,
+  caption,
+  color = colors.accent,
 }: {
   points: { date: string; cents: number }[];
   onScrub?: (point: { date: string; cents: number } | null) => void;
+  reference?: { cents: number; label: string };
+  caption?: string;
+  color?: string;
 }) {
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
@@ -493,6 +544,7 @@ export function SpendChart({
   const height = 148;
   const drawWidth = width || 320;
   const values = series.map((point) => point.cents);
+  if (reference) values.push(reference.cents);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const raw = max - min;
@@ -516,6 +568,7 @@ export function SpendChart({
   const samples = smoothSamples(coords, 3);
   const dot = coords[active ?? coords.length - 1];
   const dotSize = active == null ? 9 : 13;
+  const refY = reference ? yOf(reference.cents) : null;
 
   function pick(x: number) {
     if (!width || !onScrub) return;
@@ -548,8 +601,8 @@ export function SpendChart({
         const fill = Math.max(0, height - sample.y);
         return (
           <View key={`fill-${index}`} pointerEvents="none" style={{ position: "absolute", left: sample.x, top: sample.y, width: columnWidth, height: fill }}>
-            <View style={{ flex: 1, backgroundColor: "rgba(27, 122, 98, 0.22)" }} />
-            <View style={{ flex: 1, backgroundColor: "rgba(27, 122, 98, 0.06)" }} />
+            <View style={{ flex: 1, backgroundColor: color, opacity: 0.22 }} />
+            <View style={{ flex: 1, backgroundColor: color, opacity: 0.06 }} />
           </View>
         );
       })}
@@ -570,7 +623,7 @@ export function SpendChart({
               width: length,
               height: 2.5,
               borderRadius: 2,
-              backgroundColor: colors.accent,
+              backgroundColor: color,
               transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
             }}
           />
@@ -588,11 +641,67 @@ export function SpendChart({
           width: dotSize,
           height: dotSize,
           borderRadius: dotSize / 2,
-          backgroundColor: colors.accent,
+          backgroundColor: color,
           borderWidth: 3,
           borderColor: "#fff",
         }}
       />
+      {refY != null ? (
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: refY, height: 1, borderTopWidth: 1, borderStyle: "dashed", borderColor: colors.tertiary }} />
+      ) : null}
+      {reference && refY != null ? (
+        <Text pointerEvents="none" style={[styles.chartTag, { top: refY - 6, left: 8 }]}>
+          {reference.label}
+        </Text>
+      ) : null}
+      {caption ? (
+        <Text pointerEvents="none" style={[styles.chartTag, { top: 2, right: 8 }]}>
+          {caption}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+export type BarSeries = { key: string; color: string };
+
+export function GroupedBars({
+  points,
+  series,
+  onPress,
+}: {
+  points: { label: string; values: Record<string, number> }[];
+  series: BarSeries[];
+  onPress?: (label: string) => void;
+}) {
+  const max = Math.max(1, ...points.flatMap((point) => series.map((item) => point.values[item.key] ?? 0)));
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={{ height: 168, flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
+        {points.map((point) => (
+          <Pressable key={point.label} onPress={onPress ? () => onPress(point.label) : undefined} style={{ flex: 1, height: "100%", flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 2 }}>
+            {series.map((item) => {
+              const value = point.values[item.key] ?? 0;
+              return <View key={item.key} style={{ width: 7, height: `${Math.max(2, Math.round((value / max) * 100))}%`, borderRadius: 3, backgroundColor: item.color }} />;
+            })}
+          </Pressable>
+        ))}
+      </View>
+      <View style={{ flexDirection: "row" }}>
+        {points.map((point) => (
+          <Text key={point.label} numberOfLines={1} style={{ flex: 1, textAlign: "center", fontSize: 10, color: colors.tertiary }}>
+            {point.label}
+          </Text>
+        ))}
+      </View>
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 16 }}>
+        {series.map((item) => (
+          <View key={item.key} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: item.color }} />
+            <Text style={styles.kicker}>{item.key}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -652,6 +761,7 @@ const styles = StyleSheet.create({
   sectionTrail: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3 },
   sectionAction: { fontSize: 15, fontWeight: "600", color: colors.accentInk },
   ledger: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 10 },
+  menuGlyph: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
   divided: { borderTopWidth: 1, borderTopColor: colors.line },
   ledgerCopy: { flex: 1, gap: 2 },
   meta: { fontSize: 12, color: colors.tertiary },
@@ -682,8 +792,13 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     backgroundColor: "rgba(27, 122, 98, 0.14)",
   },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   heroLabel: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
   heroFigure: { marginTop: 2, fontSize: 48, fontWeight: "600", letterSpacing: -2, color: colors.ink, fontVariant: ["tabular-nums"] },
+  heroEmpty: { fontSize: 28, fontWeight: "500", letterSpacing: -0.6, color: colors.muted },
+  heroFooter: { marginHorizontal: -18, marginTop: 12, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.line, fontSize: 13, color: colors.muted },
+  status: { fontSize: 13, fontWeight: "600", color: colors.muted },
+  chartTag: { position: "absolute", fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" },
   facts: {
     marginHorizontal: -18,
     marginTop: 2,
@@ -751,8 +866,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   knobOn: { transform: [{ translateX: 20 }] },
-  segment: { flexDirection: "row", backgroundColor: colors.fill, borderRadius: 12, padding: 2, gap: 2 },
-  segmentItem: { flex: 1, minHeight: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  segmentOn: { backgroundColor: colors.card },
-  segmentText: { fontSize: 14, fontWeight: "600", color: colors.muted },
+  segment: { position: "relative", minHeight: 40, padding: 3, borderRadius: 999, backgroundColor: colors.fill, flexDirection: "row" },
+  segmentThumb: { position: "absolute", top: 3, bottom: 3, borderRadius: 999, backgroundColor: colors.card },
+  segmentItem: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center" },
+  segmentLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
 });

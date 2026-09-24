@@ -2,8 +2,8 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { money, monthLabel, monthRange, shelfColor, shortDate, versusShort } from "../src/format";
-import { Back, Card, colors, Hero, Loading, MonthNav, Note, Screen, Section, SpendMix } from "../src/ui";
+import { addDays, money, monthLabel, monthRange, shelfColor, shortDate, todayISO, versusShort } from "../src/format";
+import { Back, Card, colors, Hero, Loading, MonthNav, Note, Screen, Section, Segment, SpendMix } from "../src/ui";
 
 type Report = {
   year: number;
@@ -23,6 +23,7 @@ export default function InsightsScreen() {
   const [data, setData] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
+  const [span, setSpan] = useState<"90" | "365" | "all">("365");
 
   useEffect(() => {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`)
@@ -33,7 +34,10 @@ export default function InsightsScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load insights"));
   }, [cursor]);
 
-  const points = (data?.snapshots ?? []).map((row) => ({ date: row.date, cents: row.netWorthCents }));
+  const cutoff = span === "all" ? null : addDays(todayISO(), span === "90" ? -90 : -365);
+  const points = (data?.snapshots ?? [])
+    .filter((row) => !cutoff || row.date >= cutoff)
+    .map((row) => ({ date: row.date, cents: row.netWorthCents }));
   const latest = points.length ? points[points.length - 1] : null;
   const shown = scrub?.cents ?? latest?.cents ?? data?.netWorth.netWorthCents ?? 0;
   const moved = points.length >= 2 ? points[points.length - 1].cents - points[0].cents : null;
@@ -57,15 +61,27 @@ export default function InsightsScreen() {
       {!data && !error ? <Loading /> : null}
       {data ? (
         <>
+          <Segment
+            value={span}
+            onChange={(value) => {
+              setScrub(null);
+              setSpan(value as "90" | "365" | "all");
+            }}
+            options={[
+              { value: "90", label: "3M" },
+              { value: "365", label: "1Y" },
+              { value: "all", label: "All" },
+            ]}
+          />
           <Hero
             label={scrub ? shortDate(scrub.date) : "Net worth"}
             cents={shown}
             tone={shown < 0 ? "bad" : undefined}
+            status={!scrub && movedStatus ? { label: movedStatus, tone: (moved ?? 0) > 0 ? "good" : "bad" } : null}
             points={points.length > 1 ? points : undefined}
+            caption="Net worth"
             onScrub={setScrub}
-          >
-            {!scrub && movedStatus ? <Note>{movedStatus}</Note> : null}
-          </Hero>
+          />
           <Section title="Spending" trailing={`${money(data.spendingCents)}${note ? ` · ${note}` : ""}`} />
           <Card>
             <SpendMix rows={data.byCategory.map((category) => ({ key: category.id || category.name, cents: category.cents, color: shelfColor(category.color) }))} />

@@ -84,7 +84,6 @@ export default function SettingsScreen() {
           </Card>
         </>
       )}
-
       <Section title="Rules" />
       <Card>
         <MenuRow title="Manage rules" icon="list" onPress={() => router.push("/rules")} />
@@ -99,7 +98,7 @@ export default function SettingsScreen() {
       <Section title="Import" />
       <Card>
         {accounts.map((account, index) => (
-          <MenuRow key={account.id} divided={index > 0} title={account.name} onPress={() => setAccountId(account.id)} />
+          <MenuRow key={account.id} divided={index > 0} title={account.name} active={accountId === account.id} onPress={() => setAccountId(account.id)} />
         ))}
         <View style={{ padding: 16, gap: 12 }}>
           <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />

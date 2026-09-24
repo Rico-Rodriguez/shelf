@@ -5,7 +5,7 @@ import { api } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Sheet, Switch } from "../../src/ui";
+import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
 
 type Tx = Charge;
 
@@ -399,7 +399,14 @@ export default function ActivityScreen() {
         <Sheet title="Add" onClose={() => setAdding(false)}>
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-          <Button label={income ? "Income" : "Spending"} tone="quiet" onPress={() => setIncome((value) => !value)} />
+          <Segment
+            value={income ? "in" : "out"}
+            onChange={(value) => setIncome(value === "in")}
+            options={[
+              { value: "out", label: "Spending" },
+              { value: "in", label: "Income" },
+            ]}
+          />
           <Section title="Category" />
           <Card>
             {categories.slice(0, 24).map((category, index) => (
