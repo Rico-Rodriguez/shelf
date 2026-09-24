@@ -1,14 +1,12 @@
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Pressable, Text, View } from "react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
-import { tapSelect } from "../../src/haptic";
+import { categorizeLabel, dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
-import { DecideCard } from "../../src/decide";
-import { celebrate, SuccessMark } from "../../src/toast";
+import { celebrate } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
+import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet } from "../../src/ui";
 
 type Tx = Charge;
 
@@ -34,7 +32,6 @@ export default function ActivityScreen() {
   const [query, setQuery] = useState(typeof params.q === "string" ? params.q : "");
   const [search, setSearch] = useState(query);
   const [unreviewedOnly, setUnreviewedOnly] = useState(params.reviewed === "false");
-  const [reviewing, setReviewing] = useState(params.focus === "1" && params.reviewed === "false");
   const [categoryId, setCategoryId] = useState(typeof params.categoryId === "string" ? params.categoryId : "");
   const [accountFilter, setAccountFilter] = useState(typeof params.accountId === "string" ? params.accountId : "");
   const [tag, setTag] = useState(typeof params.tag === "string" ? params.tag : "");
@@ -57,14 +54,9 @@ export default function ActivityScreen() {
   const [accountId, setAccountId] = useState("");
   const [income, setIncome] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
-  const [frequent, setFrequent] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState("");
-  const [reviewCategory, setReviewCategory] = useState("");
-  const [reviewAlways, setReviewAlways] = useState(false);
-  const [similar, setSimilar] = useState<number | null>(null);
   const [addCategory, setAddCategory] = useState("");
   const [addDate, setAddDate] = useState(todayISO());
   const [addMore, setAddMore] = useState(false);
@@ -87,8 +79,6 @@ export default function ActivityScreen() {
       .then(([tx, cats, accts]) => {
         setRows(tx.transactions);
         setUnreviewed(tx.unreviewed);
-        setFaces(tx.faces ?? {});
-        setFrequent(tx.frequentCategoryIds ?? []);
         setGroups(cats.groups);
         setAccounts(accts.accounts);
         setAccountId((current) => current || accts.accounts[0]?.id || "");
@@ -114,67 +104,7 @@ export default function ActivityScreen() {
   }, [rows]);
 
   const reviewRows = (rows ?? []).filter((tx) => !tx.reviewed);
-  const currentReview = reviewRows[0] ?? null;
   const categories = groups.flatMap((group) => group.categories);
-  const quickIds = frequent.length ? frequent : categories.filter((category) => !groups.find((group) => group.name === "Income")?.categories.includes(category)).map((category) => category.id);
-  const quick = quickIds.map((id) => categories.find((category) => category.id === id)).filter((category): category is { id: string; name: string } => Boolean(category)).slice(0, 6);
-
-  useEffect(() => {
-    if (!reviewing || !currentReview) return;
-    setReviewCategory(currentReview.categoryId ?? "");
-    setReviewAlways(false);
-    setSimilar(null);
-  }, [reviewing, currentReview?.id]);
-
-  useEffect(() => {
-    if (!reviewAlways || !currentReview) {
-      setSimilar(null);
-      return;
-    }
-    const merchant = currentReview.merchantName || currentReview.name;
-    void api<{ count: number }>("/api/rules/preview", {
-      method: "POST",
-      body: JSON.stringify({ matchMerchant: merchantMatchKey(merchant), unreviewedOnly: true, excludeId: currentReview.id }),
-    })
-      .then((res) => setSimilar(res.count))
-      .catch(() => setSimilar(null));
-  }, [reviewAlways, currentReview?.id]);
-
-  async function confirmReview() {
-    if (!currentReview) return;
-    const id = currentReview.id;
-    celebrate("Categorized");
-    setRows((current) => (current ?? []).filter((row) => row.id !== id));
-    setUnreviewed((count) => Math.max(0, count - 1));
-    try {
-      await patch(id, { categoryId: reviewCategory || null, reviewed: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not categorize");
-      load();
-    }
-    if (reviewAlways && reviewCategory) {
-      const merchant = currentReview.merchantName || currentReview.name;
-      await api("/api/rules", {
-        method: "POST",
-        body: JSON.stringify({ name: merchant, matchMerchant: merchantMatchKey(merchant), actionCategoryId: reviewCategory, applyUnreviewed: true }),
-      });
-      load();
-    }
-  }
-
-  async function hideReview() {
-    if (!currentReview) return;
-    const id = currentReview.id;
-    celebrate("Hidden");
-    setRows((current) => (current ?? []).filter((row) => row.id !== id));
-    setUnreviewed((count) => Math.max(0, count - 1));
-    try {
-      await patch(id, { hidden: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not hide");
-      load();
-    }
-  }
 
   async function patch(id: string, body: Record<string, unknown>) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -208,73 +138,6 @@ export default function ActivityScreen() {
     }
   }
 
-  if (reviewing) {
-    return (
-      <Screen title="Review" framed onRefresh={load} action={<Pressable onPress={() => setReviewing(false)}><Text style={{ color: colors.accentInk, fontWeight: "600" }}>Close</Text></Pressable>}>
-        {error ? <Note>{error}</Note> : null}
-        {!currentReview ? (
-          <View style={{ alignItems: "center", gap: 16, paddingTop: 48 }}>
-            <SuccessMark />
-            <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.4, color: colors.ink }}>You’re caught up</Text>
-            <Text style={{ fontSize: 15, color: colors.muted, textAlign: "center" }}>Every charge has a category.</Text>
-          </View>
-        ) : null}
-        {currentReview ? (
-          <ReviewSlide key={currentReview.id}>
-            <Note>{`${reviewRows.length} left · swipe right to accept, left to hide`}</Note>
-            <DecideCard id={currentReview.id} onAccept={() => void confirmReview()} onHide={() => void hideReview()}>
-              <View style={{ padding: 20, paddingTop: 56, gap: 8 }}>
-                <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(currentReview.date)}{currentReview.account?.name ? ` · ${currentReview.account.name}` : ""}{currentReview.pending ? " · Pending" : ""}</Text>
-                <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.4, color: colors.ink }}>{currentReview.name}</Text>
-                <FlowAmount cents={currentReview.amountCents} size={32} />
-                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>{categories.find((category) => category.id === reviewCategory)?.name ?? "Uncategorized"}</Text>
-                {faces[currentReview.merchantName || currentReview.name]?.monthCents ? (
-                  <Text style={{ fontSize: 13, color: colors.muted }}>{money(faces[currentReview.merchantName || currentReview.name].monthCents)} this month</Text>
-                ) : null}
-              </View>
-            </DecideCard>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {quick.map((category, index) => (
-                <Pressable key={category.id} onPress={() => { if (category.id !== reviewCategory) tapSelect(); setReviewCategory(category.id); }} style={[chip, reviewCategory === category.id ? { backgroundColor: colors.accentSoft } : null]}>
-                  <Text style={{ color: colors.ink }}>{`${index + 1} ${category.name}`}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {groups.filter((group) => group.name !== "Income").map((group) => (
-              <View key={group.name} style={{ gap: 8 }}>
-                <Section title={group.name} />
-                <Card>
-                  {group.categories.map((category, index) => (
-                    <Pressable key={category.id} onPress={() => setReviewCategory(category.id)} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                      <Text style={{ fontSize: 16, color: reviewCategory === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
-                    </Pressable>
-                  ))}
-                </Card>
-              </View>
-            ))}
-            <Pressable onPress={() => setReviewAlways((value) => !value)} style={{ minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, flexDirection: "row", alignItems: "center", gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, color: colors.ink }}>{`Always categorize ${currentReview.merchantName || currentReview.name} this way`}</Text>
-                {reviewAlways && similar ? <Text style={{ fontSize: 13, color: colors.muted }}>{`Clears ${similar} more`}</Text> : null}
-              </View>
-              <Switch on={reviewAlways} />
-            </Pressable>
-            <Button label="Skip" tone="quiet" onPress={() => setRows((current) => {
-              const list = current ?? [];
-              const index = list.findIndex((row) => row.id === currentReview.id);
-              if (index < 0 || list.length < 2) return list;
-              const next = list.slice();
-              const [skipped] = next.splice(index, 1);
-              next.push(skipped);
-              return next;
-            })} />
-            <Button label="Confirm" onPress={() => void confirmReview()} />
-          </ReviewSlide>
-        ) : null}
-      </Screen>
-    );
-  }
-
   const month = range ? { year: Number(range.start.slice(0, 4)), month: Number(range.start.slice(5, 7)) } : null;
 
   return (
@@ -293,8 +156,7 @@ export default function ActivityScreen() {
         <ReviewBanner
           label={categorizeLabel(unreviewed)}
           onPress={() => {
-            setUnreviewedOnly(true);
-            setReviewing(true);
+            router.push("/review");
           }}
         />
       ) : null}
@@ -509,14 +371,3 @@ export default function ActivityScreen() {
 
 const chip = { backgroundColor: colors.fill, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 };
 
-function ReviewSlide({ children }: { children: ReactNode }) {
-  const x = useRef(new Animated.Value(28)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(x, { toValue: 0, useNativeDriver: true, stiffness: 340, damping: 28, mass: 0.75 }),
-      Animated.timing(opacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start();
-  }, [opacity, x]);
-  return <Animated.View style={{ gap: 24, opacity, transform: [{ translateX: x }] }}>{children}</Animated.View>;
-}
