@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
-import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet } from "../src/ui";
+import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet, Switch } from "../src/ui";
 
 type Bill = {
   id: string;
@@ -234,14 +234,7 @@ export default function BillsScreen() {
     >
       {error ? <Note>{error}</Note> : null}
       {rows === null && !error ? <Loading /> : null}
-      <Segment
-        value={view}
-        onChange={(next) => setView(next === "calendar" ? "calendar" : "list")}
-        options={[
-          { value: "list", label: "List" },
-          { value: "calendar", label: "Calendar" },
-        ]}
-      />
+      <Segment value={view} onChange={(next) => setView(next as "list" | "calendar")} options={[{ value: "list", label: "List" }, { value: "calendar", label: "Calendar" }]} />
       {rows ? (
         <Hero label={thisMonth ? "Due this month" : monthLabel(focus.year, focus.month)} cents={outflow} points={points.length > 1 ? points : undefined}>
           <View style={{ paddingHorizontal: 18, paddingBottom: 16, gap: 4 }}>
@@ -370,7 +363,7 @@ export default function BillsScreen() {
           ) : null}
           <Pressable onPress={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })} style={toggle}>
             <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Subscription</Text>
-            <Text style={{ fontWeight: "600", color: form.kind === "subscription" ? colors.accentInk : colors.muted }}>{form.kind === "subscription" ? "On" : "Off"}</Text>
+            <Switch on={form.kind === "subscription"} />
           </Pressable>
           <Button label="Save" onPress={() => void save()} busy={busy} />
           {editing !== "new" ? (
@@ -390,5 +383,5 @@ export default function BillsScreen() {
   );
 }
 
-const toggle = { minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, justifyContent: "center" as const };
+const toggle = { minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 12 };
 const choice = { minHeight: 44, justifyContent: "center" as const, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line };

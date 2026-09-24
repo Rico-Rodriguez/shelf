@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { Back, Button, Card, colors, Field, Loading, Note, Screen, Sheet } from "../src/ui";
+import { Back, Button, Card, colors, Field, Loading, Note, Screen, Sheet, Switch } from "../src/ui";
 
 type Rule = {
   id: string;
@@ -231,28 +231,30 @@ export default function RulesScreen() {
           <Button label="Add a rule" onPress={() => setOpen(true)} />
         </View>
       ) : null}
-      {(rules ?? []).map((rule, index) => (
-        <Card key={rule.id}>
-          <Pressable onPress={() => openEdit(rule)} style={{ padding: 16, gap: 4 }}>
+      {rules && rules.length > 0 ? <Card>
+      {rules.map((rule, index) => (
+        <View key={rule.id} style={{ borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}>
+          <Pressable onPress={() => openEdit(rule)} style={{ gap: 4 }}>
             <Text style={{ fontSize: 16, fontWeight: "600", color: rule.enabled ? colors.ink : colors.muted }}>{rule.name}</Text>
             <Text style={{ fontSize: 13, color: colors.muted }}>{describe(rule)}</Text>
           </Pressable>
-          <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingBottom: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Button label={rule.enabled ? "On" : "Off"} tone="quiet" onPress={() => void api(`/api/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !rule.enabled }) }).then(load)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="Earlier" tone="quiet" onPress={() => void move(index, -1)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="Later" tone="quiet" onPress={() => void move(index, 1)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="Delete" tone="danger" onPress={() => void api(`/api/rules/${rule.id}`, { method: "DELETE" }).then(load)} />
-            </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Pressable accessibilityLabel={rule.enabled ? "Disable rule" : "Enable rule"} onPress={() => void api(`/api/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ enabled: !rule.enabled }) }).then(load)}>
+              <Switch on={rule.enabled} />
+            </Pressable>
+            <Pressable disabled={index === 0} onPress={() => void move(index, -1)}>
+              <Text style={{ fontSize: 13, fontWeight: "500", color: index === 0 ? colors.tertiary : colors.ink }}>Earlier</Text>
+            </Pressable>
+            <Pressable disabled={index === (rules?.length ?? 0) - 1} onPress={() => void move(index, 1)}>
+              <Text style={{ fontSize: 13, fontWeight: "500", color: index === (rules?.length ?? 0) - 1 ? colors.tertiary : colors.ink }}>Later</Text>
+            </Pressable>
+            <Pressable onPress={() => void api(`/api/rules/${rule.id}`, { method: "DELETE" }).then(load)}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.danger }}>Delete</Text>
+            </Pressable>
           </View>
-        </Card>
+        </View>
       ))}
+      </Card> : null}
 
       {open ? (
         <Sheet title={editingId ? "Edit rule" : "New rule"} onClose={() => setOpen(false)}>
@@ -284,17 +286,19 @@ export default function RulesScreen() {
           </Pressable>
           {picking === "split" ? <Pick options={[{ id: "", name: "No split" }, ...categories]} value={form.splitCategoryId} onChange={(splitCategoryId) => { setForm({ ...form, splitCategoryId }); setPicking(null); }} /> : null}
           <Field label="Split amount" value={form.splitAmount} onChangeText={(splitAmount) => setForm({ ...form, splitAmount })} keyboardType="decimal-pad" />
-          <Pressable onPress={() => setForm({ ...form, actionHide: !form.actionHide })} style={toggle}>
-            <Text style={{ flex: 1, fontSize: 16 }}>Hide matching purchases</Text>
-            <Text style={{ fontWeight: "600", color: form.actionHide ? colors.accentInk : colors.muted }}>{form.actionHide ? "On" : "Off"}</Text>
-          </Pressable>
-          <Pressable onPress={() => setForm({ ...form, applyExisting: !form.applyExisting })} style={toggle}>
-            <Text style={{ flex: 1, fontSize: 16 }}>Apply to existing transactions</Text>
-            <Text style={{ fontWeight: "600", color: form.applyExisting ? colors.accentInk : colors.muted }}>{form.applyExisting ? "On" : "Off"}</Text>
-          </Pressable>
+          <Card>
+            <Pressable onPress={() => setForm({ ...form, actionHide: !form.actionHide })} style={toggle}>
+              <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Hide matching purchases</Text>
+              <Switch on={form.actionHide} />
+            </Pressable>
+            <Pressable onPress={() => setForm({ ...form, applyExisting: !form.applyExisting })} style={[toggle, { borderTopWidth: 1, borderTopColor: colors.line, borderRadius: 0 }]}>
+              <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Apply to existing transactions</Text>
+              <Switch on={form.applyExisting} />
+            </Pressable>
+          </Card>
           {preview ? <Note>{preview}</Note> : null}
-          <Button label="Preview matches" tone="quiet" onPress={() => void dryRun()} />
-          <Button label="Save rule" onPress={() => void save()} />
+          <Button label="Preview matches" tone="quiet" block onPress={() => void dryRun()} />
+          <Button label="Save rule" block onPress={() => void save()} />
         </Sheet>
       ) : null}
     </Screen>

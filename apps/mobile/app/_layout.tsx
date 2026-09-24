@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AppState } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useShelfType } from "../src/brand";
 import { SessionProvider } from "../src/session";
 
 function useOverTheAirUpdate() {
@@ -15,6 +16,8 @@ function useOverTheAirUpdate() {
       try {
         const result = await Updates.checkForUpdateAsync();
         if (cancelled || !result.isAvailable) return;
+        const offered = "id" in result.manifest ? result.manifest.id : null;
+        if (offered && offered.toLowerCase() === Updates.updateId?.toLowerCase()) return;
         await Updates.fetchUpdateAsync();
         if (!cancelled) await Updates.reloadAsync();
       } catch {
@@ -34,6 +37,7 @@ function useOverTheAirUpdate() {
 }
 
 export default function RootLayout() {
+  useShelfType();
   useOverTheAirUpdate();
   return (
     <SafeAreaProvider>

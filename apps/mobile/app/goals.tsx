@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { goalPace, mediumDate, money } from "../src/format";
-import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet } from "../src/ui";
+import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
   id: string;
@@ -157,10 +157,7 @@ export default function GoalsScreen() {
           <Segment
             value={form.kind}
             onChange={(kind) => setForm({ ...form, kind: kind as "save_up" | "pay_down" })}
-            options={[
-              { value: "save_up", label: "Save up" },
-              { value: "pay_down", label: "Pay down" },
-            ]}
+            options={[{ value: "save_up", label: "Save up" }, { value: "pay_down", label: "Pay down" }]}
           />
           <Field label="Target" value={form.target} onChangeText={(target) => setForm({ ...form, target })} keyboardType="decimal-pad" />
           <Field label="Name" value={form.name} onChangeText={(name) => setForm({ ...form, name })} />
@@ -177,7 +174,7 @@ export default function GoalsScreen() {
                   style={{ minHeight: 48, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
                 >
                   <Text style={{ fontSize: 16, color: colors.ink }}>{account.name}</Text>
-                  <Text style={{ fontWeight: "600", color: on ? colors.accentInk : colors.muted }}>{on ? "On" : "Off"}</Text>
+                  <Switch on={on} />
                 </Pressable>
               );
             })}
