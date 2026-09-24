@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Share } from "react-native";
 import { api, apiText } from "../src/api";
-import { Back, Button, Field, Note, Row, Screen } from "../src/ui";
+import { Back, Button, Card, Field, MenuRow, Note, Screen, Section } from "../src/ui";
 import { useSession } from "../src/session";
 
 type Household = {
@@ -48,7 +48,33 @@ export default function SettingsScreen() {
           }
         />
       )}
-      <Row title="Manage rules" onPress={() => router.push("/rules")} />
+      <Section title="Rules" />
+      <Card>
+        <MenuRow title="Manage rules" icon="list" onPress={() => router.push("/rules")} />
+      </Card>
+      <Section title="Import" />
+      <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
+      <Note>Positive amounts are money out.</Note>
+      <Card>
+        {accounts.map((account, index) => (
+          <MenuRow
+            key={account.id}
+            title={account.name}
+            divided={index > 0}
+            active={accountId === account.id}
+            onPress={() => setAccountId(account.id)}
+          />
+        ))}
+      </Card>
+      <Button
+        label="Import CSV"
+        onPress={() =>
+          void api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId, csv }) }).then((res) =>
+            setMessage(`Imported ${res.created} rows.`),
+          )
+        }
+      />
+      <Section title="Shelf key" />
       <Field label="Current Shelf key" value={current} onChangeText={setCurrent} shelfKey />
       <Field label="New Shelf key" value={next} onChangeText={setNext} shelfKey />
       <Button
@@ -64,34 +90,22 @@ export default function SettingsScreen() {
             .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not change the Shelf key"));
         }}
       />
-      <Button label="Export JSON" tone="quiet" onPress={() => void shareExport("json")} />
-      <Button label="Export CSV" tone="quiet" onPress={() => void shareExport("csv")} />
-      <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
-      <Note>Positive amounts are money out.</Note>
-      {accounts.map((account) => (
-        <Row key={account.id} title={accountId === account.id ? `Import into ${account.name}` : account.name} onPress={() => setAccountId(account.id)} />
-      ))}
-      <Button
-        label="Import CSV"
-        onPress={() =>
-          void api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId, csv }) }).then((res) =>
-            setMessage(`Imported ${res.created} rows.`),
-          )
-        }
-      />
-      <Note>{home ? `Household role: ${home.role}` : "Household"}</Note>
-      {(home?.members ?? []).map((member) => (
-        <Row
-          key={member.userId}
-          title={home && home.members.length > 1 ? `${member.name} · ${member.role}` : member.name}
-          detail={home?.role === "owner" && member.role !== "owner" ? "Remove" : undefined}
-          onPress={
-            home?.role === "owner" && member.role !== "owner"
-              ? () => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))
-              : undefined
-          }
-        />
-      ))}
+      <Section title="Household" />
+      <Note>{home ? `Role: ${home.role}` : "Household"}</Note>
+      <Card>
+        {(home?.members ?? []).map((member, index) => (
+          <MenuRow
+            key={member.userId}
+            title={home && home.members.length > 1 ? `${member.name} · ${member.role}` : member.name}
+            divided={index > 0}
+            onPress={
+              home?.role === "owner" && member.role !== "owner"
+                ? () => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))
+                : () => undefined
+            }
+          />
+        ))}
+      </Card>
       {home?.role === "owner" ? (
         <Button
           label="Invite someone"

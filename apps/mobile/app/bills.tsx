@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
-import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Sheet } from "../src/ui";
+import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet } from "../src/ui";
 
 type Bill = {
   id: string;
@@ -234,14 +234,14 @@ export default function BillsScreen() {
     >
       {error ? <Note>{error}</Note> : null}
       {rows === null && !error ? <Loading /> : null}
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <View style={{ flex: 1 }}>
-          <Button label="List" tone={view === "list" ? "primary" : "quiet"} onPress={() => setView("list")} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Calendar" tone={view === "calendar" ? "primary" : "quiet"} onPress={() => setView("calendar")} />
-        </View>
-      </View>
+      <Segment
+        value={view}
+        onChange={(next) => setView(next === "calendar" ? "calendar" : "list")}
+        options={[
+          { value: "list", label: "List" },
+          { value: "calendar", label: "Calendar" },
+        ]}
+      />
       {rows ? (
         <Hero label={thisMonth ? "Due this month" : monthLabel(focus.year, focus.month)} cents={outflow} points={points.length > 1 ? points : undefined}>
           <View style={{ paddingHorizontal: 18, paddingBottom: 16, gap: 4 }}>

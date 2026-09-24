@@ -79,6 +79,17 @@ export function shiftMonth(year: number, month: number, delta: number): { year: 
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
+/** Month key `2026-03` or quarter key `2026-Q2` to an inclusive date range. */
+export function periodRange(key: string): { start: string; end: string } | null {
+  const month = /^(\d{4})-(\d{2})$/.exec(key);
+  if (month) return monthRange(Number(month[1]), Number(month[2]));
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(key);
+  if (!quarter) return null;
+  const year = Number(quarter[1]);
+  const startMonth = (Number(quarter[2]) - 1) * 3 + 1;
+  return { start: monthRange(year, startMonth).start, end: monthRange(year, startMonth + 2).end };
+}
+
 export function monthRange(year: number, month: number): { start: string; end: string } {
   const start = `${year}-${String(month).padStart(2, "0")}-01`;
   const last = new Date(year, month, 0).getDate();

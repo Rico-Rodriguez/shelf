@@ -1,8 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../src/api";
-import { merchantMatchKey, outflow } from "../src/format";
-import { Back, Button, Hero, Loading, Note, Row, Screen } from "../src/ui";
+import { flowMoney, merchantMatchKey } from "../src/format";
+import { Back, Button, Card, Hero, LedgerRow, Loading, Note, Screen } from "../src/ui";
 
 type Tx = { id: string; name: string; date: string; amountCents: number; pending: boolean; category: { id: string; name: string } | null };
 type Rule = { id: string; matchMerchant: string | null; actionCategoryId: string | null; name: string };
@@ -107,9 +107,23 @@ export default function MerchantScreen() {
       {!rule && summary.category ? <Button label={`Always file as ${summary.category}`} onPress={() => void alwaysFile()} busy={busy} /> : null}
       {rule ? <Note>{categoryName ? `Files as ${categoryName}` : "A rule matches this merchant"}</Note> : null}
       {rows && rows.length === 0 ? <Note>No transactions for this merchant.</Note> : null}
-      {(rows ?? []).map((tx) => (
-        <Row key={tx.id} title={tx.name} detail={`${tx.date}${tx.category?.name ? ` · ${tx.category.name}` : ""} · ${outflow(tx.amountCents)}`} />
-      ))}
+      {rows && rows.length ? (
+        <Card>
+          {rows.map((tx, index) => {
+            const flow = flowMoney(tx.amountCents);
+            return (
+              <LedgerRow
+                key={tx.id}
+                divided={index > 0}
+                name={tx.name}
+                meta={[tx.date, tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                amount={flow.text}
+                amountColor={flow.color}
+              />
+            );
+          })}
+        </Card>
+      ) : null}
     </Screen>
   );
 }
