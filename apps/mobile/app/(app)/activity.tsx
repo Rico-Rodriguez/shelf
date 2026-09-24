@@ -1,8 +1,9 @@
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
+import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { celebrate } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
@@ -190,7 +191,7 @@ export default function ActivityScreen() {
         {error ? <Note>{error}</Note> : null}
         {!currentReview ? <Note>You’re caught up</Note> : null}
         {currentReview ? (
-          <>
+          <ReviewSlide key={currentReview.id}>
             <Note>{`${reviewRows.length} left${faces[currentReview.merchantName || currentReview.name]?.monthCents ? ` · ${money(faces[currentReview.merchantName || currentReview.name].monthCents)} this month` : ""}`}</Note>
             <Card>
               <View style={{ padding: 16, gap: 6 }}>
@@ -201,7 +202,7 @@ export default function ActivityScreen() {
             </Card>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {quick.map((category, index) => (
-                <Pressable key={category.id} onPress={() => setReviewCategory(category.id)} style={[chip, reviewCategory === category.id ? { backgroundColor: colors.accentSoft } : null]}>
+                <Pressable key={category.id} onPress={() => { if (category.id !== reviewCategory) tapSelect(); setReviewCategory(category.id); }} style={[chip, reviewCategory === category.id ? { backgroundColor: colors.accentSoft } : null]}>
                   <Text style={{ color: colors.ink }}>{`${index + 1} ${category.name}`}</Text>
                 </Pressable>
               ))}
@@ -235,7 +236,7 @@ export default function ActivityScreen() {
               return next;
             })} />
             <Button label="Confirm" onPress={() => void confirmReview()} />
-          </>
+          </ReviewSlide>
         ) : null}
       </Screen>
     );
@@ -309,7 +310,7 @@ export default function ActivityScreen() {
                       { label: "Hide", tone: "danger", onPress: () => void patch(tx.id, { hidden: true }) },
                       tx.reviewed
                         ? { label: "Edit", tone: "ink", onPress: () => setSelected(tx) }
-                        : { label: "Done", tone: "accent", onPress: () => void patch(tx.id, { reviewed: true }) },
+                        : { label: "Done", tone: "accent", onPress: () => { celebrate("Reviewed"); void patch(tx.id, { reviewed: true }); } },
                     ]}
                   >
                     <LedgerRow
@@ -344,6 +345,7 @@ export default function ActivityScreen() {
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
+            celebrate("Saved");
             load();
           }}
         />
@@ -403,6 +405,7 @@ export default function ActivityScreen() {
                   body: JSON.stringify({ ids: reviewRows.map((tx) => tx.id) }),
                 }).then(() => {
                   setFilters(false);
+                  celebrate("Accepted");
                   load();
                 })
               }
@@ -459,6 +462,7 @@ export default function ActivityScreen() {
                 ).then(() => {
                   setSelectedIds([]);
                   setSelecting(false);
+                  celebrate("Updated");
                   load();
                 })
               }
@@ -471,3 +475,15 @@ export default function ActivityScreen() {
 }
 
 const chip = { backgroundColor: colors.fill, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 };
+
+function ReviewSlide({ children }: { children: ReactNode }) {
+  const x = useRef(new Animated.Value(28)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(x, { toValue: 0, useNativeDriver: true, stiffness: 340, damping: 28, mass: 0.75 }),
+      Animated.timing(opacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [opacity, x]);
+  return <Animated.View style={{ gap: 24, opacity, transform: [{ translateX: x }] }}>{children}</Animated.View>;
+}

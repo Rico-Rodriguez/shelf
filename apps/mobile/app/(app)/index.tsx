@@ -25,11 +25,42 @@ type Dash = {
   suggestedSubscriptions?: { merchantName: string }[];
 };
 
+function MonthHero({ data }: { data: Dash }) {
+  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
+  const showCash = data.cashFlow.incomeCents !== 0 || data.cashFlow.spendingCents !== 0;
+  const planned = data.budget.plannedCents > 0;
+  const overPlan = planned && data.budget.remainingCents < 0;
+  const daysLeft = daysLeftInMonth();
+  const pace = planned ? (overPlan ? "Over the plan" : `${money(Math.round(data.budget.remainingCents / daysLeft))} a day left`) : null;
+  return (
+    <Hero
+      label={scrub ? dayLabel(scrub.date) : "Spent this month"}
+      cents={scrub?.cents ?? data.cashFlow.spendingCents}
+      points={data.spendSeries}
+      onScrub={setScrub}
+      live={scrub != null}
+      status={pace && !scrub ? { label: pace, tone: overPlan ? "bad" : "good" } : null}
+    >
+      {scrub || !showCash ? null : (
+        <Facts
+          items={[
+            { kicker: "Income", value: money(data.cashFlow.incomeCents) },
+            {
+              kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
+              value: money(Math.abs(data.cashFlow.savedCents)),
+              color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+            },
+          ]}
+        />
+      )}
+    </Hero>
+  );
+}
+
 export default function HomeScreen() {
   const [data, setData] = useState<Dash | null>(() => peek<Dash>("/api/dashboard") ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
     return read<Dash>("/api/dashboard")
@@ -74,8 +105,6 @@ export default function HomeScreen() {
   const overPlan = Boolean(data && data.budget.plannedCents > 0 && left < 0);
   const daysLeft = daysLeftInMonth();
   const dayWord = daysLeft === 1 ? "day" : "days";
-  const showCash = Boolean(data && (data.cashFlow.incomeCents !== 0 || data.cashFlow.spendingCents !== 0));
-  const shown = scrub?.cents ?? data?.cashFlow.spendingCents ?? 0;
 
   return (
     <Screen framed onRefresh={load}>
@@ -83,26 +112,7 @@ export default function HomeScreen() {
       {!data && !error ? <Loading /> : null}
       {data ? (
         <>
-          <Hero
-            label={scrub ? dayLabel(scrub.date) : "Spent this month"}
-            cents={shown}
-            points={data.spendSeries}
-            onScrub={setScrub}
-            live={scrub != null}
-          >
-            {scrub || !showCash ? null : (
-              <Facts
-                items={[
-                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-                  {
-                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-                    value: money(Math.abs(data.cashFlow.savedCents)),
-                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-                  },
-                ]}
-              />
-            )}
-          </Hero>
+          <MonthHero data={data} />
 
           {data.budget.plannedCents > 0 ? (
             <Pressable

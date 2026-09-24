@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "./api";
 import { dayLabel, merchantMatchKey } from "./format";
+import { tapSelect } from "./haptic";
 import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet, Switch } from "./ui";
 
 export type ChargeGroup = { name: string; categories: { id: string; name: string }[] };
@@ -130,7 +131,10 @@ export function ChargeSheet({
           group.categories.map((category) => (
             <Pressable
               key={category.id}
-              onPress={() => setCategoryId(category.id)}
+              onPress={() => {
+                if (category.id !== categoryId) tapSelect();
+                setCategoryId(category.id);
+              }}
               style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}
             >
               <Text style={{ fontSize: 16, color: categoryId === category.id ? colors.accentInk : colors.ink }}>{group.name === "Income" ? category.name : `${category.name}`}</Text>

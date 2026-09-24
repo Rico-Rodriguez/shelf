@@ -1,5 +1,6 @@
 import { ReactNode, useRef } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
+import { tapPress } from "./haptic";
 import { colors } from "./ui";
 
 const BUTTON = 76;
@@ -67,6 +68,7 @@ export function SwipeRow({
           <Pressable
             key={action.label}
             onPress={() => {
+              tapPress();
               settle(0);
               action.onPress();
             }}
