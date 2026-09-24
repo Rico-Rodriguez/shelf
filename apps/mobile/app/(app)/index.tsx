@@ -29,7 +29,6 @@ import {
   LedgerRow,
   Loading,
   Note,
-  ReviewBanner,
   Screen,
   Section,
   Segment,
@@ -267,17 +266,17 @@ export default function HomeScreen() {
         <>
           <MonthHero data={data} />
 
-          {/* Robinhood-Style Tactile Quick-Action Pill Strip */}
+          {/* Streamlined Quick-Action Dock */}
           <View style={styles.actionStrip}>
             <SpringPressable
               onPress={() => {
                 tapSelect();
                 setAdding(true);
               }}
-              style={styles.pillButton}
+              style={[styles.pillButton, { flex: 1, justifyContent: "center" }]}
             >
               <Icon name="pencil" size={16} color={colors.ink} />
-              <Text style={styles.pillText}>Quick Add</Text>
+              <Text style={styles.pillText}>Add Expense</Text>
             </SpringPressable>
 
             {data.unreviewed.count > 0 ? (
@@ -286,76 +285,15 @@ export default function HomeScreen() {
                   tapSelect();
                   router.push("/review");
                 }}
-                style={[styles.pillButton, styles.pillBadgeActive]}
+                style={[styles.pillButton, styles.pillBadgeActive, { flex: 1, justifyContent: "center" }]}
               >
                 <Icon name="check" size={16} color={colors.positive} filled />
                 <Text style={[styles.pillText, { color: colors.positive }]}>
-                  {data.unreviewed.count} to review
+                  {`Review (${data.unreviewed.count})`}
                 </Text>
-              </SpringPressable>
-            ) : null}
-
-            <SpringPressable
-              onPress={() => {
-                tapSelect();
-                router.push("/(app)/budget");
-              }}
-              style={styles.pillButton}
-            >
-              <Icon name="chart" size={16} color={colors.ink} />
-              <Text style={styles.pillText}>
-                {plannedTotal > 0 ? `${budgetPct}% of Plan` : "Set Budget"}
-              </Text>
-            </SpringPressable>
-
-            {nextBill ? (
-              <SpringPressable
-                onPress={() => {
-                  tapSelect();
-                  router.push("/bills");
-                }}
-                style={styles.pillButton}
-              >
-                <Icon name="calendar" size={16} color={colors.ink} />
-                <Text style={styles.pillText}>{inDaysPhrase(nextBill.nextDate)}</Text>
               </SpringPressable>
             ) : null}
           </View>
-
-          {/* Monthly Plan Card */}
-          {plannedTotal > 0 ? (
-            <SpringPressable
-              onPress={() => router.push("/(app)/budget")}
-              style={[styles.cardButton, { backgroundColor: colors.card, borderColor: colors.line }]}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>
-                  This month’s plan
-                </Text>
-                <Text style={{ fontSize: 13, color: overPlan ? colors.danger : colors.muted }}>
-                  {overPlan
-                    ? `${money(Math.abs(left))} over the plan`
-                    : `${money(left)} left of ${money(plannedTotal)}`}
-                </Text>
-              </View>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>Open ›</Text>
-            </SpringPressable>
-          ) : data.transactions.length > 0 ? (
-            <SpringPressable
-              onPress={() => router.push("/(app)/budget")}
-              style={[styles.cardButton, { backgroundColor: colors.card, borderColor: colors.line }]}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>
-                  Set a monthly plan
-                </Text>
-                <Text style={{ fontSize: 13, color: colors.muted }}>
-                  See daily safe spending and track your monthly pace.
-                </Text>
-              </View>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>Set ›</Text>
-            </SpringPressable>
-          ) : null}
 
           {/* Empty / Initial Account State */}
           {data.accountCount === 0 && data.transactions.length === 0 ? (
@@ -366,11 +304,6 @@ export default function HomeScreen() {
             </View>
           ) : (
             <>
-              {/* Unreviewed banner fallback */}
-              {data.unreviewed.count > 0 ? (
-                <ReviewBanner label={categorizeLabel(data.unreviewed.count)} onPress={() => router.push("/review")} />
-              ) : null}
-
               {/* Latest Transactions with Direct Swipe Actions */}
               {latest.length > 0 ? (
                 <View style={{ gap: 8 }}>

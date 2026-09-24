@@ -7,7 +7,7 @@ import { tapSelect } from "../../src/haptic";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { celebrate } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, SpringPressable } from "../../src/ui";
+import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, Screen, SearchField, Section, Segment, Sheet, SpringPressable } from "../../src/ui";
 
 type Tx = Charge;
 
@@ -164,14 +164,6 @@ export default function ActivityScreen() {
       }
     >
       {error ? <Note>{error}</Note> : null}
-      {unreviewed > 0 ? (
-        <ReviewBanner
-          label={categorizeLabel(unreviewed)}
-          onPress={() => {
-            router.push("/review");
-          }}
-        />
-      ) : null}
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <View style={{ flex: 1 }}>
           <SearchField value={query} onChangeText={setQuery} placeholder="Search merchants or notes" />

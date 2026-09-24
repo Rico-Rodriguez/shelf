@@ -743,12 +743,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       }
     })
     .onEnd((event) => {
-      if (event.translationY > 110 || event.velocityY > 600) {
-        translateY.value = withSpring(800, { damping: 26, stiffness: 360 }, () => {
+      if (event.translationY > 90 || event.velocityY > 500) {
+        translateY.value = withTiming(650, { duration: 160, easing: Easing.out(Easing.quad) }, () => {
           runOnJS(dismiss)();
         });
       } else {
-        translateY.value = withSpring(0, { damping: 26, stiffness: 420 });
+        translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
       }
     });
 
@@ -759,7 +759,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const backdropAnimatedStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       translateY.value,
-      [0, 240],
+      [0, 200],
       [1, 0],
       Extrapolation.CLAMP,
     );
@@ -767,7 +767,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   });
 
   return (
-    <Modal visible animationType="fade" transparent onRequestClose={dismiss}>
+    <Modal visible animationType="none" transparent onRequestClose={dismiss}>
       <View style={styles.sheetWrap}>
         <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />

@@ -160,7 +160,35 @@ export function ChargeSheet({
   const merchantName = tx.merchantName || name;
 
   return (
-    <Sheet title={merchantName} onClose={onClose}>
+    <Sheet
+      title={pickingCategory ? "Select Category" : merchantName}
+      onClose={pickingCategory ? () => setPickingCategory(false) : onClose}
+    >
+      {pickingCategory ? (
+        <View style={{ gap: 12 }}>
+          <Pressable
+            onPress={() => setPickingCategory(false)}
+            style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 }}
+          >
+            <View style={{ transform: [{ rotate: "180deg" }] }}>
+              <Icon name="chevron" size={14} color={colors.accentInk} />
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>
+              Back to details
+            </Text>
+          </Pressable>
+          <CategoryPicker
+            groups={groups}
+            selected={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id);
+              setPickingCategory(false);
+            }}
+            onClose={() => setPickingCategory(false)}
+          />
+        </View>
+      ) : (
+        <>
       <View style={{ alignItems: "center", gap: 6, paddingVertical: 8 }}>
         <FlowAmount cents={tx.amountCents} size={36} />
         <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center" }}>
@@ -351,21 +379,9 @@ export function ChargeSheet({
       ) : null}
 
       <Button label="Save Changes" onPress={() => void save()} busy={busy} block />
-
-      {pickingCategory ? (
-        <Sheet title="Select Category" onClose={() => setPickingCategory(false)}>
-          <CategoryPicker
-            groups={groups}
-            selected={categoryId}
-            onSelect={(id) => {
-              setCategoryId(id);
-              setPickingCategory(false);
-            }}
-            onClose={() => setPickingCategory(false)}
-          />
-        </Sheet>
-      ) : null}
-    </Sheet>
+    </>
+  )}
+</Sheet>
   );
 }
 
