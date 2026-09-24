@@ -293,44 +293,7 @@ export default function HomeScreen() {
             </SpringPressable>
           </View>
 
-          {/* Financial Pulse Cards (Monarch / Rocket style) */}
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <SpringPressable
-              onPress={() => router.push("/(app)/budget")}
-              style={[styles.pulseCard, { flex: 1 }]}
-            >
-              <Text style={styles.pulseLabel}>{plannedTotal > 0 ? "Remaining" : "Saved"}</Text>
-              <Text
-                style={[
-                  styles.pulseFigure,
-                  plannedTotal > 0 && left < 0 ? { color: colors.danger } : { color: colors.ink },
-                ]}
-                numberOfLines={1}
-              >
-                {money(plannedTotal > 0 ? left : data.cashFlow.savedCents)}
-              </Text>
-            </SpringPressable>
 
-            <SpringPressable
-              onPress={() => router.push("/cash-flow")}
-              style={[styles.pulseCard, { flex: 1 }]}
-            >
-              <Text style={styles.pulseLabel}>Income</Text>
-              <Text style={[styles.pulseFigure, { color: colors.positive }]} numberOfLines={1}>
-                {money(data.cashFlow.incomeCents)}
-              </Text>
-            </SpringPressable>
-
-            <SpringPressable
-              onPress={() => router.push("/bills")}
-              style={[styles.pulseCard, { flex: 1 }]}
-            >
-              <Text style={styles.pulseLabel}>Bills due</Text>
-              <Text style={styles.pulseFigure} numberOfLines={1}>
-                {bills.length > 0 ? money(bills.reduce((s, b) => s + b.amountCents, 0)) : "None"}
-              </Text>
-            </SpringPressable>
-          </View>
 
           {/* Empty / Initial Account State */}
           {data.accountCount === 0 && data.transactions.length === 0 ? (
@@ -587,32 +550,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  pulseCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  pulseLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.tertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  pulseFigure: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.ink,
-    letterSpacing: -0.3,
-    fontVariant: ["tabular-nums"],
   },
 });
