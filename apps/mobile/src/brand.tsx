@@ -1,4 +1,5 @@
-import { Fraunces_600SemiBold, useFonts } from "@expo-google-fonts/fraunces";
+import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces/600SemiBold";
+import { useFonts } from "expo-font";
 import { Platform } from "react-native";
 
 export function useWordmark(): string {
