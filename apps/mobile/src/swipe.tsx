@@ -10,12 +10,6 @@ export type SwipeAction = {
   onPress: () => void;
 };
 
-const toneStyle = {
-  ink: { backgroundColor: colors.ink, color: "#fff" },
-  danger: { backgroundColor: colors.danger, color: "#fff" },
-  accent: { backgroundColor: colors.accent, color: "#fff" },
-};
-
 export function SwipeRow({
   children,
   actions,
@@ -29,6 +23,11 @@ export function SwipeRow({
   divided?: boolean;
   onPress?: () => void;
 }) {
+  const toneStyle = {
+    ink: { backgroundColor: colors.ink, color: colors.controlInk },
+    danger: { backgroundColor: colors.danger, color: "#fff" },
+    accent: { backgroundColor: colors.accent, color: colors.controlInk },
+  };
   const width = Math.max(BUTTON, actions.length * BUTTON);
   const x = useRef(new Animated.Value(0)).current;
   const offset = useRef(0);
