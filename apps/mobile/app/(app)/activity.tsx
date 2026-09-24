@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
-import { tapSuccess } from "../../src/haptic";
+import { celebrate } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
 import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
 
@@ -77,7 +77,7 @@ export default function ActivityScreen() {
   }, [query]);
 
   const load = useCallback(() => {
-    void Promise.all([
+    return Promise.all([
       read<TxPayload>(txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range)),
       read<{ groups: Group[] }>("/api/categories"),
       read<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
@@ -95,7 +95,11 @@ export default function ActivityScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load activity"));
   }, [search, unreviewedOnly, categoryId, accountFilter, tag, range]);
 
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, Tx[]>();
@@ -136,7 +140,7 @@ export default function ActivityScreen() {
 
   async function confirmReview() {
     if (!currentReview) return;
-    tapSuccess();
+    celebrate("Categorized");
     await patch(currentReview.id, { categoryId: reviewCategory || null, reviewed: true });
     if (reviewAlways && reviewCategory) {
       const merchant = currentReview.merchantName || currentReview.name;
@@ -171,6 +175,7 @@ export default function ActivityScreen() {
       setName("");
       setAmount("");
       setAdding(false);
+      celebrate("Added");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add");
@@ -181,7 +186,7 @@ export default function ActivityScreen() {
 
   if (reviewing) {
     return (
-      <Screen title="Review" framed action={<Pressable onPress={() => setReviewing(false)}><Text style={{ color: colors.accentInk, fontWeight: "600" }}>Close</Text></Pressable>}>
+      <Screen title="Review" framed onRefresh={load} action={<Pressable onPress={() => setReviewing(false)}><Text style={{ color: colors.accentInk, fontWeight: "600" }}>Close</Text></Pressable>}>
         {error ? <Note>{error}</Note> : null}
         {!currentReview ? <Note>You’re caught up</Note> : null}
         {currentReview ? (
@@ -242,6 +247,7 @@ export default function ActivityScreen() {
     <Screen
       title="Activity"
       framed
+      onRefresh={load}
       action={
         <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>

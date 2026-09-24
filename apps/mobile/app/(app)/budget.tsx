@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
+import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
 
 type BudgetRow = {
@@ -49,7 +50,7 @@ export default function BudgetScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    void read<Budget>(`/api/budget?year=${cursor.year}&month=${cursor.month}`)
+    return read<Budget>(`/api/budget?year=${cursor.year}&month=${cursor.month}`)
       .then((next) => {
         setData(next);
         setIncome((Number(next.plannedIncomeCents) / 100).toFixed(0));
@@ -58,7 +59,11 @@ export default function BudgetScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load the plan"));
   }, [cursor]);
 
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const groups = useMemo(() => {
     if (!data) return [];
@@ -110,6 +115,7 @@ export default function BudgetScreen() {
     }
     await Promise.all(jobs);
     setEditing(null);
+    celebrate("Saved");
     load();
   }
 
@@ -157,6 +163,7 @@ export default function BudgetScreen() {
     <Screen
       title="Budget"
       framed
+      onRefresh={load}
       action={
         <Pressable onPress={() => setPlanOpen(true)}>
           <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>

@@ -41,6 +41,7 @@ export function SpendChart({
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
   const [reveal, setReveal] = useState(0);
+  const [pulse, setPulse] = useState(0);
   const lastIndex = useRef<number | null>(null);
   const height = 156;
   const signature = series.map((point) => point.cents).join(",");
@@ -57,6 +58,23 @@ export function SpendChart({
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [signature]);
+
+  useEffect(() => {
+    if (active != null) return;
+    let frame = 0;
+    const started = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - started;
+      if (elapsed > 1400) {
+        setPulse(0);
+        return;
+      }
+      setPulse((Math.sin(elapsed / 180) + 1) / 2);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [active, signature]);
 
   const geometry = useMemo(() => {
     if (series.length < 2 || width <= 0) return null;
@@ -141,6 +159,7 @@ export function SpendChart({
           {active != null && dot ? <Line x1={dot.x} x2={dot.x} y1={8} y2={height - 4} stroke={colors.ink} strokeOpacity={0.28} strokeWidth={1} /> : null}
           {dot ? (
             <>
+              {active == null ? <Circle cx={dot.x} cy={dot.y} r={7 + pulse * 5} fill={color} opacity={0.18 * (1 - pulse)} /> : null}
               <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 6.5} fill={color} />
               <Circle cx={dot.x} cy={dot.y} r={active == null ? 2.2 : 3} fill={colors.card} />
             </>
