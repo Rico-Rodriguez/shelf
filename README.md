@@ -42,9 +42,14 @@ These changes are inside the installed iOS app, so they need a new `Shelf.ipa`:
 
 Server changes, such as an API route or the database, deploy with the website. The phone does not need an update for those unless its screens have to change too.
 
-GitHub Actions builds that install file on a Mac when `apps/mobile` or `.github/workflows/ios-ipa.yml` changes on `master` or `cursor/native-parity-08b4`. The run summary prints a direct download. That link lasts about ten minutes. After it expires, the same file stays on the `ipa` release, named with the app version, for example `https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf-1.2.0-2.ipa`. Sideload that file. Do not unzip it. The Actions artifact named Shelf is a zip around the IPA, and macOS will not open that zip. The IPA has an ad-hoc signature so the package is valid. Your sideload tool still signs it with your Apple ID. The Actions page for this private repo is only visible in a browser signed in as the account that owns the repository.
+GitHub Actions builds that install file on a Mac runner (`.github/workflows/ios-ipa.yml`). Because macOS runners consume minutes at a 10× rate, **this workflow is strictly manual (`workflow_dispatch`) to avoid exhausting GitHub Actions quotas**. To build a new IPA:
+1. Go to your repository on GitHub → **Actions** → **Shelf IPA**.
+2. Click **Run workflow** (or run `gh workflow run ios-ipa.yml`).
+3. The run summary prints a direct download link (lasts ~10 minutes). After it expires, the file is saved to the `ipa` release tag (e.g. `https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf-1.2.0-2.ipa`). Sideload that file. Do not unzip it.
 
-The phone must already contain `expo-updates` for a later screen change to arrive on its own. The install built before that package was added cannot download an update. One sideload of an IPA that includes it is enough.
+> [!IMPORTANT]
+> **AI Assistant Rule**: Whenever making changes that touch native modules, iOS native code, `apps/mobile/app.json` permissions/plugins/icon/splash, or bumping `runtimeVersion`, you **MUST explicitly alert the user** that an OTA update is insufficient and they need to trigger the **Shelf IPA** workflow manually. For everyday UI, styling, screens, and copy changes, inform them that the automatic OTA pipeline (`publish-ota.yml`) handles it seamlessly hands-off on push without needing a manual build.
+
 
 `scripts/publish-ota.mjs` is what the GitHub job runs. It exports the iOS bundle with `EXPO_PUBLIC_API_URL` set to the live server, names each file by its hash, and stores the Expo app config in the update, including the `shelf` URL scheme. A missing scheme makes the first open of an update crash. The next open then uses the copy that was installed. Asset names cannot contain a slash, or the phone refuses to store the update.
 

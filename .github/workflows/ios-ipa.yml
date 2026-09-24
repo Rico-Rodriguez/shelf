@@ -2,14 +2,6 @@ name: Shelf IPA
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-      - cursor/native-parity-08b4
-      - cursor/ipa-download-link-be4e
-    paths:
-      - "apps/mobile/**"
-      - ".github/workflows/ios-ipa.yml"
 
 concurrency:
   group: shelf-ipa-${{ github.ref }}

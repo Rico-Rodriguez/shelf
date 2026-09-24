@@ -1,0 +1,60 @@
+workflows:
+  shelf-ios-ipa:
+    name: Shelf iOS IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      vars:
+        CI: "1"
+        EXPO_NO_TELEMETRY: "1"
+        EXPO_NO_DOCTOR: "1"
+        EXPO_PUBLIC_API_URL: "https://shelf-xi-hazel.vercel.app"
+    scripts:
+      - name: Install JavaScript dependencies
+        script: |
+          cd apps/mobile
+          npm ci --legacy-peer-deps
+      - name: Generate iOS project (Expo prebuild)
+        script: |
+          cd apps/mobile
+          npx expo prebuild --platform ios --no-install
+      - name: Install CocoaPods
+        script: |
+          cd apps/mobile/ios
+          pod install
+      - name: Archive without signing
+        script: |
+          set -euo pipefail
+          cd apps/mobile
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme: $SCHEME"
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$CM_BUILD_DIR/Shelf.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO
+      - name: Package Shelf.ipa
+        script: |
+          set -euo pipefail
+          APP=$(find "$CM_BUILD_DIR/Shelf.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP"
+          codesign --force --deep --sign - "$APP"
+          mkdir -p "$CM_BUILD_DIR/Payload"
+          cp -R "$APP" "$CM_BUILD_DIR/Payload/"
+          (cd "$CM_BUILD_DIR" && zip -r -y -X Shelf.ipa Payload)
+          mkdir -p "$CM_BUILD_DIR/dist"
+          mv "$CM_BUILD_DIR/Shelf.ipa" "$CM_BUILD_DIR/dist/Shelf.ipa"
+          ls -lh "$CM_BUILD_DIR/dist/Shelf.ipa"
+    artifacts:
+      - dist/Shelf.ipa
