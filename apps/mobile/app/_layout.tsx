@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useShelfType } from "../src/brand";
 import { SessionProvider } from "../src/session";
+import { ThemeProvider, useTheme } from "../src/theme";
 
 function useOverTheAirUpdate() {
   useEffect(() => {
@@ -36,15 +37,26 @@ function useOverTheAirUpdate() {
   }, []);
 }
 
+function RootStack() {
+  const { palette } = useTheme();
+  return (
+    <>
+      <StatusBar style={palette.scheme === "dark" ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }} />
+    </>
+  );
+}
+
 export default function RootLayout() {
   useShelfType();
   useOverTheAirUpdate();
   return (
     <SafeAreaProvider>
-      <SessionProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#f3f5f7" } }} />
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider>
+          <RootStack />
+        </SessionProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
