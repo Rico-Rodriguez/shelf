@@ -62,7 +62,6 @@ type Dash = {
 };
 
 function MonthHero({ data }: { data: Dash }) {
-  const [viewMode, setViewMode] = useState<"spent" | "left">("spent");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const planned = data.budget.plannedCents > 0;
   const left = data.budget.remainingCents;
@@ -82,11 +81,6 @@ function MonthHero({ data }: { data: Dash }) {
         ]
       : undefined;
 
-  function toggleMode() {
-    tapSelect();
-    setViewMode((prev) => (prev === "spent" ? "left" : "spent"));
-  }
-
   let heroStatus: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null = null;
   if (!scrub) {
     if (overPlan) {
@@ -100,42 +94,7 @@ function MonthHero({ data }: { data: Dash }) {
     }
   }
 
-  const isLeftMode = viewMode === "left";
-  const displayCents = scrub
-    ? scrub.cents
-    : isLeftMode
-    ? overPlan
-      ? Math.abs(left)
-      : Math.max(0, left)
-    : data.cashFlow.spendingCents;
-
-  const heroLabel = scrub
-    ? dayLabel(scrub.date)
-    : isLeftMode
-    ? overPlan
-      ? "Over plan this month"
-      : "Left to spend this month"
-    : "Spent this month";
-
-  const heroTone: "good" | "bad" | undefined = isLeftMode ? (overPlan ? "bad" : "good") : undefined;
-
-  const facts = isLeftMode
-    ? [
-        {
-          kicker: "Spent so far",
-          value: money(data.cashFlow.spendingCents),
-        },
-        {
-          kicker: "Daily safe",
-          value: dailyPace != null ? `${money(dailyPace)}/d` : "—",
-          color: overPlan ? colors.danger : colors.positive,
-        },
-        {
-          kicker: "Planned budget",
-          value: money(data.budget.plannedCents),
-        },
-      ]
-    : planned
+  const facts = planned
     ? [
         {
           kicker: overPlan ? "Over plan" : "Left to spend",
@@ -161,77 +120,16 @@ function MonthHero({ data }: { data: Dash }) {
         },
       ];
 
-  const togglePill = (
-    <SpringPressable
-      onPress={toggleMode}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        paddingHorizontal: 9,
-        paddingVertical: 4,
-        borderRadius: 999,
-        backgroundColor: colors.fill,
-      }}
-    >
-      <Icon name="more" size={13} color={colors.muted} />
-      <Text style={{ fontSize: 11, fontWeight: "600", color: colors.ink }}>
-        {isLeftMode ? "Show Spent" : "Show Left"}
-      </Text>
-    </SpringPressable>
-  );
-
   return (
     <Hero
-      label={heroLabel}
-      cents={displayCents}
-      tone={heroTone}
-      topRight={togglePill}
-      onPressFigure={toggleMode}
+      label={scrub ? dayLabel(scrub.date) : "Spent this month"}
+      cents={scrub ? scrub.cents : data.cashFlow.spendingCents}
       points={data.spendSeries}
       baselinePoints={baselinePoints}
       onScrub={setScrub}
       live={scrub != null}
       status={heroStatus}
     >
-      <View style={{ flexDirection: "row", gap: 6, marginTop: 12, marginBottom: 4 }}>
-        <SpringPressable
-          onPress={() => {
-            if (viewMode !== "spent") {
-              tapSelect();
-              setViewMode("spent");
-            }
-          }}
-          style={{
-            paddingHorizontal: 13,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: !isLeftMode ? colors.ink : colors.fill,
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: !isLeftMode ? colors.controlInk : colors.muted }}>
-            Spent
-          </Text>
-        </SpringPressable>
-        <SpringPressable
-          onPress={() => {
-            if (viewMode !== "left") {
-              tapSelect();
-              setViewMode("left");
-            }
-          }}
-          style={{
-            paddingHorizontal: 13,
-            paddingVertical: 6,
-            borderRadius: 999,
-            backgroundColor: isLeftMode ? colors.ink : colors.fill,
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: "700", color: isLeftMode ? colors.controlInk : colors.muted }}>
-            Left to spend
-          </Text>
-        </SpringPressable>
-      </View>
       <Facts items={facts} />
     </Hero>
   );
@@ -375,26 +273,28 @@ export default function HomeScreen() {
                 tapSelect();
                 setAdding(true);
               }}
-              style={[styles.pillButton, { flex: 1, justifyContent: "center" }]}
+              style={styles.actionBtn}
             >
               <Icon name="pencil" size={16} color={colors.ink} />
-              <Text style={styles.pillText}>Add Expense</Text>
+              <Text style={styles.actionBtnText}>Add Expense</Text>
             </SpringPressable>
 
-            {data.unreviewed.count > 0 ? (
-              <SpringPressable
-                onPress={() => {
-                  tapSelect();
+            <SpringPressable
+              onPress={() => {
+                tapSelect();
+                if (data.unreviewed.count > 0) {
                   router.push("/review");
-                }}
-                style={[styles.pillButton, styles.pillBadgeActive, { flex: 1, justifyContent: "center" }]}
-              >
-                <Icon name="check" size={16} color={colors.positive} filled />
-                <Text style={[styles.pillText, { color: colors.positive }]}>
-                  {`Review (${data.unreviewed.count})`}
-                </Text>
-              </SpringPressable>
-            ) : null}
+                } else {
+                  router.push("/(app)/activity");
+                }
+              }}
+              style={styles.actionBtn}
+            >
+              <Icon name="check" size={16} color={colors.ink} />
+              <Text style={styles.actionBtnText}>
+                {data.unreviewed.count > 0 ? `Review (${data.unreviewed.count})` : "Review"}
+              </Text>
+            </SpringPressable>
           </View>
 
           {/* Empty / Initial Account State */}
@@ -624,34 +524,30 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   actionStrip: {
     flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
+    gap: 10,
     alignItems: "center",
   },
-  pillButton: {
+  actionBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 46,
+    borderRadius: 14,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
     shadowColor: "#000",
     shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
-  pillBadgeActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  pillText: {
-    fontSize: 13,
+  actionBtnText: {
+    fontSize: 14,
     fontWeight: "600",
     color: colors.ink,
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
   cardButton: {
     minHeight: 52,
