@@ -2,7 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { categorizeLabel, dayLabel, daysLeftInMonth, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
+import { categorizeLabel, dayLabel, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
 import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
 
 type Dash = {
@@ -30,22 +30,13 @@ function MonthHero({ data }: { data: Dash }) {
   const planned = data.budget.plannedCents > 0;
   const left = data.budget.remainingCents;
   const overPlan = planned && left < 0;
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const expected = planned ? Math.round(data.budget.plannedCents * (now.getDate() / daysInMonth)) : 0;
-  const paceDelta = expected - data.budget.spentCents;
-  const pace = !planned
-    ? null
-    : overPlan
-      ? `${money(Math.abs(left))} over`
-      : Math.abs(paceDelta) < 100
-        ? "On pace"
-        : paceDelta > 0
-          ? `${money(paceDelta)} under pace`
-          : `${money(-paceDelta)} over pace`;
   const facts = planned
     ? [
-        { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
+        {
+          kicker: overPlan ? "Over plan" : "Left",
+          value: money(Math.abs(left)),
+          color: overPlan ? colors.danger : colors.positive,
+        },
         { kicker: "Plan", value: money(data.budget.plannedCents) },
         {
           kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
@@ -63,13 +54,11 @@ function MonthHero({ data }: { data: Dash }) {
       ];
   return (
     <Hero
-      label={scrub ? dayLabel(scrub.date) : planned ? (overPlan ? "Over the plan" : "Left to spend") : "Spent this month"}
-      cents={scrub ? scrub.cents : planned ? Math.abs(left) : data.cashFlow.spendingCents}
-      tone={scrub ? undefined : planned ? (overPlan ? "bad" : "good") : undefined}
+      label={scrub ? dayLabel(scrub.date) : "Spent this month"}
+      cents={scrub ? scrub.cents : data.cashFlow.spendingCents}
       points={data.spendSeries}
       onScrub={setScrub}
       live={scrub != null}
-      status={pace ? { label: pace, tone: overPlan || pace.includes("over") ? "bad" : "good" } : null}
     >
       <Facts items={facts} />
     </Hero>
@@ -122,8 +111,6 @@ export default function HomeScreen() {
   const suggestions = data?.suggestedSubscriptions?.length ?? 0;
   const left = data?.budget.remainingCents ?? 0;
   const overPlan = Boolean(data && data.budget.plannedCents > 0 && left < 0);
-  const daysLeft = daysLeftInMonth();
-  const dayWord = daysLeft === 1 ? "day" : "days";
 
   return (
     <Screen framed onRefresh={load}>
@@ -153,8 +140,8 @@ export default function HomeScreen() {
             >
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={{ fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>This month’s plan</Text>
-                <Text style={{ fontSize: 13, color: colors.muted }}>
-                  {overPlan ? `${money(Math.abs(left))} over · ${daysLeft} ${dayWord} left` : `${money(data.budget.spentCents)} of ${money(data.budget.plannedCents)}`}
+                <Text style={{ fontSize: 13, color: overPlan ? colors.danger : colors.muted }}>
+                  {overPlan ? `${money(Math.abs(left))} over the plan` : `${money(left)} left of ${money(data.budget.plannedCents)}`}
                 </Text>
               </View>
               <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>Open</Text>
@@ -190,7 +177,7 @@ export default function HomeScreen() {
           ) : (
             <>
               {data.unreviewed.count > 0 ? (
-                <ReviewBanner label={categorizeLabel(data.unreviewed.count)} onPress={() => router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } })} />
+                <ReviewBanner label={categorizeLabel(data.unreviewed.count)} onPress={() => router.push("/review")} />
               ) : null}
 
               {latest.length > 0 ? (
