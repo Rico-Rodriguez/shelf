@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { money, shortDate } from "../src/format";
+import { goalPace, mediumDate, money } from "../src/format";
 import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Sheet } from "../src/ui";
 
 type Goal = {
@@ -111,8 +111,10 @@ export default function GoalsScreen() {
         <Card>
           {goals.map((goal, index) => {
             const done = goal.remainingCents <= 0 && goal.targetCents > 0;
+            const pace = goalPace(goal);
             const when = [
-              goal.targetDate ? `By ${shortDate(goal.targetDate)}` : "",
+              pace.label,
+              goal.targetDate ? `By ${mediumDate(goal.targetDate)}` : "",
               goal.accounts.map((account) => account.name).join(", "),
             ]
               .filter(Boolean)

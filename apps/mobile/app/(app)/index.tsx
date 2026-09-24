@@ -113,7 +113,7 @@ export default function HomeScreen() {
           ) : (
             <>
               {data.unreviewed.count > 0 ? (
-                <ReviewBanner label={categorizeLabel(data.unreviewed.count)} onPress={() => router.push("/(app)/activity")} />
+                <ReviewBanner label={categorizeLabel(data.unreviewed.count)} onPress={() => router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } })} />
               ) : null}
 
               {latest.length > 0 ? (

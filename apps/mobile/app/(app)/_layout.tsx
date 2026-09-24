@@ -1,8 +1,8 @@
 import { router, Tabs, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { AppState, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { api } from "../../src/api";
+import { ApiError, api } from "../../src/api";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { colors } from "../../src/ui";
@@ -15,17 +15,23 @@ const TABS = [
   { name: "more", title: "More", icon: "more" },
 ] as const;
 
-function MobileBar({ unread }: { unread: number }) {
+function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string }) {
   const insets = useSafeAreaInsets();
   const wordmark = useWordmark();
   return (
     <View style={{ paddingTop: insets.top, backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1 }} />
-        <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
-          Shelf
-        </Text>
+        <View style={{ alignItems: "center" }}>
+          <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
+            Shelf
+          </Text>
+          {syncLabel ? <Text style={{ fontSize: 11, color: syncLabel === "Sync failed" ? colors.danger : colors.muted }}>{syncLabel}</Text> : null}
+        </View>
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
+          <Pressable accessibilityLabel="Search" onPress={() => router.push("/search")} style={barButton}>
+            <Icon name="search" size={20} color={colors.ink} />
+          </Pressable>
           <Pressable accessibilityLabel="Settings" onPress={() => router.push("/settings")} style={barButton}>
             <Icon name="gear" size={20} color={colors.ink} />
           </Pressable>
@@ -99,6 +105,34 @@ export default function AppTabs() {
   const path = usePathname();
   const [reviewCount, setReviewCount] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [syncLabel, setSyncLabel] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    const tick = (pendingOnly: boolean) => {
+      setSyncLabel("Syncing");
+      void api("/api/plaid/sync", { method: "POST", body: JSON.stringify({ pendingOnly }) })
+        .then(() => {
+          if (alive) setSyncLabel("Up to date");
+        })
+        .catch((err: unknown) => {
+          if (!alive) return;
+          setSyncLabel(err instanceof ApiError && err.status === 403 ? "Up to date" : "Sync failed");
+        });
+    };
+    tick(false);
+    const focus = AppState.addEventListener("change", (state) => {
+      if (state === "active") tick(true);
+    });
+    const pending = setInterval(() => tick(true), 60 * 1000);
+    const full = setInterval(() => tick(false), 15 * 60 * 1000);
+    return () => {
+      alive = false;
+      focus.remove();
+      clearInterval(pending);
+      clearInterval(full);
+    };
+  }, []);
 
   useEffect(() => {
     void api<{ unreviewed: number }>("/api/transactions?countOnly=1")
@@ -122,7 +156,7 @@ export default function AppTabs() {
         />
       )}
       screenOptions={{
-        header: () => <MobileBar unread={unread} />,
+        header: () => <MobileBar unread={unread} syncLabel={syncLabel} />,
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Home" }} />

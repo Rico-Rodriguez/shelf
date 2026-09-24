@@ -23,6 +23,7 @@ export function Icon({
   if (name === "chevron") return <Glyph size={size} color={color} text="›" />;
   if (name === "bell") return <Glyph size={size} color={color} text="◌" />;
   if (name === "gear") return <Glyph size={size} color={color} text="⚙" />;
+  if (name === "search") return <Glyph size={size} color={color} text="⌕" />;
   if (name === "spark") return <Glyph size={size} color={color} text="↗" />;
   if (name === "calendar") return <Glyph size={size} color={color} text="▦" />;
   if (name === "flag") return <Glyph size={size} color={color} text="⚑" />;

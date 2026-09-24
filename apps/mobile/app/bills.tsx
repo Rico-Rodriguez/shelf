@@ -1,28 +1,70 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { flowMoney, inDaysPhrase, money } from "../src/format";
-import { Back, Button, Card, Field, Hero, LedgerRow, Loading, Note, Screen, Section, Sheet } from "../src/ui";
+import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
+import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Sheet } from "../src/ui";
 
 type Bill = {
   id: string;
   merchantName: string;
   amountCents: number;
-  nextDate: string;
   cadence: string;
+  nextDate: string;
+  isIncome: boolean;
   isActive: boolean;
+  categoryId: string | null;
+  accountId: string | null;
+  kind?: "bill" | "subscription";
+  priceDeltaCents?: number | null;
+};
+
+type Draft = {
+  merchantName: string;
+  amountCents: number;
+  cadence: string;
+  nextDate: string;
+  categoryId: string | null;
+  accountId: string | null;
   isIncome: boolean;
 };
 
-type Draft = { merchantName: string; amountCents: number; cadence: string };
+type Form = {
+  merchantName: string;
+  amount: string;
+  cadence: string;
+  nextDate: string;
+  categoryId: string;
+  accountId: string;
+  kind: "bill" | "subscription";
+};
+
+const CADENCES = [
+  ["weekly", "Weekly"],
+  ["biweekly", "Biweekly"],
+  ["monthly", "Monthly"],
+  ["quarterly", "Quarterly"],
+  ["yearly", "Yearly"],
+] as const;
+
+const CADENCE_LABEL: Record<string, string> = Object.fromEntries(CADENCES);
+const emptyForm = (): Form => ({ merchantName: "", amount: "", cadence: "monthly", nextDate: todayISO(), categoryId: "", accountId: "", kind: "bill" });
 
 export default function BillsScreen() {
+  const now = new Date();
+  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [rows, setRows] = useState<Bill[] | null>(null);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [view, setView] = useState<"list" | "calendar">("list");
+  const [findOpen, setFindOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [suggestions, setSuggestions] = useState<Draft[]>([]);
+  const [editing, setEditing] = useState<Bill | "new" | null>(null);
+  const [form, setForm] = useState<Form>(emptyForm);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [groups, setGroups] = useState<{ categories: { id: string; name: string }[] }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [picking, setPicking] = useState<"cadence" | "category" | "account" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Bill | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [merchant, setMerchant] = useState("");
-  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
 
   function load() {
     void api<{ recurrences: Bill[] }>("/api/recurring")
@@ -33,116 +75,320 @@ export default function BillsScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load bills"));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    void api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
+    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
+  }, []);
+
+  const bills = (rows ?? [])
+    .filter((row) => !row.isIncome)
+    .sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return a.nextDate.localeCompare(b.nextDate);
+    });
+  const focus = view === "calendar" ? cursor : { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const projected = useMemo(
+    () =>
+      bills
+        .filter((row) => row.isActive)
+        .flatMap((row) => occurrencesInMonth(row.nextDate, row.cadence, focus.year, focus.month).map((date) => ({ ...row, date }))),
+    [bills, focus.year, focus.month],
+  );
+  const monthlyBills = bills.filter((row) => row.isActive).reduce((sum, row) => sum + Math.round(annualizedCents(row.amountCents, row.cadence) / 12), 0);
+  const outflow = projected.reduce((sum, row) => sum + row.amountCents, 0);
+  const found = suggestions.filter((draft) => !draft.isIncome);
+  const categories = groups.flatMap((group) => group.categories);
+  const range = monthRange(focus.year, focus.month);
+  const today = todayISO();
+  const byDate = new Map<string, number>();
+  for (const row of projected) byDate.set(row.date, (byDate.get(row.date) ?? 0) + row.amountCents);
+  let run = 0;
+  const curve = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, cents]) => {
+      run += cents;
+      return { date, cents: run };
+    });
+  const points = curve.length ? [{ date: range.start, cents: 0 }, ...curve] : [];
+  const delta = outflow - monthlyBills;
+  const status =
+    monthlyBills <= 0 || Math.abs(delta) < 100 ? null : delta > 0 ? `${money(delta)} above typical` : `${money(-delta)} under typical`;
+  const next = [...projected].filter((row) => row.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const thisMonth = focus.year === now.getFullYear() && focus.month === now.getMonth() + 1;
+  const days = new Date(cursor.year, cursor.month, 0).getDate();
+  const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
 
   async function detect() {
-    const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
-    setDrafts(res.suggestions);
+    setFindOpen(true);
+    setFinding(true);
+    try {
+      const res = await api<{ suggestions: Draft[] }>("/api/recurring", { method: "POST", body: JSON.stringify({ action: "detect" }) });
+      setSuggestions(res.suggestions.filter((draft) => !draft.isIncome));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not look for bills");
+    } finally {
+      setFinding(false);
+    }
   }
 
-  const bills = rows ?? [];
-  const total = bills.filter((row) => row.isActive && !row.isIncome).reduce((sum, row) => sum + row.amountCents, 0);
+  async function confirm(drafts: Draft[]) {
+    const outgoing = drafts.filter((draft) => !draft.isIncome);
+    if (!outgoing.length) {
+      setSuggestions([]);
+      return;
+    }
+    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: outgoing }) });
+    setSuggestions([]);
+    setFindOpen(false);
+    load();
+  }
+
+  async function skip(draft: Draft) {
+    await api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "dismiss", merchantName: draft.merchantName }) });
+    setSuggestions((current) => current.filter((row) => row.merchantName !== draft.merchantName));
+  }
+
+  function openNew() {
+    setConfirmDelete(false);
+    setPicking(null);
+    setForm(emptyForm());
+    setEditing("new");
+  }
+
+  function openEdit(row: Bill) {
+    setConfirmDelete(false);
+    setPicking(null);
+    setForm({
+      merchantName: row.merchantName,
+      amount: (row.amountCents / 100).toFixed(2),
+      cadence: row.cadence,
+      nextDate: row.nextDate,
+      categoryId: row.categoryId ?? "",
+      accountId: row.accountId ?? "",
+      kind: row.kind ?? "bill",
+    });
+    setEditing(row);
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      if (editing === "new") {
+        await api("/api/recurring", { method: "POST", body: JSON.stringify({ ...form, amount: Number(form.amount), kind: form.kind }) });
+      } else if (editing) {
+        await api("/api/recurring", {
+          method: "PATCH",
+          body: JSON.stringify({
+            id: editing.id,
+            merchantName: form.merchantName,
+            amount: Number(form.amount),
+            cadence: form.cadence,
+            nextDate: form.nextDate,
+            isIncome: false,
+            categoryId: form.categoryId || null,
+            accountId: form.accountId || null,
+            kind: form.kind,
+          }),
+        });
+      }
+      setEditing(null);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the bill");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pause(row: Bill) {
+    await api("/api/recurring", { method: "PATCH", body: JSON.stringify({ id: row.id, isActive: !row.isActive }) });
+    setEditing(null);
+    load();
+  }
+
+  async function remove(row: Bill) {
+    await api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: row.id }) });
+    setEditing(null);
+    load();
+  }
+
+  function detail(row: Bill) {
+    const bits = [CADENCE_LABEL[row.cadence] ?? row.cadence];
+    if ((row.kind ?? "bill") === "subscription") bits.push("Subscription");
+    bits.push(row.isActive ? `Due ${inDaysPhrase(row.nextDate)}` : "Paused");
+    if (row.priceDeltaCents) bits.push(row.priceDeltaCents > 0 ? "Up" : "Down");
+    return bits.join(" · ");
+  }
 
   return (
     <Screen
       title="Bills"
       refresh={<Back />}
       action={
-        <Button label="Add" onPress={() => setAdding(true)} />
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <Button label="Find bills" tone="quiet" onPress={() => void detect()} />
+          <Button label="Add" onPress={openNew} />
+        </View>
       }
     >
       {error ? <Note>{error}</Note> : null}
       {rows === null && !error ? <Loading /> : null}
-      {rows ? <Hero label="Coming up" cents={total} /> : null}
-      <Button label="Find recurring charges" tone="quiet" onPress={() => void detect()} />
-      {drafts.length ? (
-        <>
-          <Section title="Looks like a bill" />
-          <Card>
-            {drafts.map((draft, index) => (
-              <LedgerRow
-                key={draft.merchantName}
-                divided={index > 0}
-                name={draft.merchantName}
-                meta={draft.cadence}
-                amount={money(draft.amountCents)}
-                onPress={() => void api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "confirm", suggestions: [draft] }) }).then(() => {
-                  setDrafts((current) => current.filter((row) => row.merchantName !== draft.merchantName));
-                  load();
-                })}
-              />
-            ))}
-          </Card>
-        </>
-      ) : null}
-      {bills.length ? (
-        <Card>
-          {bills.map((row, index) => {
-            const flow = row.isIncome ? flowMoney(-Math.abs(row.amountCents)) : null;
-            return (
-              <LedgerRow
-                key={row.id}
-                divided={index > 0}
-                name={row.merchantName}
-                meta={[row.isActive ? inDaysPhrase(row.nextDate) : "Paused", row.cadence].join(" · ")}
-                amount={flow ? flow.text : money(row.amountCents)}
-                amountColor={flow?.color}
-                onPress={() => setSelected(row)}
-              />
-            );
-          })}
-        </Card>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button label="List" tone={view === "list" ? "primary" : "quiet"} onPress={() => setView("list")} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button label="Calendar" tone={view === "calendar" ? "primary" : "quiet"} onPress={() => setView("calendar")} />
+        </View>
+      </View>
+      {rows ? (
+        <Hero label={thisMonth ? "Due this month" : monthLabel(focus.year, focus.month)} cents={outflow} points={points.length > 1 ? points : undefined}>
+          <View style={{ paddingHorizontal: 18, paddingBottom: 16, gap: 4 }}>
+            {status ? <Text style={{ fontSize: 13, color: colors.muted }}>{status}</Text> : null}
+            {monthlyBills > 0 ? <Text style={{ fontSize: 13, color: colors.muted }}>{`Typical ${money(monthlyBills)}`}</Text> : null}
+            {next ? <Text style={{ fontSize: 13, color: colors.muted }}>{`${next.merchantName} ${inDaysPhrase(next.date)}`}</Text> : null}
+          </View>
+        </Hero>
       ) : null}
 
-      {selected ? (
-        <Sheet title={selected.merchantName} onClose={() => setSelected(null)}>
-          <Note>{`${money(selected.amountCents)} · ${selected.nextDate}`}</Note>
-          <Button
-            label="Mark paid"
-            onPress={() => void api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: selected.id }) }).then(() => {
-              setSelected(null);
-              load();
-            })}
-          />
-          <Button
-            label={selected.isActive ? "Pause" : "Resume"}
-            tone="quiet"
-            onPress={() => void api("/api/recurring", { method: "PATCH", body: JSON.stringify({ id: selected.id, isActive: !selected.isActive }) }).then(() => {
-              setSelected(null);
-              load();
-            })}
-          />
-          <Button
-            label="Remove"
-            tone="danger"
-            onPress={() => void api("/api/recurring", { method: "DELETE", body: JSON.stringify({ id: selected.id }) }).then(() => {
-              setSelected(null);
-              load();
-            })}
-          />
+      {view === "calendar" ? (
+        <Card>
+          <View style={{ padding: 12, gap: 8 }}>
+            <MonthNav year={cursor.year} month={cursor.month} label={monthLabel(cursor.year, cursor.month)} onChange={(year, month) => setCursor({ year, month })} />
+            <View style={{ flexDirection: "row" }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+                <Text key={`${day}${index}`} style={{ flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", color: colors.muted }}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {Array.from({ length: startPad }).map((_, index) => (
+                <View key={`pad-${index}`} style={{ width: "14.28%", minHeight: 52 }} />
+              ))}
+              {Array.from({ length: days }).map((_, index) => {
+                const day = index + 1;
+                const iso = `${cursor.year}-${String(cursor.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const hits = projected.filter((row) => row.date === iso);
+                return (
+                  <View key={iso} style={{ width: "14.28%", minHeight: 52, backgroundColor: colors.fill, borderRadius: 10, padding: 2, marginBottom: 2 }}>
+                    <Text style={{ fontSize: 11, color: colors.muted }}>{day}</Text>
+                    {hits.slice(0, 2).map((hit) => (
+                      <Pressable key={hit.id + hit.date} onPress={() => openEdit(hit)}>
+                        <Text numberOfLines={1} style={{ fontSize: 10, color: colors.ink }}>
+                          {hit.merchantName}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </Card>
+      ) : bills.length === 0 && rows ? (
+        <View style={{ gap: 12, alignItems: "center" }}>
+          <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>No bills yet</Text>
+          <Button label="Find bills" onPress={() => void detect()} />
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Section title="Coming up" />
+          <Card>
+            {bills.map((row, index) => (
+              <LedgerRow key={row.id} divided={index > 0} name={row.merchantName} meta={detail(row)} amount={money(row.amountCents)} onPress={() => openEdit(row)} />
+            ))}
+          </Card>
+        </View>
+      )}
+
+      {findOpen ? (
+        <Sheet title="Find bills" onClose={() => setFindOpen(false)}>
+          {finding ? <Note>Looking through activity…</Note> : null}
+          {!finding && found.length === 0 ? <Note>Nothing repeating showed up.</Note> : null}
+          {found.map((draft) => (
+            <View key={draft.merchantName} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, color: colors.ink }}>{draft.merchantName}</Text>
+                <Text style={{ fontSize: 13, color: colors.muted }}>{`${CADENCE_LABEL[draft.cadence] ?? draft.cadence} · next ${draft.nextDate}`}</Text>
+              </View>
+              <Text style={{ fontWeight: "600" }}>{money(draft.amountCents)}</Text>
+              <Button label="Skip" tone="quiet" onPress={() => void skip(draft)} />
+            </View>
+          ))}
+          {found.length ? <Button label="Keep these" onPress={() => void confirm(found)} /> : null}
         </Sheet>
       ) : null}
 
-      {adding ? (
-        <Sheet title="Add a bill" onClose={() => setAdding(false)}>
-          <Field label="Merchant" value={merchant} onChangeText={setMerchant} />
-          <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-          <Button
-            label="Add bill"
-            onPress={() =>
-              void api("/api/recurring", {
-                method: "POST",
-                body: JSON.stringify({ merchantName: merchant, amount: Number(amount), cadence: "monthly" }),
-              }).then(() => {
-                setMerchant("");
-                setAmount("");
-                setAdding(false);
-                load();
-              })
-            }
-          />
+      {editing ? (
+        <Sheet title={editing === "new" ? "New bill" : form.merchantName || "Bill"} onClose={() => setEditing(null)}>
+          <Field label="Name" value={form.merchantName} onChangeText={(merchantName) => setForm({ ...form, merchantName })} />
+          <Field label="Amount" value={form.amount} onChangeText={(amount) => setForm({ ...form, amount })} keyboardType="decimal-pad" />
+          <Pressable onPress={() => setPicking(picking === "cadence" ? null : "cadence")} style={toggle}>
+            <Text style={{ fontSize: 16, color: colors.ink }}>{`How often · ${CADENCE_LABEL[form.cadence] ?? form.cadence}`}</Text>
+          </Pressable>
+          {picking === "cadence" ? (
+            <Card>
+              {CADENCES.map(([value, label]) => (
+                <Pressable key={value} onPress={() => { setForm({ ...form, cadence: value }); setPicking(null); }} style={choice}>
+                  <Text style={{ color: form.cadence === value ? colors.accentInk : colors.ink }}>{label}</Text>
+                </Pressable>
+              ))}
+            </Card>
+          ) : null}
+          <Field label="Next date" value={form.nextDate} onChangeText={(nextDate) => setForm({ ...form, nextDate })} placeholder="YYYY-MM-DD" />
+          <Pressable onPress={() => setPicking(picking === "category" ? null : "category")} style={toggle}>
+            <Text style={{ fontSize: 16, color: colors.ink }}>{categories.find((row) => row.id === form.categoryId)?.name ?? "No category"}</Text>
+          </Pressable>
+          {picking === "category" ? (
+            <Card>
+              <Pressable onPress={() => { setForm({ ...form, categoryId: "" }); setPicking(null); }} style={choice}>
+                <Text>No category</Text>
+              </Pressable>
+              {categories.map((category) => (
+                <Pressable key={category.id} onPress={() => { setForm({ ...form, categoryId: category.id }); setPicking(null); }} style={choice}>
+                  <Text style={{ color: form.categoryId === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
+                </Pressable>
+              ))}
+            </Card>
+          ) : null}
+          <Pressable onPress={() => setPicking(picking === "account" ? null : "account")} style={toggle}>
+            <Text style={{ fontSize: 16, color: colors.ink }}>{accounts.find((row) => row.id === form.accountId)?.name ?? "Any account"}</Text>
+          </Pressable>
+          {picking === "account" ? (
+            <Card>
+              <Pressable onPress={() => { setForm({ ...form, accountId: "" }); setPicking(null); }} style={choice}>
+                <Text>Any account</Text>
+              </Pressable>
+              {accounts.map((account) => (
+                <Pressable key={account.id} onPress={() => { setForm({ ...form, accountId: account.id }); setPicking(null); }} style={choice}>
+                  <Text style={{ color: form.accountId === account.id ? colors.accentInk : colors.ink }}>{account.name}</Text>
+                </Pressable>
+              ))}
+            </Card>
+          ) : null}
+          <Pressable onPress={() => setForm({ ...form, kind: form.kind === "subscription" ? "bill" : "subscription" })} style={toggle}>
+            <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Subscription</Text>
+            <Text style={{ fontWeight: "600", color: form.kind === "subscription" ? colors.accentInk : colors.muted }}>{form.kind === "subscription" ? "On" : "Off"}</Text>
+          </Pressable>
+          <Button label="Save" onPress={() => void save()} busy={busy} />
+          {editing !== "new" ? (
+            <>
+              <Button
+                label="Skip this cycle"
+                tone="quiet"
+                onPress={() => void api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); load(); })}
+              />
+              <Button label={editing.isActive ? "Pause" : "Resume"} tone="quiet" onPress={() => void pause(editing)} />
+              <Button label={confirmDelete ? "Delete this bill?" : "Delete"} tone="danger" onPress={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void remove(editing); }} />
+            </>
+          ) : null}
         </Sheet>
       ) : null}
     </Screen>
   );
 }
+
+const toggle = { minHeight: 52, paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.card, justifyContent: "center" as const };
+const choice = { minHeight: 44, justifyContent: "center" as const, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line };
