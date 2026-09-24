@@ -3,13 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/api";
-import { Charge, ChargeSheet } from "../src/charge";
+import { CategoryPicker, Charge, ChargeSheet } from "../src/charge";
 import { ReviewCard } from "../src/decide";
 import { money } from "../src/format";
-import { tapSelect } from "../src/haptic";
 import { Icon } from "../src/icons";
 import { celebrate, SuccessMark } from "../src/toast";
-import { Card, colors, Field, Sheet } from "../src/ui";
+import { colors, Field, Sheet } from "../src/ui";
 
 type Group = { name: string; categories: { id: string; name: string }[] };
 
@@ -105,7 +104,7 @@ export default function ReviewScreen() {
         <View style={{ flex: 1, paddingHorizontal: 20, paddingBottom: 12 }}>
           <View style={{ flex: 1, justifyContent: "center" }}>
             {next ? (
-              <View pointerEvents="none" style={{ position: "absolute", left: 16, right: 16, top: 28, bottom: 12, borderRadius: 28, backgroundColor: colors.fill, opacity: 0.9 }} />
+              <View pointerEvents="none" style={{ position: "absolute", left: 18, right: 18, top: 18, bottom: 0, borderRadius: 28, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
             ) : null}
             <ReviewCard id={current.id} onReviewed={() => void markReviewed()} onSkip={skip}>
               <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, paddingVertical: 36, gap: 16 }}>
@@ -146,21 +145,14 @@ export default function ReviewScreen() {
 
       {picking ? (
         <Sheet title="Category" onClose={() => setPicking(false)}>
-          <Card>
-            {categories.map((category, index) => (
-              <Pressable
-                key={category.id}
-                onPress={() => {
-                  if (category.id !== categoryId) tapSelect();
-                  setCategoryId(category.id);
-                  setPicking(false);
-                }}
-                style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
-              >
-                <Text style={{ fontSize: 16, color: category.id === categoryId ? colors.accentInk : colors.ink }}>{category.name}</Text>
-              </Pressable>
-            ))}
-          </Card>
+          <CategoryPicker
+            groups={groups}
+            selected={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id);
+              setPicking(false);
+            }}
+          />
         </Sheet>
       ) : null}
 

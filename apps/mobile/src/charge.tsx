@@ -1,10 +1,10 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "./api";
 import { dayLabel, merchantMatchKey } from "./format";
 import { tapSelect } from "./haptic";
-import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet, Switch } from "./ui";
+import { Button, Card, colors, Field, FlowAmount, Note, SearchField, Section, Sheet, Switch } from "./ui";
 
 export type ChargeGroup = { name: string; categories: { id: string; name: string }[] };
 
@@ -125,23 +125,7 @@ export function ChargeSheet({
       {tx.originalDescription && tx.originalDescription !== name ? <Note>{tx.originalDescription}</Note> : null}
       <Button label="History" tone="quiet" onPress={() => { onClose(); router.push({ pathname: "/merchant", params: { name: tx.merchantName || tx.name } }); }} />
       {error ? <Note>{error}</Note> : null}
-      <Section title="Category" />
-      <Card>
-        {groups.map((group) =>
-          group.categories.map((category) => (
-            <Pressable
-              key={category.id}
-              onPress={() => {
-                if (category.id !== categoryId) tapSelect();
-                setCategoryId(category.id);
-              }}
-              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}
-            >
-              <Text style={{ fontSize: 16, color: categoryId === category.id ? colors.accentInk : colors.ink }}>{group.name === "Income" ? category.name : `${category.name}`}</Text>
-            </Pressable>
-          )),
-        )}
-      </Card>
+      <CategoryPicker groups={groups} selected={categoryId} onSelect={setCategoryId} />
       <Pressable onPress={() => setAlways((value) => !value)} style={toggle}>
         <Text style={{ flex: 1, fontSize: 16, color: colors.ink }}>Always categorize this merchant this way</Text>
         <Switch on={always} />
@@ -246,6 +230,67 @@ export function ChargeSheet({
       ) : null}
       <Button label="Save" onPress={() => void save()} busy={busy} />
     </Sheet>
+  );
+}
+
+export function CategoryPicker({
+  groups,
+  selected,
+  onSelect,
+}: {
+  groups: ChargeGroup[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const shown = useMemo(
+    () =>
+      groups
+        .map((group) => ({
+          ...group,
+          categories: group.categories.filter((category) => !needle || category.name.toLowerCase().includes(needle) || group.name.toLowerCase().includes(needle)),
+        }))
+        .filter((group) => group.categories.length > 0),
+    [groups, needle],
+  );
+  return (
+    <View style={{ gap: 12 }}>
+      <SearchField value={query} onChangeText={setQuery} placeholder="Search categories" />
+      {shown.length === 0 ? <Note>No category matches.</Note> : null}
+      {shown.map((group) => (
+        <View key={group.name} style={{ gap: 8 }}>
+          <Section title={group.name} />
+          <Card>
+            {group.categories.map((category, index) => {
+              const on = category.id === selected;
+              return (
+                <Pressable
+                  key={category.id}
+                  onPress={() => {
+                    if (!on) tapSelect();
+                    onSelect(category.id);
+                  }}
+                  style={{
+                    minHeight: 48,
+                    paddingHorizontal: 16,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    borderTopWidth: index ? 1 : 0,
+                    borderTopColor: colors.line,
+                    backgroundColor: on ? colors.accentSoft : "transparent",
+                  }}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: on ? "600" : "400", color: on ? colors.accentInk : colors.ink }}>{category.name}</Text>
+                  {on ? <Text style={{ color: colors.accentInk, fontWeight: "700" }}>✓</Text> : null}
+                </Pressable>
+              );
+            })}
+          </Card>
+        </View>
+      ))}
+    </View>
   );
 }
 

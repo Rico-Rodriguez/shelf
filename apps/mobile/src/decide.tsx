@@ -46,27 +46,28 @@ export function ReviewCard({
     });
 
   const card = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }, { rotate: `${x.value / 22}deg` }],
+    transform: [{ translateX: x.value }, { rotate: `${x.value / 28}deg` }],
   }));
-  const reviewed = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, x.value / 80)) }));
-  const skip = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, -x.value / 80)) }));
+  const body = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, Math.abs(x.value) / 70) }));
+  const reviewed = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, x.value / 90)) }));
+  const skip = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, -x.value / 90)) }));
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={[{ borderRadius: 28, backgroundColor: colors.card, minHeight: 420, overflow: "hidden" }, card]}>
-        <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 28, left: 0, right: 0, alignItems: "center", zIndex: 2, gap: 8 }, reviewed]}>
-          <View style={badge("#fff")}>
-            <Text style={{ fontSize: 18, fontWeight: "700" }}>✓</Text>
+      <Animated.View style={[{ borderRadius: 28, backgroundColor: colors.fill, minHeight: 440, overflow: "hidden", borderWidth: 1, borderColor: colors.lineStrong }, card]}>
+        <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "rgba(61, 190, 154, 0.18)" }, reviewed]}>
+          <View style={badge(colors.positive)}>
+            <Text style={{ color: "#fff", fontSize: 22, fontWeight: "700" }}>✓</Text>
           </View>
-          <Text style={{ color: colors.ink, fontSize: 28, fontWeight: "700", letterSpacing: -0.6, textAlign: "center" }}>Mark as{"\n"}reviewed</Text>
+          <Text style={{ color: colors.ink, fontSize: 32, fontWeight: "700", letterSpacing: -0.8, textAlign: "center" }}>Reviewed</Text>
         </Animated.View>
-        <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 28, left: 0, right: 0, alignItems: "center", zIndex: 2, gap: 8 }, skip]}>
-          <View style={badge(colors.fillStrong)}>
-            <Text style={{ color: colors.ink, fontSize: 16, fontWeight: "700" }}>▸</Text>
+        <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: colors.fillStrong }, skip]}>
+          <View style={badge(colors.ink)}>
+            <Text style={{ color: colors.bg, fontSize: 18, fontWeight: "700" }}>▸</Text>
           </View>
-          <Text style={{ color: colors.ink, fontSize: 28, fontWeight: "700", letterSpacing: -0.6, textAlign: "center" }}>Skip{"\n"}for now</Text>
+          <Text style={{ color: colors.ink, fontSize: 32, fontWeight: "700", letterSpacing: -0.8, textAlign: "center" }}>Skip</Text>
         </Animated.View>
-        {children}
+        <Animated.View style={[{ flex: 1 }, body]}>{children}</Animated.View>
       </Animated.View>
     </GestureDetector>
   );
