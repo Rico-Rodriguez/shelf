@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, api, load, peek } from "../../src/api";
+import { tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { colors } from "../../src/ui";
@@ -67,7 +68,10 @@ function ShelfTabBar({
             accessibilityRole="button"
             accessibilityState={focused ? { selected: true } : {}}
             accessibilityLabel={route.name === "activity" && reviewCount > 0 ? `Activity, ${reviewCount} to categorize` : spec?.title}
-            onPress={() => onPress(route, focused)}
+            onPress={() => {
+              if (!focused) tapSelect();
+              onPress(route, focused);
+            }}
             style={{ flex: 1, alignItems: "center", gap: 4, minHeight: 44 }}
           >
             <View>

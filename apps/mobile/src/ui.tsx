@@ -1,11 +1,15 @@
 import { router } from "expo-router";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
+import { GroupedBars, SpendChart } from "./chart";
 import { flowMoney, money, shiftMonth } from "./format";
+import { tapPress, tapSelect } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { colors, useTheme, type Palette } from "./theme";
+
+export { GroupedBars, SpendChart };
 
 export { colors };
 
@@ -135,17 +139,27 @@ export function Button({
   block?: boolean;
 }) {
   const styles = useStyles();
+  const scale = useRef(new Animated.Value(1)).current;
+  function settle(to: number) {
+    Animated.spring(scale, { toValue: to, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start();
+  }
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      onPressIn={() => settle(0.97)}
+      onPressOut={() => settle(1)}
       disabled={busy}
-      style={[styles.button, tone === "quiet" && styles.quiet, tone === "danger" && styles.danger, block && styles.buttonBlock]}
     >
-      {busy ? (
-        <ActivityIndicator color={tone === "primary" ? "#fff" : colors.ink} />
-      ) : (
-        <Text style={[styles.buttonText, tone !== "primary" && styles.quietText, tone === "danger" && { color: "#fff" }]}>{label}</Text>
-      )}
+      <Animated.View style={[styles.button, tone === "quiet" && styles.quiet, tone === "danger" && styles.danger, block && styles.buttonBlock, { transform: [{ scale }] }]}>
+        {busy ? (
+          <ActivityIndicator color={tone === "primary" ? "#fff" : colors.ink} />
+        ) : (
+          <Text style={[styles.buttonText, tone !== "primary" && styles.quietText, tone === "danger" && { color: "#fff" }]}>{label}</Text>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -230,9 +244,13 @@ export function Row({ title, detail, icon, onPress }: { title: string; detail?: 
 
 export function Switch({ on }: { on: boolean }) {
   const styles = useStyles();
+  const x = useRef(new Animated.Value(on ? 20 : 0)).current;
+  useEffect(() => {
+    Animated.spring(x, { toValue: on ? 20 : 0, useNativeDriver: true, stiffness: 520, damping: 32, mass: 0.7 }).start();
+  }, [on, x]);
   return (
     <View style={[styles.switch, on ? styles.switchOn : null]}>
-      <View style={[styles.knob, on ? styles.knobOn : null]} />
+      <Animated.View style={[styles.knob, { transform: [{ translateX: x }] }]} />
     </View>
   );
 }
@@ -291,22 +309,31 @@ export function Segment({
 }) {
   const styles = useStyles();
   const index = Math.max(0, options.findIndex((option) => option.value === value));
+  const [width, setWidth] = useState(0);
+  const x = useRef(new Animated.Value(0)).current;
+  const inner = Math.max(0, width - 6);
+  const item = options.length > 0 ? inner / options.length : 0;
+  useEffect(() => {
+    Animated.spring(x, { toValue: index * item, useNativeDriver: true, stiffness: 460, damping: 34, mass: 0.7 }).start();
+  }, [index, item, x]);
   return (
-    <View style={styles.segment}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.segmentThumb,
-          {
-            width: `${100 / options.length}%`,
-            left: `${(index * 100) / options.length}%`,
-          },
-        ]}
-      />
+    <View style={styles.segment} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      {item > 0 ? (
+        <Animated.View pointerEvents="none" style={[styles.segmentThumb, { left: 3, width: item, transform: [{ translateX: x }] }]} />
+      ) : null}
       {options.map((option) => {
         const selected = option.value === value;
         return (
-          <Pressable key={option.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => onChange(option.value)} style={styles.segmentItem}>
+          <Pressable
+            key={option.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => {
+              if (option.value !== value) tapSelect();
+              onChange(option.value);
+            }}
+            style={styles.segmentItem}
+          >
             <Text style={[styles.segmentLabel, selected ? { color: colors.ink } : null]}>{option.label}</Text>
           </Pressable>
         );
@@ -430,9 +457,14 @@ export function Progress({ value, max, color = colors.positive }: { value: numbe
   const styles = useStyles();
   const ratio = max <= 0 ? (value > 0 ? 1 : 0) : Math.min(1, value / max);
   const over = max > 0 ? value > max : value > 0;
+  const [width, setWidth] = useState(0);
+  const fill = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fill, { toValue: width * ratio, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+  }, [fill, ratio, width]);
   return (
-    <View style={styles.track}>
-      <View style={{ width: `${Math.round(ratio * 100)}%`, height: "100%", backgroundColor: over ? colors.danger : color }} />
+    <View style={styles.track} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <Animated.View style={{ width: fill, height: "100%", backgroundColor: over ? colors.danger : color, borderRadius: 99 }} />
     </View>
   );
 }
@@ -641,217 +673,6 @@ function Digit({
   );
 }
 
-function curvePoint(start: number, controlA: number, controlB: number, end: number, t: number) {
-  const rest = 1 - t;
-  return rest * rest * rest * start + 3 * rest * rest * t * controlA + 3 * rest * t * t * controlB + t * t * t * end;
-}
-
-/** Samples the same cubic the old summary chart used, so the area can be drawn with views. */
-function smoothSamples(coords: { x: number; y: number }[], step: number) {
-  const samples: { x: number; y: number }[] = [];
-  for (let i = 0; i < coords.length - 1; i++) {
-    const current = coords[i];
-    const next = coords[i + 1];
-    const mid = (current.x + next.x) / 2;
-    const count = Math.max(1, Math.round(Math.max(next.x - current.x, step) / step));
-    for (let s = 0; s < count; s++) {
-      const t = s / count;
-      samples.push({
-        x: curvePoint(current.x, mid, mid, next.x, t),
-        y: curvePoint(current.y, current.y, next.y, next.y, t),
-      });
-    }
-  }
-  samples.push(coords[coords.length - 1]);
-  return samples;
-}
-
-export function SpendChart({
-  points,
-  onScrub,
-  reference,
-  caption,
-  color = colors.accent,
-}: {
-  points: { date: string; cents: number }[];
-  onScrub?: (point: { date: string; cents: number } | null) => void;
-  reference?: { cents: number; label: string };
-  caption?: string;
-  color?: string;
-}) {
-  const styles = useStyles();
-  const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
-  const [width, setWidth] = useState(0);
-  const [active, setActive] = useState<number | null>(null);
-  if (series.length < 2) return null;
-  const height = 148;
-  const drawWidth = width || 320;
-  const values = series.map((point) => point.cents);
-  if (reference) values.push(reference.cents);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const raw = max - min;
-  const pad = raw === 0 ? Math.max(Math.abs(max) * 0.22, 1) : raw * 0.22;
-  const lo = min - pad;
-  const hi = max + pad;
-  const span = hi - lo || 1;
-  const insetX = 10;
-  const insetY = 14;
-
-  function xOf(index: number) {
-    if (series.length <= 1) return drawWidth / 2;
-    return insetX + (index / (series.length - 1)) * (drawWidth - insetX * 2);
-  }
-
-  function yOf(cents: number) {
-    return insetY + ((hi - cents) / span) * (height - insetY * 2);
-  }
-
-  const coords = series.map((point, index) => ({ x: xOf(index), y: yOf(point.cents) }));
-  const samples = width ? smoothSamples(coords, 1.5) : [];
-  const dot = coords[active ?? coords.length - 1];
-  const dotSize = active == null ? 9 : 13;
-  const refY = reference ? yOf(reference.cents) : null;
-
-  function pick(x: number) {
-    if (!width || !onScrub) return;
-    const index = Math.round(Math.min(1, Math.max(0, x / width)) * (series.length - 1));
-    setActive(index);
-    onScrub(series[index] ?? null);
-  }
-
-  return (
-    <View
-      style={styles.chart}
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      onStartShouldSetResponder={() => Boolean(onScrub)}
-      onMoveShouldSetResponder={() => Boolean(onScrub)}
-      onResponderTerminationRequest={() => false}
-      onResponderGrant={(event) => pick(event.nativeEvent.locationX)}
-      onResponderMove={(event) => pick(event.nativeEvent.locationX)}
-      onResponderRelease={() => {
-        setActive(null);
-        onScrub?.(null);
-      }}
-      onResponderTerminate={() => {
-        setActive(null);
-        onScrub?.(null);
-      }}
-    >
-      {samples.map((sample, index) => {
-        const next = samples[index + 1];
-        const columnWidth = Math.max(1.5, (next?.x ?? sample.x + 1.5) - sample.x + 0.6);
-        const fill = Math.max(0, height - sample.y);
-        return (
-          <View key={`fill-${index}`} pointerEvents="none" style={{ position: "absolute", left: sample.x, top: sample.y, width: columnWidth, height: fill }}>
-            <View style={{ flex: 1, backgroundColor: color, opacity: 0.38 }} />
-            <View style={{ flex: 1.2, backgroundColor: color, opacity: 0.22 }} />
-            <View style={{ flex: 1.6, backgroundColor: color, opacity: 0.1 }} />
-            <View style={{ flex: 2, backgroundColor: color, opacity: 0.03 }} />
-          </View>
-        );
-      })}
-      {samples.slice(0, -1).map((sample, index) => {
-        const next = samples[index + 1];
-        const dx = next.x - sample.x;
-        const dy = next.y - sample.y;
-        const length = Math.hypot(dx, dy);
-        if (length < 0.2) return null;
-        const span = length + 1.4;
-        return (
-          <View
-            key={`line-${index}`}
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: (sample.x + next.x) / 2 - span / 2,
-              top: (sample.y + next.y) / 2 - 1.15,
-              width: span,
-              height: 2.3,
-              borderRadius: 1,
-              backgroundColor: color,
-              transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
-            }}
-          />
-        );
-      })}
-      {active != null ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: dot.x, top: 0, bottom: 0, width: 1, backgroundColor: colors.ink, opacity: 0.35 }} />
-      ) : null}
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: dot.x - dotSize / 2,
-          top: dot.y - dotSize / 2,
-          width: dotSize,
-          height: dotSize,
-          borderRadius: dotSize / 2,
-          backgroundColor: color,
-          borderWidth: 3,
-          borderColor: colors.card,
-        }}
-      />
-      {refY != null ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: refY, height: 1, borderTopWidth: 1, borderStyle: "dashed", borderColor: colors.tertiary }} />
-      ) : null}
-      {reference && refY != null ? (
-        <Text pointerEvents="none" style={[styles.chartTag, { top: refY - 6, left: 8 }]}>
-          {reference.label}
-        </Text>
-      ) : null}
-      {caption ? (
-        <Text pointerEvents="none" style={[styles.chartTag, { top: 2, right: 8 }]}>
-          {caption}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-export type BarSeries = { key: string; color: string };
-
-export function GroupedBars({
-  points,
-  series,
-  onPress,
-}: {
-  points: { label: string; values: Record<string, number> }[];
-  series: BarSeries[];
-  onPress?: (label: string) => void;
-}) {
-  const styles = useStyles();
-  const max = Math.max(1, ...points.flatMap((point) => series.map((item) => point.values[item.key] ?? 0)));
-  return (
-    <View style={{ gap: 10 }}>
-      <View style={{ height: 168, flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
-        {points.map((point) => (
-          <Pressable key={point.label} onPress={onPress ? () => onPress(point.label) : undefined} style={{ flex: 1, height: "100%", flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 2 }}>
-            {series.map((item) => {
-              const value = point.values[item.key] ?? 0;
-              return <View key={item.key} style={{ width: 7, height: `${Math.max(2, Math.round((value / max) * 100))}%`, borderRadius: 3, backgroundColor: item.color }} />;
-            })}
-          </Pressable>
-        ))}
-      </View>
-      <View style={{ flexDirection: "row" }}>
-        {points.map((point) => (
-          <Text key={point.label} numberOfLines={1} style={{ flex: 1, textAlign: "center", fontSize: 10, color: colors.tertiary }}>
-            {point.label}
-          </Text>
-        ))}
-      </View>
-      <View style={{ flexDirection: "row", justifyContent: "center", gap: 16 }}>
-        {series.map((item) => (
-          <View key={item.key} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: item.color }} />
-            <Text style={styles.kicker}>{item.key}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 function makeStyles(colors: Palette) {
   return StyleSheet.create({

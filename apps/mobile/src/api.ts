@@ -18,7 +18,9 @@ function localServer(value: string): boolean {
 
 export function apiBase(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-  if (configured && !localServer(configured)) return configured;
+  // A published bundle keeps the live server when the baked address is local.
+  // A dev session can still point at the machine running the API.
+  if (configured && (__DEV__ || !localServer(configured))) return configured;
   return LIVE_SERVER;
 }
 
@@ -29,23 +31,24 @@ let tokenPromise: Promise<string | null> | undefined;
 
 export function getToken(): Promise<string | null> {
   if (!tokenPromise) {
-    tokenPromise = SecureStore.getItemAsync(TOKEN_KEY).catch((err: unknown) => {
-      tokenPromise = undefined;
-      throw err;
-    });
+    tokenPromise = SecureStore.getItemAsync(TOKEN_KEY).catch(() => null);
   }
   return tokenPromise;
 }
 
 export async function setToken(token: string | null): Promise<void> {
   tokenPromise = Promise.resolve(token);
-  if (!token) {
-    memory.clear();
-    flight.clear();
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-    return;
+  try {
+    if (!token) {
+      memory.clear();
+      flight.clear();
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      return;
+    }
+    await SecureStore.setItemAsync(TOKEN_KEY, token);
+  } catch {
+    // The memory token still authorizes this session when the keychain is unavailable.
   }
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
 }
 
 export function peek<T>(path: string): T | undefined {

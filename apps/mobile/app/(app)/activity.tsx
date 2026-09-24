@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
+import { tapSuccess } from "../../src/haptic";
 import { SwipeRow } from "../../src/swipe";
 import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, Note, ReviewBanner, Screen, SearchField, Section, Segment, Sheet, Switch } from "../../src/ui";
 
@@ -135,6 +136,7 @@ export default function ActivityScreen() {
 
   async function confirmReview() {
     if (!currentReview) return;
+    tapSuccess();
     await patch(currentReview.id, { categoryId: reviewCategory || null, reviewed: true });
     if (reviewAlways && reviewCategory) {
       const merchant = currentReview.merchantName || currentReview.name;

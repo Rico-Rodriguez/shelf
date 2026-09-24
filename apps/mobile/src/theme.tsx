@@ -96,9 +96,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   Object.assign(colors, palette);
 
   useEffect(() => {
-    void SecureStore.getItemAsync(KEY).then((stored) => {
-      if (stored === "light" || stored === "dark" || stored === "system") setModeState(stored);
-    });
+    void SecureStore.getItemAsync(KEY)
+      .then((stored) => {
+        if (stored === "light" || stored === "dark" || stored === "system") setModeState(stored);
+      })
+      .catch(() => undefined);
     const sub = Appearance.addChangeListener(({ colorScheme }) => setSystem(colorScheme));
     return () => sub.remove();
   }, []);
