@@ -56,5 +56,24 @@ workflows:
           mkdir -p "$CM_BUILD_DIR/dist"
           mv "$CM_BUILD_DIR/Shelf.ipa" "$CM_BUILD_DIR/dist/Shelf.ipa"
           ls -lh "$CM_BUILD_DIR/dist/Shelf.ipa"
+      - name: Publish to GitHub Releases
+        script: |
+          set -euo pipefail
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "Publishing to GitHub Releases..."
+            version=$(node -p "require('./apps/mobile/app.json').expo.version")
+            build=$(node -p "require('./apps/mobile/app.json').expo.ios.buildNumber")
+            named="Shelf-${version}-${build}.ipa"
+            cp dist/Shelf.ipa "dist/${named}"
+            gh release delete ipa --yes --cleanup-tag || true
+            gh release create ipa "dist/${named}" \
+              --target "$CM_COMMIT" \
+              --title "Shelf ${version} (${build})" \
+              --notes "Shelf ${version} (${build}). Download ${named} for sideloading." \
+              --latest=false
+            echo "Successfully published ${named} to GitHub Releases!"
+          else
+            echo "GITHUB_TOKEN not found in Codemagic environment variables. Skipping GitHub Release upload."
+          fi
     artifacts:
       - dist/Shelf.ipa
