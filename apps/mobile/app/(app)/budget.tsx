@@ -1,7 +1,7 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../../src/api";
+import { api, load as read, peek } from "../../src/api";
 import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
 import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
 
@@ -30,9 +30,10 @@ type MonthTx = { id: string; name: string; merchantName: string | null; amountCe
 
 export default function BudgetScreen() {
   const now = new Date();
+  const opening = peek<Budget>(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const [data, setData] = useState<Budget | null>(null);
-  const [income, setIncome] = useState("");
+  const [data, setData] = useState<Budget | null>(opening ?? null);
+  const [income, setIncome] = useState(opening ? (opening.plannedIncomeCents / 100).toFixed(0) : "");
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [showUnused, setShowUnused] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -48,7 +49,7 @@ export default function BudgetScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    void api<Budget>(`/api/budget?year=${cursor.year}&month=${cursor.month}`)
+    void read<Budget>(`/api/budget?year=${cursor.year}&month=${cursor.month}`)
       .then((next) => {
         setData(next);
         setIncome((Number(next.plannedIncomeCents) / 100).toFixed(0));

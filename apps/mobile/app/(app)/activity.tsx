@@ -1,7 +1,7 @@
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../../src/api";
+import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { Charge, ChargeSheet } from "../../src/charge";
 import { SwipeRow } from "../../src/swipe";
@@ -10,6 +10,21 @@ import { Button, Card, colors, Field, FlowAmount, LedgerRow, Loading, MonthNav, 
 type Tx = Charge;
 
 type Group = { id?: string; name: string; categories: { id: string; name: string }[] };
+type TxPayload = { transactions: Tx[]; unreviewed: number; faces?: Record<string, { monthCents: number; count: number }>; frequentCategoryIds?: string[] };
+
+function txPath(search: string, unreviewedOnly: boolean, categoryId: string, accountFilter: string, tag: string, range: { start: string; end: string } | null) {
+  const qs = new URLSearchParams();
+  if (search.trim()) qs.set("q", search.trim());
+  if (unreviewedOnly) qs.set("reviewed", "false");
+  if (categoryId) qs.set("categoryId", categoryId);
+  if (accountFilter) qs.set("accountId", accountFilter);
+  if (tag.trim()) qs.set("tag", tag.trim());
+  if (range) {
+    qs.set("start", range.start);
+    qs.set("end", range.end);
+  }
+  return `/api/transactions?${qs.toString()}`;
+}
 
 export default function ActivityScreen() {
   const params = useLocalSearchParams<{ q?: string; categoryId?: string; start?: string; end?: string; accountId?: string; tag?: string; reviewed?: string; focus?: string }>();
@@ -23,10 +38,13 @@ export default function ActivityScreen() {
   const [range, setRange] = useState<{ start: string; end: string } | null>(
     typeof params.start === "string" && typeof params.end === "string" ? { start: params.start, end: params.end } : null,
   );
-  const [rows, setRows] = useState<Tx[] | null>(null);
+  const [rows, setRows] = useState<Tx[] | null>(() => {
+    const start = typeof params.start === "string" && typeof params.end === "string" ? { start: params.start, end: params.end } : null;
+    return peek<TxPayload>(txPath(typeof params.q === "string" ? params.q : "", params.reviewed === "false", typeof params.categoryId === "string" ? params.categoryId : "", typeof params.accountId === "string" ? params.accountId : "", typeof params.tag === "string" ? params.tag : "", start))?.transactions ?? null;
+  });
   const [unreviewed, setUnreviewed] = useState(0);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<Group[]>(() => peek<{ groups: Group[] }>("/api/categories")?.groups ?? []);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>(() => peek<{ accounts: { id: string; name: string }[] }>("/api/accounts")?.accounts ?? []);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Tx | null>(null);
   const [filters, setFilters] = useState(false);
@@ -58,20 +76,10 @@ export default function ActivityScreen() {
   }, [query]);
 
   const load = useCallback(() => {
-    const qs = new URLSearchParams();
-    if (search.trim()) qs.set("q", search.trim());
-    if (unreviewedOnly) qs.set("reviewed", "false");
-    if (categoryId) qs.set("categoryId", categoryId);
-    if (accountFilter) qs.set("accountId", accountFilter);
-    if (tag.trim()) qs.set("tag", tag.trim());
-    if (range) {
-      qs.set("start", range.start);
-      qs.set("end", range.end);
-    }
     void Promise.all([
-      api<{ transactions: Tx[]; unreviewed: number; faces?: Record<string, { monthCents: number; count: number }>; frequentCategoryIds?: string[] }>(`/api/transactions?${qs.toString()}`),
-      api<{ groups: Group[] }>("/api/categories"),
-      api<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
+      read<TxPayload>(txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range)),
+      read<{ groups: Group[] }>("/api/categories"),
+      read<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
     ])
       .then(([tx, cats, accts]) => {
         setRows(tx.transactions);
@@ -233,8 +241,8 @@ export default function ActivityScreen() {
       title="Activity"
       framed
       action={
-        <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.ink, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Add</Text>
+        <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
         </Pressable>
       }
     >
