@@ -6,7 +6,6 @@ import { ChargeSheet, ChargeGroup } from "../../src/charge";
 import {
   categorizeLabel,
   dayLabel,
-  daysLeftInMonth,
   flowMoney,
   inDaysPhrase,
   money,
@@ -23,7 +22,6 @@ import {
   Button,
   Card,
   colors,
-  Facts,
   Field,
   Hero,
   LedgerRow,
@@ -64,10 +62,6 @@ type Dash = {
 function MonthHero({ data }: { data: Dash }) {
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const planned = data.budget.plannedCents > 0;
-  const left = data.budget.remainingCents;
-  const overPlan = planned && left < 0;
-  const daysLeft = daysLeftInMonth();
-  const dailyPace = planned && left > 0 ? Math.round(left / daysLeft) : null;
 
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
@@ -81,45 +75,6 @@ function MonthHero({ data }: { data: Dash }) {
         ]
       : undefined;
 
-  let heroStatus: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null = null;
-  if (!scrub) {
-    if (overPlan) {
-      heroStatus = { label: `Over by ${money(Math.abs(left))}`, tone: "bad" };
-    } else if (dailyPace != null) {
-      heroStatus = { label: `Safe: ${money(dailyPace)}/day`, tone: "good" };
-    } else if (planned) {
-      heroStatus = { label: "Budget complete", tone: "good" };
-    } else {
-      heroStatus = { label: "No budget set", tone: "neutral" };
-    }
-  }
-
-  const facts = planned
-    ? [
-        {
-          kicker: overPlan ? "Over plan" : "Left to spend",
-          value: money(Math.abs(left)),
-          color: overPlan ? colors.danger : colors.positive,
-        },
-        {
-          kicker: "Daily pace",
-          value: dailyPace != null ? `${money(dailyPace)}/d` : money(data.budget.plannedCents),
-        },
-        {
-          kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-          value: money(Math.abs(data.cashFlow.savedCents)),
-          color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-        },
-      ]
-    : [
-        { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-        {
-          kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-          value: money(Math.abs(data.cashFlow.savedCents)),
-          color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-        },
-      ];
-
   return (
     <Hero
       label={scrub ? dayLabel(scrub.date) : "Spent this month"}
@@ -128,10 +83,7 @@ function MonthHero({ data }: { data: Dash }) {
       baselinePoints={baselinePoints}
       onScrub={setScrub}
       live={scrub != null}
-      status={heroStatus}
-    >
-      <Facts items={facts} />
-    </Hero>
+    />
   );
 }
 
