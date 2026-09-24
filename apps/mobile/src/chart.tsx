@@ -40,41 +40,11 @@ export function SpendChart({
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
-  const [reveal, setReveal] = useState(0);
-  const [pulse, setPulse] = useState(0);
+  const lineRef = useRef<Path>(null);
+  const ringRef = useRef<Circle>(null);
   const lastIndex = useRef<number | null>(null);
   const height = 156;
   const signature = series.map((point) => point.cents).join(",");
-
-  useEffect(() => {
-    let frame = 0;
-    const started = Date.now();
-    const tick = () => {
-      const t = Math.min(1, (Date.now() - started) / 720);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setReveal(eased);
-      if (t < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [signature]);
-
-  useEffect(() => {
-    if (active != null) return;
-    let frame = 0;
-    const started = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - started;
-      if (elapsed > 1400) {
-        setPulse(0);
-        return;
-      }
-      setPulse((Math.sin(elapsed / 180) + 1) / 2);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [active, signature]);
 
   const geometry = useMemo(() => {
     if (series.length < 2 || width <= 0) return null;
@@ -96,6 +66,41 @@ export function SpendChart({
     const area = `${line} L ${coords[coords.length - 1].x} ${height} L ${coords[0].x} ${height} Z`;
     return { coords, line, area, length: pathLength(coords), refY: reference ? yOf(reference.cents) : null };
   }, [series, width, reference, height]);
+
+  const lineLength = geometry?.length ?? 0;
+
+  useEffect(() => {
+    if (!lineLength) return;
+    let frame = 0;
+    const started = Date.now();
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - started) / 720);
+      const eased = 1 - Math.pow(1 - t, 3);
+      lineRef.current?.setNativeProps?.({ strokeDashoffset: lineLength * (1 - eased) });
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    lineRef.current?.setNativeProps?.({ strokeDashoffset: lineLength });
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [lineLength, signature]);
+
+  useEffect(() => {
+    if (active != null || !lineLength) return;
+    let frame = 0;
+    const started = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - started;
+      if (elapsed > 1400) {
+        ringRef.current?.setNativeProps?.({ r: 6, opacity: 0 });
+        return;
+      }
+      const wave = (Math.sin(elapsed / 180) + 1) / 2;
+      ringRef.current?.setNativeProps?.({ r: 6 + wave * 6, opacity: 0.22 * (1 - wave) });
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [active, lineLength, signature]);
 
   if (series.length < 2) return null;
 
@@ -145,8 +150,9 @@ export function SpendChart({
           {geometry.refY != null ? (
             <Line x1={0} x2={width} y1={geometry.refY} y2={geometry.refY} stroke={colors.tertiary} strokeDasharray="3 5" strokeWidth={1} />
           ) : null}
-          <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.35 + reveal * 0.65} />
+          <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.9} />
           <Path
+            ref={lineRef}
             d={geometry.line}
             stroke={color}
             strokeWidth={2.5}
@@ -154,12 +160,12 @@ export function SpendChart({
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={geometry.length}
-            strokeDashoffset={geometry.length * (1 - reveal)}
+            strokeDashoffset={0}
           />
           {active != null && dot ? <Line x1={dot.x} x2={dot.x} y1={8} y2={height - 4} stroke={colors.ink} strokeOpacity={0.28} strokeWidth={1} /> : null}
           {dot ? (
             <>
-              {active == null ? <Circle cx={dot.x} cy={dot.y} r={7 + pulse * 5} fill={color} opacity={0.18 * (1 - pulse)} /> : null}
+              {active == null ? <Circle ref={ringRef} cx={dot.x} cy={dot.y} r={6} fill={color} opacity={0.18} /> : null}
               <Circle cx={dot.x} cy={dot.y} r={active == null ? 4.5 : 6.5} fill={color} />
               <Circle cx={dot.x} cy={dot.y} r={active == null ? 2.2 : 3} fill={colors.card} />
             </>

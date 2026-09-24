@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { categorizeLabel, dayLabel, daysLeftInMonth, flowMoney, inDaysPhrase, money, monthRange, shelfColor, shortDate, todayISO } from "../../src/format";
-import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
+import { Button, Card, colors, Facts, Hero, LedgerRow, Loading, Note, Progress, ReviewBanner, Screen, Section, SpendMix } from "../../src/ui";
 
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
@@ -109,25 +109,27 @@ export default function HomeScreen() {
               onPress={() => router.push("/(app)/budget")}
               style={({ pressed }) => [
                 {
-                  minHeight: 52,
                   paddingHorizontal: 16,
                   paddingVertical: 14,
                   borderRadius: 20,
                   backgroundColor: colors.card,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  gap: 10,
                 },
                 pressed ? { backgroundColor: colors.fill } : null,
               ]}
             >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over this month" : "Left this month"}</Text>
-                <Text style={{ fontSize: 12, color: colors.muted }}>
-                  {overPlan ? `${daysLeft} ${dayWord} left` : `${money(Math.round(left / daysLeft))} a day · ${daysLeft} ${dayWord} left`}
-                </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>{overPlan ? "Over the plan" : "Left to spend"}</Text>
+                  <Text style={{ fontSize: 13, color: colors.muted }}>
+                    {overPlan ? `${daysLeft} ${dayWord} left in the month` : `${money(Math.round(left / daysLeft))} a day · ${daysLeft} ${dayWord} left`}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: overPlan ? colors.danger : colors.positive }}>{money(Math.abs(left))}</Text>
               </View>
-              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: overPlan ? colors.danger : colors.positive }}>{money(Math.abs(left))}</Text>
+              <Progress value={data.budget.spentCents} max={data.budget.plannedCents} />
             </Pressable>
           ) : null}
 

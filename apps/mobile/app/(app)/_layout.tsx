@@ -35,13 +35,11 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
     <View style={{ paddingTop: insets.top, backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1 }} />
-        <View style={{ alignItems: "center" }}>
-          <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>
-            Shelf
-          </Text>
-          {shown ? (
-            <Animated.Text style={{ fontSize: 11, color: shown === "Sync failed" ? colors.danger : colors.muted, opacity }}>{shown}</Animated.Text>
-          ) : null}
+        <View style={{ alignItems: "center", justifyContent: "center", height: 36 }}>
+          <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>Shelf</Text>
+          <Animated.Text style={{ height: 14, fontSize: 11, lineHeight: 14, color: shown === "Sync failed" ? colors.danger : colors.muted, opacity }}>
+            {shown === "Up to date" ? "" : shown}
+          </Animated.Text>
         </View>
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
           <Pressable accessibilityLabel="Search" onPress={() => router.push("/search")} style={barButton}>

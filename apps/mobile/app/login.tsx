@@ -1,10 +1,10 @@
-import { Link, Redirect, router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useState } from "react";
-import { Text } from "react-native";
+import { Pressable, Text } from "react-native";
 import { api } from "../src/api";
 import { googleRedirectHint, signInWithGoogle } from "../src/google";
 import { useSession } from "../src/session";
-import { Button, Field, Note, Screen } from "../src/ui";
+import { Button, colors, Field, Note, Screen } from "../src/ui";
 
 export default function LoginScreen() {
   const { state, refresh } = useSession();
@@ -68,7 +68,9 @@ export default function LoginScreen() {
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />
-      <Link href="/join"><Text>Join with an invite</Text></Link>
+      <Pressable onPress={() => router.push("/join")} hitSlop={8}>
+        <Text style={{ color: colors.accentInk, fontSize: 15, fontWeight: "600" }}>Join with an invite</Text>
+      </Pressable>
     </Screen>
   );
 }
