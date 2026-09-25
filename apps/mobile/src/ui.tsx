@@ -823,9 +823,12 @@ export function Sheet({
   const styles = useStyles();
   const screenHeight = Dimensions.get("window").height;
   const translateY = useSharedValue(screenHeight);
+  const [modalVisible, setModalVisible] = useState(true);
+  const [closing, setClosing] = useState(false);
   const isClosing = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     translateY.value = withSpring(0, {
@@ -833,28 +836,46 @@ export function Sheet({
       stiffness: 340,
       mass: 0.8,
     });
+    return () => {
+      if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    };
   }, [translateY]);
 
   const dismiss = useCallback(() => {
     if (isClosing.current) return;
     isClosing.current = true;
+    setClosing(true);
     tapPress();
-    translateY.value = withTiming(screenHeight, { duration: 190, easing: Easing.out(Easing.cubic) });
-    setTimeout(() => {
+
+    translateY.value = withTiming(
+      screenHeight,
+      { duration: 180, easing: Easing.out(Easing.cubic) },
+      (finished) => {
+        if (finished) {
+          runOnJS(setModalVisible)(false);
+        }
+      },
+    );
+
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    dismissTimer.current = setTimeout(() => {
+      setModalVisible(false);
       onCloseRef.current();
-    }, 190);
+    }, 200);
   }, [screenHeight, translateY]);
 
   const panGesture = Gesture.Pan()
     .activeOffsetY([-6, 6])
     .onUpdate((event) => {
+      if (isClosing.current) return;
       if (event.translationY > 0) {
         translateY.value = event.translationY;
       } else {
         translateY.value = -Math.pow(Math.abs(event.translationY), 0.72);
       }
     })
-    .onEnd((event) => {
+    .onFinalize((event) => {
+      if (isClosing.current) return;
       if (event.translationY > 80 || event.velocityY > 450) {
         runOnJS(dismiss)();
       } else {
@@ -876,9 +897,19 @@ export function Sheet({
     return { opacity };
   });
 
+  if (!modalVisible) return null;
+
   return (
-    <Modal visible animationType="none" transparent onRequestClose={dismiss}>
-      <View style={styles.sheetWrap}>
+    <Modal
+      visible={modalVisible}
+      animationType="none"
+      transparent
+      onRequestClose={dismiss}
+      onDismiss={() => {
+        onCloseRef.current();
+      }}
+    >
+      <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
         </Reanimated.View>
@@ -890,10 +921,14 @@ export function Sheet({
             sheetAnimatedStyle,
           ]}
         >
-          <GestureDetector gesture={panGesture}>
-            <View style={{ paddingTop: 8, paddingBottom: 6 }}>
-              <View style={styles.handle} />
-              <View style={styles.sheetHead}>
+          <View style={{ paddingTop: 8, paddingBottom: 6 }}>
+            <GestureDetector gesture={panGesture}>
+              <View style={{ paddingVertical: 4 }}>
+                <View style={styles.handle} />
+              </View>
+            </GestureDetector>
+            <View style={styles.sheetHead}>
+              <GestureDetector gesture={panGesture}>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.sheetTitle} numberOfLines={1}>
                     {title}
@@ -904,12 +939,12 @@ export function Sheet({
                     </Text>
                   ) : null}
                 </View>
-                <Pressable onPress={dismiss} hitSlop={12} style={{ padding: 4 }}>
-                  <Text style={styles.sectionAction}>Done</Text>
-                </Pressable>
-              </View>
+              </GestureDetector>
+              <Pressable onPress={dismiss} hitSlop={16} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+                <Text style={styles.sectionAction}>Done</Text>
+              </Pressable>
             </View>
-          </GestureDetector>
+          </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
             {children}
           </ScrollView>
