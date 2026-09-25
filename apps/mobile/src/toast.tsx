@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LottieView from "lottie-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import success from "./success.json";
-import { tapSuccess } from "./haptic";
+import { tapPress, tapSuccess } from "./haptic";
 import { colors } from "./theme";
 
 type Listener = (message: string) => void;
@@ -25,91 +25,109 @@ export function SuccessMark({ size = 120 }: { size?: number }) {
   return <LottieView source={success} autoPlay loop={false} style={{ width: size, height: size }} />;
 }
 
-const CONFETTI_COLORS = ["#1B7A62", "#3DBE9A", "#C47A1A", "#E07A5F", "#2F5D8C", "#6B4F9A", "#FFD166"];
-
-type Particle = {
-  id: number;
-  color: string;
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-  size: number;
-  shape: "circle" | "square" | "strip";
-};
-
-export function CelebrationBurst() {
-  const particles = useMemo<Particle[]>(() => {
-    return Array.from({ length: 42 }).map((_, i) => {
-      const angle = (Math.PI * 2 * i) / 42 + (Math.random() * 0.4 - 0.2);
-      const distance = 90 + Math.random() * 150;
-      return {
-        id: i,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-        x: Math.cos(angle) * distance,
-        y: Math.sin(angle) * distance - 30,
-        scale: 0.6 + Math.random() * 0.8,
-        rotation: Math.random() * 360,
-        size: 7 + Math.random() * 7,
-        shape: i % 3 === 0 ? "circle" : i % 3 === 1 ? "strip" : "square",
-      };
-    });
-  }, []);
-
-  const progress = useRef(new Animated.Value(0)).current;
+export function ConfirmMark({ size = 48 }: { size?: number }) {
+  const scale = useRef(new Animated.Value(0.82)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    progress.setValue(0);
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 1400,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [progress]);
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 28 }),
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+  }, [scale, opacity]);
 
   return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        {particles.map((p: Particle) => {
-          const translateX = progress.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, p.x],
-          });
-          const translateY = progress.interpolate({
-            inputRange: [0, 0.4, 1],
-            outputRange: [0, p.y * 0.8, p.y + 120], // subtle gravity drop
-          });
-          const opacity = progress.interpolate({
-            inputRange: [0, 0.1, 0.75, 1],
-            outputRange: [0, 1, 0.9, 0],
-          });
-          const rotate = progress.interpolate({
-            inputRange: [0, 1],
-            outputRange: ["0deg", `${p.rotation + 360}deg`],
-          });
-          const scale = progress.interpolate({
-            inputRange: [0, 0.2, 1],
-            outputRange: [0.2, p.scale, p.scale * 0.7],
-          });
+    <Animated.View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", opacity, transform: [{ scale }] }}>
+      <Svg viewBox="0 0 52 52" width={size} height={size}>
+        <Circle cx={26} cy={26} r={23} stroke={colors.positive} strokeWidth={2.5} fill="none" />
+        <Path d="M15 27.5 L22.5 35 L37.5 18" stroke={colors.positive} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    </Animated.View>
+  );
+}
 
-          return (
-            <Animated.View
-              key={p.id}
-              style={{
-                position: "absolute",
-                width: p.shape === "strip" ? p.size * 2 : p.size,
-                height: p.shape === "strip" ? p.size * 0.6 : p.size,
-                borderRadius: p.shape === "circle" ? p.size / 2 : p.shape === "strip" ? 2 : 3,
-                backgroundColor: p.color,
-                opacity,
-                transform: [{ translateX }, { translateY }, { rotate }, { scale }],
-              }}
-            />
-          );
-        })}
+type Offer = { label: string; undo: () => Promise<void> };
+let pushOffer: (offer: Offer) => void = () => undefined;
+
+export function offerUndo(label: string, undo: () => Promise<void>) {
+  pushOffer({ label, undo });
+}
+
+export function UndoHost() {
+  const insets = useSafeAreaInsets();
+  const [offer, setOffer] = useState<Offer | null>(null);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    pushOffer = (next) => {
+      setOffer(next);
+      opacity.setValue(0);
+      translateY.setValue(12);
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, stiffness: 420, damping: 24 }),
+      ]).start();
+    };
+    return () => {
+      pushOffer = () => undefined;
+    };
+  }, [opacity, translateY]);
+
+  useEffect(() => {
+    if (!offer) return;
+    const timer = setTimeout(() => {
+      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setOffer(null));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [offer, opacity]);
+
+  if (!offer) return null;
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: 20,
+        right: 20,
+        bottom: Math.max(insets.bottom + 62, 80),
+        alignItems: "center",
+        zIndex: 9998,
+        opacity,
+        transform: [{ translateY }],
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+          paddingLeft: 18,
+          paddingRight: 14,
+          paddingVertical: 10,
+          borderRadius: 999,
+          backgroundColor: colors.ink,
+          shadowColor: "#000",
+          shadowOpacity: 0.16,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 6,
+        }}
+      >
+        <Text style={{ color: colors.card, fontSize: 14, fontWeight: "500" }}>{offer.label}</Text>
+        <Pressable
+          hitSlop={8}
+          onPress={() => {
+            tapPress();
+            const run = offer.undo;
+            setOffer(null);
+            void run();
+          }}
+        >
+          <Text style={{ color: colors.accent, fontSize: 14, fontWeight: "700" }}>Undo</Text>
+        </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -234,9 +252,7 @@ export function ToastHost() {
 
   if (!message) return null;
   return (
-    <>
-      <CelebrationBurst key={tick} />
-      <View
+    <View
       pointerEvents="none"
       style={{
         position: "absolute",
@@ -270,6 +286,5 @@ export function ToastHost() {
         <Text style={{ color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 }}>{message}</Text>
       </Animated.View>
     </View>
-    </>
   );
 }

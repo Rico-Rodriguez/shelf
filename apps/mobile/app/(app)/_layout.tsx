@@ -19,32 +19,29 @@ const TABS = [
 function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string }) {
   const insets = useSafeAreaInsets();
   const wordmark = useWordmark();
-  const opacity = useRef(new Animated.Value(0)).current;
-  const [shown, setShown] = useState("");
-  useEffect(() => {
-    if (!syncLabel) return;
-    setShown(syncLabel);
-    opacity.setValue(1);
-    if (syncLabel !== "Up to date") return;
-    const fade = setTimeout(() => {
-      Animated.timing(opacity, { toValue: 0, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    }, 1400);
-    return () => clearTimeout(fade);
-  }, [opacity, syncLabel]);
   return (
     <View style={{ paddingTop: insets.top, backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
-        <View style={{ flex: 1 }} />
+        <View style={{ flex: 1, justifyContent: "center" }}>
+          {syncLabel ? (
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: "500",
+                color: syncLabel === "Sync failed" ? colors.danger : colors.muted,
+              }}
+              numberOfLines={1}
+            >
+              {syncLabel}
+            </Text>
+          ) : null}
+        </View>
         <View style={{ alignItems: "center", justifyContent: "center", height: 36 }}>
-          <Text style={{ fontFamily: wordmark, fontSize: 22, fontWeight: "600", letterSpacing: -0.6, color: colors.ink }}>Shelf</Text>
-            <Animated.Text style={{ height: 14, fontSize: 11, lineHeight: 14, color: shown === "Sync failed" ? colors.danger : shown === "Up to date" ? colors.positive : colors.muted, opacity }}>
-            {shown}
-          </Animated.Text>
+          <Text style={{ fontFamily: wordmark, fontSize: 20, fontWeight: "600", letterSpacing: -0.5, color: colors.ink }}>
+            Shelf
+          </Text>
         </View>
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
-          <Pressable accessibilityLabel="Search" onPress={() => router.push("/search")} style={barButton}>
-            <Icon name="search" size={20} color={colors.ink} />
-          </Pressable>
           <Pressable accessibilityLabel="Settings" onPress={() => router.push("/settings")} style={barButton}>
             <Icon name="gear" size={20} color={colors.ink} />
           </Pressable>
@@ -71,17 +68,6 @@ function ShelfTabBarItem({
   spec?: { name: string; title: string; icon: string };
   onPress: () => void;
 }) {
-  const scale = useRef(new Animated.Value(focused ? 1.06 : 1)).current;
-  useEffect(() => {
-    Animated.spring(scale, {
-      toValue: focused ? 1.08 : 1,
-      useNativeDriver: true,
-      stiffness: 480,
-      damping: 24,
-      mass: 0.6,
-    }).start();
-  }, [focused, scale]);
-
   const color = focused ? colors.accentInk : colors.tertiary;
 
   return (
@@ -95,14 +81,14 @@ function ShelfTabBarItem({
       }}
       style={{ flex: 1, alignItems: "center", gap: 3, minHeight: 46 }}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>
+      <View style={{ position: "relative" }}>
         <Icon name={spec?.icon ?? "more"} size={24} color={color} filled={focused} />
         {route.name === "activity" && reviewCount > 0 ? (
           <View style={[badge, { backgroundColor: colors.danger }]}>
             <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{reviewCount > 99 ? "99+" : reviewCount}</Text>
           </View>
         ) : null}
-      </Animated.View>
+      </View>
       <Text style={{ fontSize: 11, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color }}>{spec?.title}</Text>
     </Pressable>
   );
@@ -118,24 +104,17 @@ function ShelfTabBar({
   onPress: (route: { key: string; name: string }, focused: boolean) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [width, setWidth] = useState(0);
-  const x = useRef(new Animated.Value(0)).current;
-  const count = Math.max(state.routes.length, 1);
-  const tab = width / count;
-  useEffect(() => {
-    Animated.spring(x, { toValue: state.index * tab, useNativeDriver: true, stiffness: 460, damping: 34, mass: 0.7 }).start();
-  }, [state.index, tab, x]);
   return (
     <View
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      style={{ flexDirection: "row", backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8) }}
+      style={{
+        flexDirection: "row",
+        backgroundColor: colors.card,
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+        paddingTop: 8,
+        paddingBottom: Math.max(insets.bottom, 8),
+      }}
     >
-      {tab > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={{ position: "absolute", top: 0, left: tab * 0.28, width: tab * 0.44, height: 3.5, borderRadius: 99, backgroundColor: colors.accent, transform: [{ translateX: x }] }}
-        />
-      ) : null}
       {state.routes.map((route, index) => {
         const spec = TABS.find((tab) => tab.name === route.name);
         const focused = state.index === index;

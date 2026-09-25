@@ -492,7 +492,6 @@ export function Hero({
   status,
   topRight,
   points,
-  baselinePoints,
   reference,
   caption,
   color,
@@ -513,7 +512,6 @@ export function Hero({
   status?: { label: string; tone: "good" | "warn" | "bad" | "neutral" } | null;
   topRight?: ReactNode;
   points?: { date: string; cents: number }[];
-  baselinePoints?: { date: string; cents: number }[];
   reference?: { cents: number; label: string };
   caption?: string;
   color?: string;
@@ -530,6 +528,14 @@ export function Hero({
   const styles = useStyles();
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
   const charting = (points?.length ?? 0) >= 2;
+  const figureText = empty
+    ? empty
+    : signed && cents < 0
+      ? `-${money(Math.abs(cents))}`
+      : signed && cents > 0
+        ? `+${money(cents)}`
+        : money(cents);
+
   return (
     <View style={styles.hero}>
       <View style={styles.heroTop}>
@@ -545,26 +551,32 @@ export function Hero({
       </View>
       {onPressFigure ? (
         <Pressable onPress={onPressFigure} hitSlop={8}>
-          <RollingMoney
-            cents={cents}
-            signed={signed}
-            blank={empty}
-            live={live}
-            style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
-          />
+          <Text
+            style={[
+              styles.heroFigure,
+              empty ? styles.heroEmpty : null,
+              tone === "bad" ? { color: colors.danger } : null,
+              tone === "good" ? { color: colors.positive } : null,
+            ]}
+          >
+            {figureText}
+          </Text>
         </Pressable>
       ) : (
-        <RollingMoney
-          cents={cents}
-          signed={signed}
-          blank={empty}
-          live={live}
-          style={[styles.heroFigure, empty ? styles.heroEmpty : null, tone === "bad" ? { color: colors.danger } : null, tone === "good" ? { color: colors.positive } : null]}
-        />
+        <Text
+          style={[
+            styles.heroFigure,
+            empty ? styles.heroEmpty : null,
+            tone === "bad" ? { color: colors.danger } : null,
+            tone === "good" ? { color: colors.positive } : null,
+          ]}
+        >
+          {figureText}
+        </Text>
       )}
       {subtitle ? <View style={{ marginTop: 4 }}>{subtitle}</View> : null}
       {charting && points ? (
-        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} baselinePoints={baselinePoints} />
+        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} />
       ) : shownShares.length ? (
         <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16, gap: 8 }}>
           <View style={[styles.mix, { borderRadius: 99, overflow: "hidden" }]}>
@@ -861,129 +873,6 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-const ROLL = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-
-function RollingMoney({
-  cents,
-  signed,
-  blank,
-  live,
-  animateOnMount = true,
-  style,
-}: {
-  cents: number;
-  signed?: boolean;
-  blank?: string;
-  live?: boolean;
-  animateOnMount?: boolean;
-  style: StyleProp<TextStyle>;
-}) {
-  const text = blank ? blank : signed && cents < 0 ? `−${money(Math.abs(cents))}` : money(cents);
-  const mountInitial = animateOnMount ? money(0) : text;
-  const fromRef = useRef(mountInitial);
-  const [from, setFrom] = useState(mountInitial);
-  const progress = useRef(new Animated.Value(animateOnMount ? 0 : 1)).current;
-  const [box, setBox] = useState({ w: 26, h: 54 });
-  const hasMounted = useRef(false);
-
-  useEffect(() => {
-    if (!hasMounted.current && animateOnMount && !blank && !live) {
-      hasMounted.current = true;
-      setFrom(mountInitial);
-      progress.setValue(0);
-      const anim = Animated.timing(progress, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: true });
-      anim.start(({ finished }) => {
-        if (finished) fromRef.current = text;
-      });
-      return () => anim.stop();
-    }
-    
-    if (live || blank || (fromRef.current === text && hasMounted.current)) {
-      fromRef.current = text;
-      setFrom(text);
-      progress.setValue(1);
-      hasMounted.current = true;
-      return;
-    }
-    
-    hasMounted.current = true;
-    setFrom(fromRef.current);
-    progress.setValue(0);
-    const anim = Animated.timing(progress, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true });
-    anim.start(({ finished }) => {
-      if (finished) fromRef.current = text;
-    });
-    return () => anim.stop();
-  }, [text, live, blank, progress, mountInitial, animateOnMount]);
-
-  if (blank || live) return <Text style={style}>{text}</Text>;
-
-  const len = Math.max(from.length, text.length);
-  const left = from.padStart(len);
-  const right = text.padStart(len);
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", height: box.h, marginTop: 2 }}>
-      <Text
-        style={[style, { position: "absolute", opacity: 0 }]}
-        pointerEvents="none"
-        onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          if (height > 0 && width > 0 && (height !== box.h || width !== box.w)) {
-            setBox({ w: width, h: height });
-          }
-        }}
-      >
-        8
-      </Text>
-      {right.split("").map((glyph, index) => (
-        <Digit key={`${len - index}-${glyph}`} from={left[index]} to={glyph} progress={progress} width={box.w} height={box.h} style={style} />
-      ))}
-    </View>
-  );
-}
-
-function Digit({
-  from,
-  to,
-  progress,
-  width,
-  height,
-  style,
-}: {
-  from: string;
-  to: string;
-  progress: Animated.Value;
-  width: number;
-  height: number;
-  style: StyleProp<TextStyle>;
-}) {
-  const fromDigit = /\d/.test(from) ? Number(from) : null;
-  const toDigit = /\d/.test(to) ? Number(to) : null;
-  if (fromDigit == null || toDigit == null || from === to) {
-    return <Text style={[style, { width: to === " " ? 0 : undefined }]}>{to === " " ? "" : to}</Text>;
-  }
-  let delta = toDigit - fromDigit;
-  if (delta > 5) delta -= 10;
-  if (delta < -5) delta += 10;
-  let start = fromDigit;
-  let end = fromDigit + delta;
-  if (end < 0) {
-    start += 10;
-    end += 10;
-  }
-  const shift = progress.interpolate({ inputRange: [0, 1], outputRange: [-start * height, -end * height] });
-  return (
-    <View style={{ width, height, overflow: "hidden" }}>
-      <Animated.View style={{ transform: [{ translateY: shift }] }}>
-        {ROLL.map((glyph, index) => (
-          <Text key={index} style={[style, { height, lineHeight: height, width, marginTop: 0 }]}>
-            {glyph}
-          </Text>
-        ))}
-      </Animated.View>
-    </View>
-  );
-}
 
 
 function makeStyles(colors: Palette) {

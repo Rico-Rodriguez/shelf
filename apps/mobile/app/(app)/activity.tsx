@@ -1,20 +1,46 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { api, load as read, peek, subscribeCache } from "../../src/api";
-import { categorizeLabel, dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
-import { tapSelect } from "../../src/haptic";
-import { Charge, ChargeSheet } from "../../src/charge";
-import { celebrate } from "../../src/toast";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { api, load as read, peek } from "../../src/api";
+import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
+import { ReviewDeck } from "../../src/decide";
+import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, monthLabel, monthRange, todayISO } from "../../src/format";
+import { tapPress, tapSelect } from "../../src/haptic";
+import { Icon, MerchantMark } from "../../src/icons";
+import { ConfirmMark, offerUndo, UndoHost } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
-import { Button, Card, colors, Field, LedgerRow, Loading, MonthNav, Note, Screen, SearchField, Section, Segment, Sheet, SpringPressable } from "../../src/ui";
+import {
+  Button,
+  Card,
+  colors,
+  Field,
+  Loading,
+  MonthNav,
+  Note,
+  ReviewBanner,
+  Screen,
+  SearchField,
+  Section,
+  Segment,
+  Sheet,
+} from "../../src/ui";
 
 type Tx = Charge;
+type TxPayload = {
+  transactions: Tx[];
+  unreviewed: number;
+  faces?: Record<string, { monthCents: number; count: number }>;
+  frequentCategoryIds?: string[];
+};
 
-type Group = { id?: string; name: string; categories: { id: string; name: string }[] };
-type TxPayload = { transactions: Tx[]; unreviewed: number; faces?: Record<string, { monthCents: number; count: number }>; frequentCategoryIds?: string[] };
-
-function txPath(search: string, unreviewedOnly: boolean, categoryId: string, accountFilter: string, tag: string, range: { start: string; end: string } | null) {
+function txPath(
+  search: string,
+  unreviewedOnly: boolean,
+  categoryId: string,
+  accountFilter: string,
+  tag: string,
+  range: { start: string; end: string } | null,
+) {
   const qs = new URLSearchParams();
   if (search.trim()) qs.set("q", search.trim());
   if (unreviewedOnly) qs.set("reviewed", "false");
@@ -29,7 +55,18 @@ function txPath(search: string, unreviewedOnly: boolean, categoryId: string, acc
 }
 
 export default function ActivityScreen() {
-  const params = useLocalSearchParams<{ q?: string; categoryId?: string; start?: string; end?: string; accountId?: string; tag?: string; reviewed?: string; focus?: string }>();
+  const params = useLocalSearchParams<{
+    q?: string;
+    categoryId?: string;
+    start?: string;
+    end?: string;
+    accountId?: string;
+    tag?: string;
+    reviewed?: string;
+    focus?: string;
+  }>();
+
+  const [focusMode, setFocusMode] = useState(params.focus === "1" && params.reviewed === "false");
   const [query, setQuery] = useState(typeof params.q === "string" ? params.q : "");
   const [search, setSearch] = useState(query);
   const [unreviewedOnly, setUnreviewedOnly] = useState(params.reviewed === "false");
@@ -39,12 +76,27 @@ export default function ActivityScreen() {
   const [range, setRange] = useState<{ start: string; end: string } | null>(
     typeof params.start === "string" && typeof params.end === "string" ? { start: params.start, end: params.end } : null,
   );
+
   const [rows, setRows] = useState<Tx[] | null>(() => {
     const start = typeof params.start === "string" && typeof params.end === "string" ? { start: params.start, end: params.end } : null;
-    return peek<TxPayload>(txPath(typeof params.q === "string" ? params.q : "", params.reviewed === "false", typeof params.categoryId === "string" ? params.categoryId : "", typeof params.accountId === "string" ? params.accountId : "", typeof params.tag === "string" ? params.tag : "", start))?.transactions ?? null;
+    return (
+      peek<TxPayload>(
+        txPath(
+          typeof params.q === "string" ? params.q : "",
+          params.reviewed === "false",
+          typeof params.categoryId === "string" ? params.categoryId : "",
+          typeof params.accountId === "string" ? params.accountId : "",
+          typeof params.tag === "string" ? params.tag : "",
+          start,
+        ),
+      )?.transactions ?? null
+    );
   });
   const [unreviewed, setUnreviewed] = useState(0);
-  const [groups, setGroups] = useState<Group[]>(() => peek<{ groups: Group[] }>("/api/categories")?.groups ?? []);
+  const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
+  const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
+  const [frequentCategoryIds, setFrequentCategoryIds] = useState<string[]>([]);
+  const [groups, setGroups] = useState<ChargeGroup[]>(() => peek<{ groups: ChargeGroup[] }>("/api/categories")?.groups ?? []);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>(() => peek<{ accounts: { id: string; name: string }[] }>("/api/accounts")?.accounts ?? []);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Tx | null>(null);
@@ -61,10 +113,14 @@ export default function ActivityScreen() {
   const [addCategory, setAddCategory] = useState("");
   const [addDate, setAddDate] = useState(todayISO());
   const [addMore, setAddMore] = useState(false);
-  const [cursor, setCursor] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() + 1 };
-  });
+  const cleared = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (params.focus === "1" && params.reviewed === "false") {
+      setFocusMode(true);
+      setUnreviewedOnly(true);
+    }
+  }, [params.focus, params.reviewed]);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query), 250);
@@ -74,12 +130,15 @@ export default function ActivityScreen() {
   const load = useCallback(() => {
     return Promise.all([
       read<TxPayload>(txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range)),
-      read<{ groups: Group[] }>("/api/categories"),
+      read<{ groups: ChargeGroup[] }>("/api/categories"),
       read<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
     ])
       .then(([tx, cats, accts]) => {
-        setRows(tx.transactions);
+        setRows(tx.transactions.filter((t) => !cleared.current.has(t.id)));
         setUnreviewed(tx.unreviewed);
+        setReviewBaseline((curr) => curr ?? tx.unreviewed);
+        setFaces(tx.faces ?? {});
+        setFrequentCategoryIds(tx.frequentCategoryIds ?? []);
         setGroups(cats.groups);
         setAccounts(accts.accounts);
         setAccountId((current) => current || accts.accounts[0]?.id || "");
@@ -104,22 +163,113 @@ export default function ActivityScreen() {
     return [...map.entries()];
   }, [rows]);
 
-  const reviewRows = (rows ?? []).filter((tx) => !tx.reviewed);
-  const categories = groups.flatMap((group) => group.categories);
+  const unreviewedRows = useMemo(() => (rows ?? []).filter((tx) => !tx.reviewed), [rows]);
+  const categories = useMemo(() => groups.flatMap((group) => group.categories), [groups]);
 
-  async function patch(id: string, body: Record<string, unknown>) {
-    // Optimistic update for instant UI feedback
-    setRows((current) =>
-      (current ?? []).map((t) => (t.id === id ? { ...t, ...body } : t))
-    );
-    if ("reviewed" in body && body.reviewed === true) {
-      setUnreviewed((u) => Math.max(0, u - 1));
-    }
+  function dropFromQueue(ids: string[]) {
+    for (const id of ids) cleared.current.add(id);
+    const gone = new Set(ids);
+    setRows((current) => (current ? current.filter((r) => !gone.has(r.id)) : []));
+    setUnreviewed((count) => Math.max(0, count - ids.length));
+  }
+
+  function restoreCleared(ids: string[]) {
+    for (const id of ids) cleared.current.delete(id);
+  }
+
+  async function handleReviewConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
+    dropFromQueue([tx.id]);
+    let appliedCount = 0;
+    let appliedIds: string[] = [];
+    let previousEntries: { id: string; categoryId: string | null }[] = [];
+    let createdRuleId: string | null = null;
+
     try {
-      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-      setSelected(null);
-      load();
+      await api(`/api/transactions/${tx.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
+      });
+
+      if (makeRule && nextCategoryId) {
+        const merchant = tx.merchantName || tx.name;
+        const res = await api<{ id: string; applied?: number; ids?: string[]; previous?: { id: string; categoryId: string | null }[] }>("/api/rules", {
+          method: "POST",
+          body: JSON.stringify({
+            name: merchant,
+            matchMerchant: merchantMatchKey(merchant),
+            actionCategoryId: nextCategoryId,
+            enabled: true,
+            applyUnreviewed: true,
+          }),
+        });
+        if (res) {
+          createdRuleId = res.id;
+          appliedCount = res.applied ?? 0;
+          appliedIds = (res.ids ?? []).filter((id) => id !== tx.id);
+          previousEntries = res.previous ?? [];
+          dropFromQueue(appliedIds);
+        }
+      }
+
+      offerUndo(appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed", async () => {
+        restoreCleared([tx.id, ...appliedIds]);
+        await api(`/api/transactions/${tx.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ categoryId: tx.categoryId, reviewed: false }),
+        });
+        if (previousEntries.length > 0) {
+          await api("/api/transactions/review-all", {
+            method: "POST",
+            body: JSON.stringify({ restore: previousEntries }),
+          });
+        }
+        if (createdRuleId) {
+          await api(`/api/rules/${createdRuleId}`, { method: "DELETE" });
+        }
+        load();
+      });
     } catch {
+      load();
+    }
+  }
+
+  function handleReviewSkip(tx: Charge) {
+    setRows((current) => {
+      if (!current || current.length < 2) return current;
+      const index = current.findIndex((r) => r.id === tx.id);
+      if (index < 0) return current;
+      const next = current.slice();
+      const [skipped] = next.splice(index, 1);
+      next.push(skipped);
+      return next;
+    });
+  }
+
+  async function hideTx(id: string) {
+    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
+    setRows((current) => (current ? current.filter((r) => r.id !== id) : []));
+    offerUndo("Hidden", async () => {
+      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
+      load();
+    });
+    load();
+  }
+
+  async function markDone(id: string) {
+    const previous = rows?.find((tx) => tx.id === id);
+    if (!previous) return;
+    dropFromQueue([id]);
+    try {
+      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
+      offerUndo("Marked reviewed", async () => {
+        restoreCleared([id]);
+        await api(`/api/transactions/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ reviewed: false, categoryId: previous.categoryId, hidden: previous.hidden }),
+        });
+        load();
+      });
+    } finally {
       load();
     }
   }
@@ -141,7 +291,9 @@ export default function ActivityScreen() {
       setName("");
       setAmount("");
       setAdding(false);
-      celebrate("Added");
+      offerUndo("Added", async () => {
+        load();
+      });
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add");
@@ -151,12 +303,76 @@ export default function ActivityScreen() {
   }
 
   const month = range ? { year: Number(range.start.slice(0, 4)), month: Number(range.start.slice(5, 7)) } : null;
+  const filtered = Boolean(search || accountFilter || categoryId || tag || range || unreviewedOnly);
+  const accountName = accounts.find((a) => a.id === accountFilter)?.name;
+  const categoryName = categories.find((c) => c.id === categoryId)?.name;
 
   const [refreshing, setRefreshing] = useState(false);
   const pull = useCallback(() => {
     setRefreshing(true);
     load().finally(() => setRefreshing(false));
   }, [load]);
+
+  // Review mode view (when focused into review deck)
+  if (focusMode && unreviewedOnly) {
+    return (
+      <Screen
+        title="Review"
+        framed
+        scrollable={false}
+        action={
+          <Pressable
+            onPress={() => {
+              tapPress();
+              setFocusMode(false);
+              setUnreviewedOnly(false);
+            }}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+          >
+            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Done</Text>
+          </Pressable>
+        }
+      >
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+          {unreviewedRows.length > 0 ? (
+            <ReviewDeck
+              rows={unreviewedRows}
+              remaining={unreviewed}
+              total={reviewBaseline ?? unreviewed}
+              groups={groups}
+              frequentCategoryIds={frequentCategoryIds}
+              faces={faces}
+              onConfirm={handleReviewConfirm}
+              onSkip={handleReviewSkip}
+            />
+          ) : (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 }}>
+              <ConfirmMark size={64} />
+              <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
+                You’re caught up
+              </Text>
+              <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
+                Every transaction has been reviewed.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  tapPress();
+                  setFocusMode(false);
+                  setUnreviewedOnly(false);
+                }}
+                style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 16 }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>
+                  Show all activity
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+        <UndoHost />
+      </Screen>
+    );
+  }
 
   type ListItem =
     | { type: "header"; id: string; title: string; flowText: string }
@@ -189,96 +405,80 @@ export default function ActivityScreen() {
   const listHeader = (
     <View style={{ gap: 12, paddingBottom: 8 }}>
       {error ? <Note>{error}</Note> : null}
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+
+      {/* Review banner when unreviewed charges exist */}
+      {unreviewed > 0 && !unreviewedOnly ? (
+        <ReviewBanner
+          label={categorizeLabel(unreviewed)}
+          onPress={() => {
+            tapPress();
+            setFocusMode(true);
+            setUnreviewedOnly(true);
+          }}
+        />
+      ) : null}
+
+      {/* Search Bar + Filter Icon with indicator dot */}
+      <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
         <View style={{ flex: 1 }}>
           <SearchField value={query} onChangeText={setQuery} placeholder="Search merchants or notes" />
         </View>
-        <Pressable onPress={() => setFilters(true)} style={{ minHeight: 40, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.accentInk, fontWeight: "600" }}>Filter</Text>
-        </Pressable>
-      </View>
-      {/* Horizontal Fast Filter Carousel (Robinhood / Monarch style) */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8, paddingVertical: 2, alignItems: "center" }}
-      >
-        <SpringPressable
+        <Pressable
           onPress={() => {
-            tapSelect();
-            setUnreviewedOnly(false);
-            setCategoryId("");
-            setAccountFilter("");
-            setTag("");
-            setRange(null);
-          }}
-          style={[chip, !unreviewedOnly && !categoryId && !range && !accountFilter && !tag ? chipActive : null]}
-        >
-          <Text style={[chipText, !unreviewedOnly && !categoryId && !range && !accountFilter && !tag ? chipTextActive : null]}>
-            All
-          </Text>
-        </SpringPressable>
-
-        <SpringPressable
-          onPress={() => {
-            tapSelect();
-            setUnreviewedOnly((v) => !v);
-          }}
-          style={[chip, unreviewedOnly ? chipActive : null]}
-        >
-          <Text style={[chipText, unreviewedOnly ? chipTextActive : null]}>
-            {`Needs review${unreviewed > 0 ? ` (${unreviewed})` : ""}`}
-          </Text>
-        </SpringPressable>
-
-        <SpringPressable
-          onPress={() => {
-            tapSelect();
-            if (range) {
-              setRange(null);
-            } else {
-              const now = new Date();
-              setRange(monthRange(now.getFullYear(), now.getMonth() + 1));
-            }
-          }}
-          style={[chip, range ? chipActive : null]}
-        >
-          <Text style={[chipText, range ? chipTextActive : null]}>This month</Text>
-        </SpringPressable>
-
-        {accountFilter ? (
-          <SpringPressable onPress={() => setAccountFilter("")} style={[chip, chipActive]}>
-            <Text style={[chipText, chipTextActive]}>
-              {`${accounts.find((row) => row.id === accountFilter)?.name ?? "Account"} ✕`}
-            </Text>
-          </SpringPressable>
-        ) : null}
-
-        {categoryId ? (
-          <SpringPressable onPress={() => setCategoryId("")} style={[chip, chipActive]}>
-            <Text style={[chipText, chipTextActive]}>
-              {`${categories.find((row) => row.id === categoryId)?.name ?? "Category"} ✕`}
-            </Text>
-          </SpringPressable>
-        ) : null}
-
-        {tag ? (
-          <SpringPressable onPress={() => setTag("")} style={[chip, chipActive]}>
-            <Text style={[chipText, chipTextActive]}>{`#${tag} ✕`}</Text>
-          </SpringPressable>
-        ) : null}
-
-        <SpringPressable
-          onPress={() => {
-            tapSelect();
+            tapPress();
             setFilters(true);
           }}
-          style={[chip, { borderStyle: "dashed" }]}
+          style={styles.filterButton}
         >
-          <Text style={chipText}>More filters ›</Text>
-        </SpringPressable>
-      </ScrollView>
-      {selecting ? <Button label="Cancel select" tone="quiet" onPress={() => { setSelecting(false); setSelectedIds([]); }} /> : null}
+          <Icon name="filter" size={18} color={colors.ink} />
+          {filtered ? <View style={styles.filterDot} /> : null}
+        </Pressable>
+      </View>
+
+      {/* Active Filter Chips (1:1 with Web) */}
+      {filtered ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 }}>
+          {accountName ? (
+            <Pressable onPress={() => setAccountFilter("")} style={styles.activeChip}>
+              <Text style={styles.activeChipText}>{accountName} ✕</Text>
+            </Pressable>
+          ) : null}
+          {categoryName ? (
+            <Pressable onPress={() => setCategoryId("")} style={styles.activeChip}>
+              <Text style={styles.activeChipText}>{categoryName} ✕</Text>
+            </Pressable>
+          ) : null}
+          {tag ? (
+            <Pressable onPress={() => setTag("")} style={styles.activeChip}>
+              <Text style={styles.activeChipText}>#{tag} ✕</Text>
+            </Pressable>
+          ) : null}
+          {range ? (
+            <Pressable onPress={() => setRange(null)} style={styles.activeChip}>
+              <Text style={styles.activeChipText}>Dates ✕</Text>
+            </Pressable>
+          ) : null}
+          {unreviewedOnly ? (
+            <Pressable onPress={() => setUnreviewedOnly(false)} style={styles.activeChip}>
+              <Text style={styles.activeChipText}>Needs review ✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {selecting ? (
+        <Pressable
+          onPress={() => {
+            tapPress();
+            setSelecting(false);
+            setSelectedIds([]);
+          }}
+          style={styles.cancelSelectChip}
+        >
+          <Text style={styles.cancelSelectText}>Cancel select</Text>
+        </Pressable>
+      ) : null}
+
       {rows === null && !error ? <Loading /> : null}
       {rows && grouped.length === 0 ? <Note>No matches. Try another search or clear a filter.</Note> : null}
     </View>
@@ -290,8 +490,14 @@ export default function ActivityScreen() {
       framed
       scrollable={false}
       action={
-        <Pressable onPress={() => setAdding(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
+        <Pressable
+          onPress={() => {
+            tapPress();
+            setAdding(true);
+          }}
+          style={styles.addButton}
+        >
+          <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       }
     >
@@ -304,7 +510,7 @@ export default function ActivityScreen() {
         maxToRenderPerBatch={14}
         windowSize={7}
         initialNumToRender={14}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 60 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} />}
         renderItem={({ item }) => {
           if (item.type === "header") {
@@ -319,51 +525,57 @@ export default function ActivityScreen() {
           return (
             <View
               style={[
-                rowStyle.wrapper,
-                item.isFirst && rowStyle.first,
-                item.isLast && rowStyle.last,
+                styles.rowWrapper,
+                item.isFirst && styles.rowFirst,
+                item.isLast && styles.rowLast,
               ]}
             >
               <SwipeRow
                 key={tx.id}
                 divided={!item.isFirst}
                 peek={!tx.reviewed}
-                onSwipeRight={
-                  !tx.reviewed
-                    ? () => {
-                        celebrate("Reviewed");
-                        void patch(tx.id, { reviewed: true });
-                      }
-                    : undefined
-                }
-                swipeRightLabel="Approve"
                 onPress={() => {
                   if (!selecting) {
                     setSelected(tx);
                     return;
                   }
-                  setSelectedIds((current) => (current.includes(tx.id) ? current.filter((id) => id !== tx.id) : [...current, tx.id]));
+                  setSelectedIds((current) =>
+                    current.includes(tx.id) ? current.filter((id) => id !== tx.id) : [...current, tx.id],
+                  );
                 }}
                 actions={[
-                  { label: "Hide", tone: "danger", onPress: () => void patch(tx.id, { hidden: true }) },
+                  { label: "Hide", tone: "danger", onPress: () => void hideTx(tx.id) },
                   tx.reviewed
                     ? { label: "Edit", tone: "ink", onPress: () => setSelected(tx) }
-                    : { label: "Done", tone: "accent", onPress: () => { celebrate("Reviewed"); void patch(tx.id, { reviewed: true }); } },
+                    : { label: "Done", tone: "accent", onPress: () => void markDone(tx.id) },
                 ]}
               >
-                <LedgerRow
-                  name={`${selecting && selectedIds.includes(tx.id) ? "✓ " : ""}${tx.name}`}
-                  color={tx.category?.color}
-                  meta={[tx.category?.name ?? "Uncategorized", tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
-                  amount={amount.text}
-                  amountColor={amount.color}
-                />
+                <View style={styles.txRowInner}>
+                  {selecting ? (
+                    <View style={[styles.checkbox, selectedIds.includes(tx.id) && styles.checkboxChecked]}>
+                      {selectedIds.includes(tx.id) ? <Icon name="check" size={12} color="#fff" filled /> : null}
+                    </View>
+                  ) : null}
+                  <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color ?? undefined} />
+                  <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
+                    <Text numberOfLines={1} style={styles.txName}>
+                      {tx.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.txMeta}>
+                      {[tx.category?.name, tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ") || "Uncategorized"}
+                    </Text>
+                  </View>
+                  <Text style={[styles.txAmount, { color: amount.color }]}>
+                    {amount.text}
+                  </Text>
+                </View>
               </SwipeRow>
             </View>
           );
         }}
       />
 
+      {/* Transaction Details / Edit Sheet */}
       {selected ? (
         <ChargeSheet
           tx={{
@@ -381,28 +593,68 @@ export default function ActivityScreen() {
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
-            celebrate("Saved");
+            offerUndo("Saved", async () => {
+              load();
+            });
             load();
           }}
         />
       ) : null}
 
+      {/* Filters Modal Sheet */}
       {filters ? (
         <Sheet title="Filter" onClose={() => setFilters(false)}>
           <Section title="Account" />
           <Card>
-            <Pressable onPress={() => setAccountFilter("")} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16 }}>
-              <Text style={{ color: accountFilter ? colors.ink : colors.accentInk }}>All accounts</Text>
+            <Pressable
+              onPress={() => {
+                tapSelect();
+                setAccountFilter("");
+              }}
+              style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16 }}
+            >
+              <Text style={{ color: !accountFilter ? colors.accentInk : colors.ink, fontWeight: !accountFilter ? "600" : "400" }}>
+                All accounts
+              </Text>
             </Pressable>
             {accounts.map((account) => (
-              <Pressable key={account.id} onPress={() => setAccountFilter(account.id)} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}>
-                <Text style={{ color: accountFilter === account.id ? colors.accentInk : colors.ink }}>{account.name}</Text>
+              <Pressable
+                key={account.id}
+                onPress={() => {
+                  tapSelect();
+                  setAccountFilter(account.id);
+                }}
+                style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}
+              >
+                <Text style={{ color: accountFilter === account.id ? colors.accentInk : colors.ink, fontWeight: accountFilter === account.id ? "600" : "400" }}>
+                  {account.name}
+                </Text>
               </Pressable>
             ))}
           </Card>
-          <Field label="Tag" value={tag} onChangeText={setTag} />
-          <Button label={unreviewedOnly ? "Showing needs review" : "Needs review"} tone={unreviewedOnly ? "primary" : "quiet"} onPress={() => setUnreviewedOnly((value) => !value)} />
-          <Button label="Select transactions" tone="quiet" onPress={() => { setSelecting(true); setSelectedIds([]); setFilters(false); }} />
+
+          <Field label="Tag" value={tag} onChangeText={setTag} placeholder="Filter by tag" />
+
+          <Button
+            label={unreviewedOnly ? "Showing needs review" : "Needs review"}
+            tone={unreviewedOnly ? "primary" : "quiet"}
+            onPress={() => {
+              tapSelect();
+              setUnreviewedOnly((value) => !value);
+            }}
+          />
+
+          <Button
+            label="Select transactions"
+            tone="quiet"
+            onPress={() => {
+              tapSelect();
+              setSelecting(true);
+              setSelectedIds([]);
+              setFilters(false);
+            }}
+          />
+
           {month ? (
             <MonthNav
               year={month.year}
@@ -415,33 +667,65 @@ export default function ActivityScreen() {
               label="This month"
               tone="quiet"
               onPress={() => {
+                tapSelect();
                 const now = new Date();
                 setRange(monthRange(now.getFullYear(), now.getMonth() + 1));
               }}
             />
           )}
-          {range ? <Button label="All months" tone="quiet" onPress={() => setRange(null)} /> : null}
+
+          {range ? (
+            <Button
+              label="All months"
+              tone="quiet"
+              onPress={() => {
+                tapSelect();
+                setRange(null);
+              }}
+            />
+          ) : null}
+
           <Section title="Category" />
           <Card>
-            <Pressable onPress={() => setCategoryId("")} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16 }}>
-              <Text style={{ color: categoryId ? colors.ink : colors.accentInk }}>All categories</Text>
+            <Pressable
+              onPress={() => {
+                tapSelect();
+                setCategoryId("");
+              }}
+              style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16 }}
+            >
+              <Text style={{ color: !categoryId ? colors.accentInk : colors.ink, fontWeight: !categoryId ? "600" : "400" }}>
+                All categories
+              </Text>
             </Pressable>
-            {categories.slice(0, 40).map((category) => (
-              <Pressable key={category.id} onPress={() => setCategoryId(category.id)} style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}>
-                <Text style={{ color: categoryId === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
+            {categories.slice(0, 40).map((cat) => (
+              <Pressable
+                key={cat.id}
+                onPress={() => {
+                  tapSelect();
+                  setCategoryId(cat.id);
+                }}
+                style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.line }}
+              >
+                <Text style={{ color: categoryId === cat.id ? colors.accentInk : colors.ink, fontWeight: categoryId === cat.id ? "600" : "400" }}>
+                  {cat.name}
+                </Text>
               </Pressable>
             ))}
           </Card>
-          {reviewRows.length > 0 && reviewRows.every((tx) => tx.categoryId) ? (
+
+          {unreviewedRows.length > 0 && unreviewedRows.every((tx) => tx.categoryId) ? (
             <Button
-              label={`Accept ${reviewRows.length}`}
+              label={`Accept ${unreviewedRows.length}`}
               onPress={() =>
                 void api("/api/transactions/review-all", {
                   method: "POST",
-                  body: JSON.stringify({ ids: reviewRows.map((tx) => tx.id) }),
+                  body: JSON.stringify({ ids: unreviewedRows.map((tx) => tx.id) }),
                 }).then(() => {
                   setFilters(false);
-                  celebrate("Accepted");
+                  offerUndo("Accepted all", async () => {
+                    load();
+                  });
                   load();
                 })
               }
@@ -450,10 +734,11 @@ export default function ActivityScreen() {
         </Sheet>
       ) : null}
 
+      {/* Add Transaction Sheet */}
       {adding ? (
         <Sheet title="Add" onClose={() => setAdding(false)}>
-          <Field label="Name" value={name} onChangeText={setName} />
-          <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
+          <Field label="Name" value={name} onChangeText={setName} placeholder="Coffee, paycheck…" />
+          <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" />
           <Segment
             value={income ? "in" : "out"}
             onChange={(value) => setIncome(value === "in")}
@@ -464,99 +749,228 @@ export default function ActivityScreen() {
           />
           <Section title="Category" />
           <Card>
-            {categories.slice(0, 24).map((category, index) => (
-              <Pressable key={category.id} onPress={() => setAddCategory(category.id)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                <Text style={{ color: addCategory === category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
+            {categories.slice(0, 24).map((cat, index) => (
+              <Pressable
+                key={cat.id}
+                onPress={() => {
+                  tapSelect();
+                  setAddCategory(cat.id);
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                  borderTopWidth: index ? 1 : 0,
+                  borderTopColor: colors.line,
+                }}
+              >
+                <Text style={{ color: addCategory === cat.id ? colors.accentInk : colors.ink, fontWeight: addCategory === cat.id ? "600" : "400" }}>
+                  {cat.name}
+                </Text>
               </Pressable>
             ))}
           </Card>
           <Button label={addMore ? "Less" : "More"} tone="quiet" onPress={() => setAddMore((value) => !value)} />
           {addMore ? <Field label="Date" value={addDate} onChangeText={setAddDate} placeholder="YYYY-MM-DD" /> : null}
-          {accounts.map((account) => (
-            <Pressable key={account.id} onPress={() => setAccountId(account.id)}>
-              <Text style={{ fontSize: 16, color: accountId === account.id ? colors.accentInk : colors.ink, paddingVertical: 8 }}>{account.name}</Text>
-            </Pressable>
-          ))}
-          <Button label="Add" onPress={() => void add()} busy={busy} />
+          <Section title="Account" />
+          <Card>
+            {accounts.map((acct, index) => (
+              <Pressable
+                key={acct.id}
+                onPress={() => {
+                  tapSelect();
+                  setAccountId(acct.id);
+                }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                  borderTopWidth: index ? 1 : 0,
+                  borderTopColor: colors.line,
+                }}
+              >
+                <Text style={{ color: accountId === acct.id ? colors.accentInk : colors.ink, fontWeight: accountId === acct.id ? "600" : "400" }}>
+                  {acct.name}
+                </Text>
+              </Pressable>
+            ))}
+          </Card>
+          <Button label="Add transaction" onPress={() => void add()} busy={busy} />
         </Sheet>
       ) : null}
 
+      {/* Multi-Select Floating Bar */}
       {selecting && selectedIds.length ? (
-        <Card>
-          <View style={{ padding: 12, gap: 8 }}>
-            <Note>{`${selectedIds.length} selected`}</Note>
-            {categories.slice(0, 12).map((category) => (
-              <Pressable key={category.id} onPress={() => setBulkCategory(category.id)}>
-                <Text style={{ color: bulkCategory === category.id ? colors.accentInk : colors.ink, paddingVertical: 6 }}>{category.name}</Text>
-              </Pressable>
-            ))}
-            <Button
-              label="Apply"
-              onPress={() =>
-                void Promise.all(
-                  selectedIds.map((id) => api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ categoryId: bulkCategory || undefined, reviewed: true }) })),
-                ).then(() => {
-                  setSelectedIds([]);
-                  setSelecting(false);
-                  celebrate("Updated");
+        <View style={styles.bulkBar}>
+          <Text style={styles.bulkText}>{`${selectedIds.length} selected`}</Text>
+          <Button
+            label="Mark reviewed"
+            onPress={() =>
+              void Promise.all(
+                selectedIds.map((id) =>
+                  api(`/api/transactions/${id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ categoryId: bulkCategory || undefined, reviewed: true }),
+                  }),
+                ),
+              ).then(() => {
+                setSelectedIds([]);
+                setSelecting(false);
+                offerUndo("Reviewed selected", async () => {
                   load();
-                })
-              }
-            />
-          </View>
-        </Card>
+                });
+                load();
+              })
+            }
+          />
+        </View>
       ) : null}
+
+      <UndoHost />
     </Screen>
   );
 }
 
-const chip = {
-  backgroundColor: colors.card,
-  borderRadius: 999,
-  paddingHorizontal: 13,
-  paddingVertical: 7,
-  borderWidth: 1,
-  borderColor: colors.line,
-  minHeight: 34,
-  alignItems: "center" as const,
-  justifyContent: "center" as const,
-};
-const chipActive = {
-  backgroundColor: colors.accentSoft,
-  borderColor: colors.accent,
-};
-const chipText = {
-  fontSize: 13,
-  fontWeight: "600" as const,
-  color: colors.muted,
-  letterSpacing: -0.1,
-};
-const chipTextActive = {
-  color: colors.accentInk,
-  fontWeight: "700" as const,
-};
-
-const rowStyle = StyleSheet.create({
-  wrapper: {
+const styles = StyleSheet.create({
+  filterButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  filterDot: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+  },
+  activeChip: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  activeChipText: {
+    color: colors.accentInk,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  cancelSelectChip: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.fill,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  cancelSelectText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  addButton: {
+    backgroundColor: colors.control,
+    borderRadius: 999,
+    minHeight: 34,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addButtonText: {
+    color: colors.controlInk,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  rowWrapper: {
     backgroundColor: colors.card,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: colors.line,
     overflow: "hidden",
   },
-  first: {
+  rowFirst: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderTopWidth: 1,
   },
-  last: {
+  rowLast: {
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     borderBottomWidth: 1,
-    shadowColor: "#14181f",
+    shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
+  txRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 12,
+    backgroundColor: colors.card,
+  },
+  txName: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  txMeta: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 1,
+  },
+  txAmount: {
+    fontSize: 16,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.tertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  bulkBar: {
+    position: "absolute",
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  bulkText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.ink,
+  },
 });
-

@@ -2,10 +2,10 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { dayLabel, daysLeftInMonth, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
+import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet, SpringPressable } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
 
 type BudgetRow = {
   category: { id: string; name: string; sortOrder?: number };
@@ -184,25 +184,6 @@ export default function BudgetScreen() {
   const left = plannedTotal - (data?.expenseSpentCents ?? 0);
   const over = hasPlan && left < 0;
 
-  const todayDate = new Date();
-  const isCurrentMonth = cursor.year === todayDate.getFullYear() && cursor.month === todayDate.getMonth() + 1;
-  const daysInMonth = new Date(cursor.year, cursor.month, 0).getDate();
-  const monthDayProgress = isCurrentMonth ? Math.min(1, Math.max(0, todayDate.getDate() / daysInMonth)) : undefined;
-  const daysLeft = daysLeftInMonth();
-  const dailySafe = hasPlan && !over && left > 0 ? Math.round(left / daysLeft) : null;
-  const budgetPct = hasPlan && plannedTotal > 0 ? Math.round(((data?.expenseSpentCents ?? 0) / plannedTotal) * 100) : 0;
-
-  const heroStatus = hasPlan
-    ? over
-      ? { label: `Over by ${money(Math.abs(left))}`, tone: "bad" as const }
-      : isCurrentMonth
-      ? {
-          label: `Day ${todayDate.getDate()} of ${daysInMonth} · ${budgetPct}% spent`,
-          tone: budgetPct > (todayDate.getDate() / daysInMonth) * 100 + 10 ? ("warn" as const) : ("good" as const),
-        }
-      : null
-    : null;
-
   return (
     <Screen
       title="Budget"
@@ -225,27 +206,18 @@ export default function BudgetScreen() {
             label={hasPlan ? (over ? "Over this month" : "Left this month") : "Spent this month"}
             cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
             tone={hasPlan ? (over ? "bad" : "good") : undefined}
+            status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
             points={hasPlan ? undefined : data.spendSeries}
             meter={hasPlan ? { value: data.expenseSpentCents, max: plannedTotal } : undefined}
-            status={heroStatus}
           >
             {hasPlan ? (
               <Facts
                 items={[
                   { kicker: "Spent", value: money(data.expenseSpentCents) },
                   { kicker: "Plan", value: money(plannedTotal) },
-                  {
-                    kicker: over ? "Over" : dailySafe != null ? "Daily safe" : "Remaining",
-                    value: over ? money(Math.abs(left)) : dailySafe != null ? `${money(dailySafe)}/d` : money(left),
-                    color: over ? colors.danger : colors.positive,
-                  },
                 ]}
               />
-            ) : (
-              <View style={{ paddingBottom: 16 }}>
-                <Text style={{ marginTop: 8, color: colors.muted }}>No plan yet</Text>
-              </View>
-            )}
+            ) : null}
           </Hero>
 
           {visibleGroups.map((group) => {
@@ -277,8 +249,6 @@ export default function BudgetScreen() {
                       const paced = row.availableCents > 0;
                       const rowOver = paced && row.remainingCents < 0;
                       const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
-                      const spendRatio = paced && row.availableCents > 0 ? row.spentCents / row.availableCents : 0;
-                      const isPacingFast = monthDayProgress != null && paced && spendRatio > monthDayProgress + 0.12 && !rowOver;
 
                       return (
                         <Pressable
@@ -306,15 +276,9 @@ export default function BudgetScreen() {
                             </View>
                             <View style={{ alignItems: "flex-end", gap: 2 }}>
                               {paced ? (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  {rowOver ? (
-                                    <Text style={{ fontSize: 11, fontWeight: "700", color: colors.danger, textTransform: "uppercase" }}>Over</Text>
-                                  ) : isPacingFast ? (
-                                    <Text style={{ fontSize: 11, fontWeight: "700", color: colors.warn, textTransform: "uppercase" }}>Fast</Text>
-                                  ) : (
-                                    <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, textTransform: "uppercase" }}>Left</Text>
-                                  )}
-                                </View>
+                                <Text style={{ fontSize: 11, fontWeight: "600", color: rowOver ? colors.danger : colors.tertiary, textTransform: "uppercase" }}>
+                                  {rowOver ? "Over" : "Left"}
+                                </Text>
                               ) : null}
                               <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
                             </View>
@@ -323,8 +287,7 @@ export default function BudgetScreen() {
                             <Progress
                               value={row.spentCents}
                               max={row.availableCents}
-                              color={rowOver ? colors.danger : isPacingFast ? colors.warn : color}
-                              markerRatio={monthDayProgress}
+                              color={rowOver ? colors.danger : color}
                             />
                           ) : null}
                         </Pressable>

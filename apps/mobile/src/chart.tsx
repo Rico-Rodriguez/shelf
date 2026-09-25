@@ -34,14 +34,12 @@ export function SpendChart({
   reference,
   caption,
   color = colors.accent,
-  baselinePoints,
 }: {
   points: { date: string; cents: number }[];
   onScrub?: (point: { date: string; cents: number } | null) => void;
   reference?: { cents: number; label: string };
   caption?: string;
   color?: string;
-  baselinePoints?: { date: string; cents: number }[];
 }) {
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
@@ -56,7 +54,6 @@ export function SpendChart({
     if (series.length < 2 || width <= 0) return null;
     const values = series.map((point) => point.cents);
     if (reference) values.push(reference.cents);
-    if (baselinePoints) values.push(...baselinePoints.map((p) => p.cents));
     const min = Math.min(...values);
     const max = Math.max(...values);
     const raw = max - min;
@@ -75,24 +72,14 @@ export function SpendChart({
     const line = smoothLine(coords);
     const area = `${line} L ${coords[coords.length - 1].x} ${height} L ${coords[0].x} ${height} Z`;
 
-    let baselineLine = "";
-    if (baselinePoints && baselinePoints.length >= 2) {
-      const baseCoords = baselinePoints.map((p, idx) => ({
-        x: insetX + (idx / (baselinePoints.length - 1)) * (width - insetX * 2),
-        y: yOf(p.cents),
-      }));
-      baselineLine = smoothLine(baseCoords);
-    }
-
     return {
       coords,
       line,
       area,
-      baselineLine,
       length: pathLength(coords),
       refY: reference ? yOf(reference.cents) : null,
     };
-  }, [series, width, reference, baselinePoints, height]);
+  }, [series, width, reference, height]);
 
   const lineLength = geometry?.length ?? 0;
 
@@ -190,16 +177,6 @@ export function SpendChart({
             </Defs>
 
             {/* Optional Baseline / Comparison trajectory */}
-            {geometry.baselineLine ? (
-              <Path
-                d={geometry.baselineLine}
-                stroke={colors.tertiary}
-                strokeWidth={1.5}
-                strokeDasharray="4 6"
-                fill="none"
-                opacity={0.7}
-              />
-            ) : null}
 
             {/* Reference horizontal guideline */}
             {geometry.refY != null ? (
@@ -281,7 +258,7 @@ export function SpendChart({
           </Svg>
         ) : null}
 
-        {/* Floating Interactive Tooltip Pill (Robinhood Style) */}
+        {/* Scrub Tooltip Pill */}
         {activePoint && dot && width > 0 ? (
           <View
             pointerEvents="none"
