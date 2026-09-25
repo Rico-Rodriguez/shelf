@@ -134,9 +134,17 @@ export function Screen({
   );
 }
 
-export function Card({ children }: { children: ReactNode }) {
+export function Card({
+  children,
+  style,
+  tone,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  tone?: "default" | "inset";
+}) {
   const styles = useStyles();
-  return <View style={styles.card}>{children}</View>;
+  return <View style={[styles.card, tone === "inset" ? styles.cardInset : null, style]}>{children}</View>;
 }
 
 export function Field({
@@ -797,7 +805,21 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
   );
 }
 
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  subtitle,
+  onClose,
+  children,
+  height,
+  minHeight,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: ReactNode;
+  height?: number | `${number}%`;
+  minHeight?: number | `${number}%`;
+}) {
   const styles = useStyles();
   const screenHeight = Dimensions.get("window").height;
   const translateY = useSharedValue(screenHeight);
@@ -860,21 +882,35 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
         </Reanimated.View>
-        <Reanimated.View style={[styles.sheet, sheetAnimatedStyle]}>
+        <Reanimated.View
+          style={[
+            styles.sheet,
+            minHeight ? { minHeight } : null,
+            height ? { height } : null,
+            sheetAnimatedStyle,
+          ]}
+        >
           <GestureDetector gesture={panGesture}>
             <View style={{ paddingTop: 8, paddingBottom: 6 }}>
               <View style={styles.handle} />
               <View style={styles.sheetHead}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {title}
-                </Text>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  {subtitle ? (
+                    <Text style={styles.sheetSubtitle} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
                 <Pressable onPress={dismiss} hitSlop={12} style={{ padding: 4 }}>
                   <Text style={styles.sectionAction}>Done</Text>
                 </Pressable>
               </View>
             </View>
           </GestureDetector>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 12 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
             {children}
           </ScrollView>
         </Reanimated.View>
@@ -905,10 +941,14 @@ function makeStyles(colors: Palette) {
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
+  cardInset: {
+    backgroundColor: colors.scheme === "dark" ? "#161922" : "#f6f8fa",
+    borderColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 24, 31, 0.08)",
+  },
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: "500", color: colors.muted },
   input: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.scheme === "dark" ? "#161922" : "#f6f8fa",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.line,
@@ -1014,30 +1054,30 @@ function makeStyles(colors: Palette) {
   sheetWrap: { flex: 1, justifyContent: "flex-end" },
   sheetBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.scheme === "dark" ? "rgba(0, 0, 0, 0.72)" : "rgba(20, 24, 31, 0.40)",
+    backgroundColor: colors.scheme === "dark" ? "rgba(0, 0, 0, 0.76)" : "rgba(15, 23, 42, 0.45)",
   },
   sheet: {
     maxHeight: "88%",
-    backgroundColor: colors.scheme === "dark" ? "#181b22" : colors.bg,
+    backgroundColor: colors.scheme === "dark" ? "#202530" : "#ffffff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1.5,
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    borderTopColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.18)" : colors.lineStrong,
-    borderLeftColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : colors.line,
-    borderRightColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : colors.line,
+    borderTopColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.22)" : "rgba(0, 0, 0, 0.08)",
+    borderLeftColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
+    borderRightColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: colors.scheme === "dark" ? 0.5 : 0.12,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: colors.scheme === "dark" ? 0.6 : 0.16,
+    shadowRadius: 24,
     elevation: 24,
   },
   handle: {
     width: 38,
     height: 5,
     borderRadius: 99,
-    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.32)" : colors.fillStrong,
+    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.35)" : colors.fillStrong,
     alignSelf: "center",
     marginTop: 8,
   },
@@ -1053,6 +1093,7 @@ function makeStyles(colors: Palette) {
     borderBottomColor: colors.line,
   },
   sheetTitle: { flex: 1, fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
+  sheetSubtitle: { fontSize: 13, fontWeight: "500", color: colors.muted },
   switch: {
     width: 51,
     height: 31,

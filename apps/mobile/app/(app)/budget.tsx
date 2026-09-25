@@ -350,65 +350,156 @@ export default function BudgetScreen() {
       ) : null}
 
       {editing && data ? (
-        <Sheet title={catName || "Category"} onClose={() => setEditing(null)}>
-          <Field label="Plan" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
-          <Field label="Name" value={catName} onChangeText={setCatName} />
-          <Section title="This month" />
-          {txs == null ? (
-            <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
-              <ActivityIndicator color={colors.ink} />
-            </View>
-          ) : null}
-          {txs && txs.length === 0 ? <Note>Nothing in this category yet.</Note> : null}
-          {txs && txs.length > 0 ? (
-            <Card>
-              {txs.map((tx, index) => {
-                const flow = flowMoney(tx.amountCents);
-                return (
-                  <View key={tx.id} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text numberOfLines={1} style={{ fontWeight: "500", color: colors.ink }}>{tx.merchantName || tx.name}</Text>
-                        <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(tx.date)}</Text>
-                      </View>
-                      <Text style={{ fontWeight: "600", color: flow.color }}>{flow.text}</Text>
+        (() => {
+          const paced = editing.availableCents > 0;
+          const rowOver = paced && editing.remainingCents < 0;
+          const figure = paced ? Math.abs(editing.remainingCents) : editing.spentCents;
+          const color = shelfColor(editing.group?.color ?? "#8B939E");
+          const txCount = txs ? txs.length : 0;
+          const txTotal = txs ? txs.reduce((sum, t) => sum + t.amountCents, 0) : 0;
+
+          return (
+            <Sheet
+              title={catName || editing.category.name}
+              subtitle={editing.group?.name ? `${editing.group.name} · ${monthLabel(data.year, data.month)}` : monthLabel(data.year, data.month)}
+              height="80%"
+              onClose={() => setEditing(null)}
+            >
+              {/* Category Performance Card */}
+              <Card tone="inset">
+                <View style={{ padding: 16, gap: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                    <View style={{ gap: 2 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Total Spent
+                      </Text>
+                      <Text style={{ fontSize: 32, fontWeight: "700", color: colors.ink, letterSpacing: -1, fontVariant: ["tabular-nums"] }}>
+                        {money(editing.spentCents)}
+                      </Text>
                     </View>
-                    <Pressable onPress={() => setMoving(moving === tx.id ? null : tx.id)}>
-                      <Text style={{ color: colors.accentInk, fontWeight: "600" }}>{moving === tx.id ? "Close" : "Move"}</Text>
-                    </Pressable>
-                    {moving === tx.id
-                      ? catGroups.map((group) => (
-                          <View key={group.name} style={{ gap: 4 }}>
-                            <Text style={{ fontSize: 12, color: colors.muted }}>{group.name}</Text>
-                            {group.categories.map((category) => (
-                              <Pressable key={category.id} onPress={() => void reassign(tx, category.id)}>
-                                <Text style={{ fontSize: 16, paddingVertical: 4, color: category.id === editing.category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        ))
-                      : null}
+                    {paced ? (
+                      <View
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          backgroundColor: rowOver ? "rgba(217, 74, 46, 0.12)" : "rgba(27, 122, 98, 0.12)",
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: rowOver ? colors.danger : colors.positive }}>
+                          {rowOver ? `${money(figure)} over` : `${money(figure)} left`}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
-                );
-              })}
-            </Card>
-          ) : null}
-          <Button label="Save" block onPress={() => void saveCategory()} />
-          <Pressable
-            onPress={() => {
-              if (!confirmDelete) {
-                setConfirmDelete(true);
-                return;
-              }
-              void removeCategory();
-            }}
-            style={{ alignItems: "center", paddingVertical: 10 }}
-          >
-            <Text style={{ color: confirmDelete ? colors.danger : colors.muted, fontWeight: "500", fontSize: 15 }}>
-              {confirmDelete ? "Delete this category?" : "Delete"}
-            </Text>
-          </Pressable>
-        </Sheet>
+
+                  {paced ? (
+                    <Progress
+                      value={editing.spentCents}
+                      max={editing.availableCents}
+                      color={rowOver ? colors.danger : color}
+                    />
+                  ) : null}
+
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line }}>
+                    <View style={{ gap: 2 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>Spent</Text>
+                      <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(editing.spentCents)}</Text>
+                    </View>
+                    <View style={{ gap: 2, alignItems: "center" }}>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>Plan</Text>
+                      <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(editing.plannedCents)}</Text>
+                    </View>
+                    <View style={{ gap: 2, alignItems: "flex-end" }}>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>{rowOver ? "Over Plan" : "Remaining"}</Text>
+                      <Text style={{ fontSize: 15, fontWeight: "600", color: rowOver ? colors.danger : colors.positive }}>
+                        {money(figure)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </Card>
+
+              {/* Transactions Section */}
+              <Section
+                title={txs ? `Charges this month (${txCount})` : "Charges this month"}
+                trailing={txs && txCount > 0 ? money(txTotal) : undefined}
+              />
+              {txs == null ? (
+                <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
+                  <ActivityIndicator color={colors.ink} />
+                </View>
+              ) : null}
+              {txs && txCount === 0 ? (
+                <Card tone="inset">
+                  <View style={{ padding: 20, alignItems: "center" }}>
+                    <Text style={{ color: colors.muted, fontSize: 14 }}>
+                      No charges in this category for {monthLabel(data.year, data.month)}.
+                    </Text>
+                  </View>
+                </Card>
+              ) : null}
+              {txs && txCount > 0 ? (
+                <Card tone="inset">
+                  {txs.map((tx, index) => {
+                    const flow = flowMoney(tx.amountCents);
+                    return (
+                      <View key={tx.id} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text numberOfLines={1} style={{ fontWeight: "500", color: colors.ink }}>{tx.merchantName || tx.name}</Text>
+                            <Text style={{ fontSize: 13, color: colors.muted }}>{dayLabel(tx.date)}</Text>
+                          </View>
+                          <Text style={{ fontWeight: "600", color: flow.color }}>{flow.text}</Text>
+                        </View>
+                        <Pressable onPress={() => setMoving(moving === tx.id ? null : tx.id)}>
+                          <Text style={{ color: colors.accentInk, fontWeight: "600" }}>{moving === tx.id ? "Close" : "Move"}</Text>
+                        </Pressable>
+                        {moving === tx.id
+                          ? catGroups.map((group) => (
+                              <View key={group.name} style={{ gap: 4 }}>
+                                <Text style={{ fontSize: 12, color: colors.muted }}>{group.name}</Text>
+                                {group.categories.map((category) => (
+                                  <Pressable key={category.id} onPress={() => void reassign(tx, category.id)}>
+                                    <Text style={{ fontSize: 16, paddingVertical: 4, color: category.id === editing.category.id ? colors.accentInk : colors.ink }}>{category.name}</Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            ))
+                          : null}
+                      </View>
+                    );
+                  })}
+                </Card>
+              ) : null}
+
+              {/* Edit Budget & Details */}
+              <Section title="Edit budget & name" />
+              <Card tone="inset">
+                <View style={{ padding: 14, gap: 12 }}>
+                  <Field label="Monthly plan ($)" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
+                  <Field label="Category name" value={catName} onChangeText={setCatName} />
+                  <Button label="Save changes" block onPress={() => void saveCategory()} />
+                </View>
+              </Card>
+
+              <Pressable
+                onPress={() => {
+                  if (!confirmDelete) {
+                    setConfirmDelete(true);
+                    return;
+                  }
+                  void removeCategory();
+                }}
+                style={{ alignItems: "center", paddingVertical: 10 }}
+              >
+                <Text style={{ color: confirmDelete ? colors.danger : colors.muted, fontWeight: "500", fontSize: 14 }}>
+                  {confirmDelete ? "Tap again to permanently delete" : "Delete category"}
+                </Text>
+              </Pressable>
+            </Sheet>
+          );
+        })()
       ) : null}
 
       {adding ? (
