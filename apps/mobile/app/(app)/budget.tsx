@@ -1,6 +1,6 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
@@ -163,13 +163,33 @@ export default function BudgetScreen() {
     setEditing(row);
     setPlanned((row.plannedCents / 100).toFixed(0));
     setCatName(row.category.name);
-    setTxs(null);
     setMoving(null);
     setConfirmDelete(false);
-    void api<{ groups: { name: string; categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setCatGroups(res.groups));
-    if (!data) return;
+
+    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string }[] }[] }>("/api/categories");
+    if (cachedCats?.groups) {
+      setCatGroups(cachedCats.groups);
+    } else {
+      void read<{ groups: { name: string; categories: { id: string; name: string }[] }[] }>("/api/categories")
+        .then((res) => setCatGroups(res.groups))
+        .catch(() => undefined);
+    }
+
+    if (!data) {
+      setTxs([]);
+      return;
+    }
     const range = monthRange(data.year, data.month);
-    void api<{ transactions: MonthTx[] }>(`/api/transactions?categoryId=${row.category.id}&start=${range.start}&end=${range.end}`).then((res) => setTxs(res.transactions));
+    const txPath = `/api/transactions?categoryId=${row.category.id}&start=${range.start}&end=${range.end}`;
+    const cachedTxs = peek<{ transactions: MonthTx[] }>(txPath);
+    if (cachedTxs?.transactions) {
+      setTxs(cachedTxs.transactions);
+    } else {
+      setTxs(null);
+    }
+    void read<{ transactions: MonthTx[] }>(txPath)
+      .then((res) => setTxs(res.transactions))
+      .catch(() => setTxs([]));
   }
 
   async function openAdd() {
@@ -185,138 +205,140 @@ export default function BudgetScreen() {
   const over = hasPlan && left < 0;
 
   return (
-    <Screen
-      title="Budget"
-      framed
-      onRefresh={load}
-      action={
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <MonthNav
-            year={cursor.year}
-            month={cursor.month}
-            label={monthLabel(cursor.year, cursor.month)}
-            onChange={(year, month) => setCursor({ year, month })}
-          />
-          <Pressable onPress={() => setPlanOpen(true)} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>
-          </Pressable>
-        </View>
-      }
-    >
-      {error ? <Note>{error}</Note> : null}
-      {!data && !error ? <Loading /> : null}
-      {data ? (
-        <>
-          <Hero
-            label={hasPlan ? (over ? "Over this month" : "Left this month") : "Spent this month"}
-            cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
-            tone={hasPlan ? (over ? "bad" : "good") : undefined}
-            status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
-            points={hasPlan ? undefined : data.spendSeries}
-            meter={hasPlan ? { value: data.expenseSpentCents, max: plannedTotal } : undefined}
-          >
-            {hasPlan ? (
-              <Facts
-                items={[
-                  { kicker: "Spent", value: money(data.expenseSpentCents) },
-                  { kicker: "Plan", value: money(plannedTotal) },
-                ]}
-              />
-            ) : null}
-          </Hero>
-
-          {visibleGroups.map((group) => {
-            const available = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
-            const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
-            const isClosed = closed[group.id] ?? false;
-            const color = shelfColor(group.color);
-            return (
-              <View key={group.id} style={{ gap: 8 }}>
-                <Pressable
-                  onPress={() => {
-                    tapSelect();
-                    setClosed({ ...closed, [group.id]: !isClosed });
-                  }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingVertical: 2,
-                    paddingHorizontal: 2,
-                  }}
-                >
-                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 }}>
-                    {group.name}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                    {available > 0 ? `${money(spent)} / ${money(available)}` : money(spent)}
-                  </Text>
-                </Pressable>
-                {isClosed ? null : (
-                  <Card>
-                    {group.rows.map((row, index) => {
-                      const paced = row.availableCents > 0;
-                      const rowOver = paced && row.remainingCents < 0;
-                      const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
-
-                      return (
-                        <Pressable
-                          key={row.category.id}
-                          onPress={() => openRow(row)}
-                          onPressIn={tapPress}
-                          style={({ pressed }) => [
-                            { paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line },
-                            pressed ? { backgroundColor: colors.fill } : null,
-                          ]}
-                        >
-                          <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                            <View style={{ flex: 1, gap: 4 }}>
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-                                <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: "500", color: colors.ink }}>
-                                  {row.category.name}
-                                </Text>
-                              </View>
-                              {paced ? (
-                                <Text style={{ paddingLeft: 16, fontSize: 13, color: colors.muted }}>
-                                  {money(row.spentCents)} of {money(row.availableCents)}
-                                </Text>
-                              ) : null}
-                            </View>
-                            <View style={{ alignItems: "flex-end", gap: 2 }}>
-                              {paced ? (
-                                <Text style={{ fontSize: 12, fontWeight: "500", color: rowOver ? colors.danger : colors.tertiary }}>
-                                  {rowOver ? "Over" : "Left"}
-                                </Text>
-                              ) : null}
-                              <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
-                            </View>
-                          </View>
-                          {paced ? (
-                            <Progress
-                              value={row.spentCents}
-                              max={row.availableCents}
-                              color={rowOver ? colors.danger : color}
-                            />
-                          ) : null}
-                        </Pressable>
-                      );
-                    })}
-                  </Card>
-                )}
-              </View>
-            );
-          })}
-
-          {hiddenCount > 0 ? (
-            <Pressable onPress={() => setShowUnused((value) => !value)} style={{ paddingVertical: 8, alignItems: "center" }}>
-              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>
-                {showUnused ? "Hide other categories" : `Show ${hiddenCount} other ${hiddenCount === 1 ? "category" : "categories"}`}
-              </Text>
+    <>
+      <Screen
+        title="Budget"
+        framed
+        onRefresh={load}
+        action={
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <MonthNav
+              year={cursor.year}
+              month={cursor.month}
+              label={monthLabel(cursor.year, cursor.month)}
+              onChange={(year, month) => setCursor({ year, month })}
+            />
+            <Pressable onPress={() => setPlanOpen(true)} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>
             </Pressable>
-          ) : null}
-        </>
-      ) : null}
+          </View>
+        }
+      >
+        {error ? <Note>{error}</Note> : null}
+        {!data && !error ? <Loading /> : null}
+        {data ? (
+          <>
+            <Hero
+              label={hasPlan ? (over ? "Over this month" : "Left this month") : "Spent this month"}
+              cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
+              tone={hasPlan ? (over ? "bad" : "good") : undefined}
+              status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
+              points={hasPlan ? undefined : data.spendSeries}
+              meter={hasPlan ? { value: data.expenseSpentCents, max: plannedTotal } : undefined}
+            >
+              {hasPlan ? (
+                <Facts
+                  items={[
+                    { kicker: "Spent", value: money(data.expenseSpentCents) },
+                    { kicker: "Plan", value: money(plannedTotal) },
+                  ]}
+                />
+              ) : null}
+            </Hero>
+
+            {visibleGroups.map((group) => {
+              const available = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
+              const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
+              const isClosed = closed[group.id] ?? false;
+              const color = shelfColor(group.color);
+              return (
+                <View key={group.id} style={{ gap: 8 }}>
+                  <Pressable
+                    onPress={() => {
+                      tapSelect();
+                      setClosed({ ...closed, [group.id]: !isClosed });
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingVertical: 2,
+                      paddingHorizontal: 2,
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 }}>
+                      {group.name}
+                    </Text>
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {available > 0 ? `${money(spent)} / ${money(available)}` : money(spent)}
+                    </Text>
+                  </Pressable>
+                  {isClosed ? null : (
+                    <Card>
+                      {group.rows.map((row, index) => {
+                        const paced = row.availableCents > 0;
+                        const rowOver = paced && row.remainingCents < 0;
+                        const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
+
+                        return (
+                          <Pressable
+                            key={row.category.id}
+                            onPress={() => openRow(row)}
+                            onPressIn={tapPress}
+                            style={({ pressed }) => [
+                              { paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line },
+                              pressed ? { backgroundColor: colors.fill } : null,
+                            ]}
+                          >
+                            <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                              <View style={{ flex: 1, gap: 4 }}>
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+                                  <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: "500", color: colors.ink }}>
+                                    {row.category.name}
+                                  </Text>
+                                </View>
+                                {paced ? (
+                                  <Text style={{ paddingLeft: 16, fontSize: 13, color: colors.muted }}>
+                                    {money(row.spentCents)} of {money(row.availableCents)}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              <View style={{ alignItems: "flex-end", gap: 2 }}>
+                                {paced ? (
+                                  <Text style={{ fontSize: 12, fontWeight: "500", color: rowOver ? colors.danger : colors.tertiary }}>
+                                    {rowOver ? "Over" : "Left"}
+                                  </Text>
+                                ) : null}
+                                <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
+                              </View>
+                            </View>
+                            {paced ? (
+                              <Progress
+                                value={row.spentCents}
+                                max={row.availableCents}
+                                color={rowOver ? colors.danger : color}
+                              />
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </Card>
+                  )}
+                </View>
+              );
+            })}
+
+            {hiddenCount > 0 ? (
+              <Pressable onPress={() => setShowUnused((value) => !value)} style={{ paddingVertical: 8, alignItems: "center" }}>
+                <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>
+                  {showUnused ? "Hide other categories" : `Show ${hiddenCount} other ${hiddenCount === 1 ? "category" : "categories"}`}
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
+      </Screen>
 
       {planOpen ? (
         <Sheet title="Edit budget" onClose={() => setPlanOpen(false)}>
@@ -332,7 +354,11 @@ export default function BudgetScreen() {
           <Field label="Plan" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
           <Field label="Name" value={catName} onChangeText={setCatName} />
           <Section title="This month" />
-          {txs == null ? <Loading /> : null}
+          {txs == null ? (
+            <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
+              <ActivityIndicator color={colors.ink} />
+            </View>
+          ) : null}
           {txs && txs.length === 0 ? <Note>Nothing in this category yet.</Note> : null}
           {txs && txs.length > 0 ? (
             <Card>
@@ -409,6 +435,6 @@ export default function BudgetScreen() {
           />
         </Sheet>
       ) : null}
-    </Screen>
+    </>
   );
 }

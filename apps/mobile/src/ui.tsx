@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { ActivityIndicator, Animated, Dimensions, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   Extrapolation,
@@ -108,7 +108,6 @@ export function Screen({
         scrollEnabled={scrollEnabled}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
-        removeClippedSubviews
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} /> : undefined}
       >
         {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
@@ -800,18 +799,29 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const styles = useStyles();
-  const translateY = useSharedValue(0);
+  const screenHeight = Dimensions.get("window").height;
+  const translateY = useSharedValue(screenHeight);
   const isClosing = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    translateY.value = withSpring(0, {
+      damping: 28,
+      stiffness: 340,
+      mass: 0.8,
+    });
+  }, [translateY]);
 
   const dismiss = useCallback(() => {
     if (isClosing.current) return;
     isClosing.current = true;
     tapPress();
-    translateY.value = withTiming(750, { duration: 180 });
+    translateY.value = withTiming(screenHeight, { duration: 190, easing: Easing.out(Easing.cubic) });
     setTimeout(() => {
-      onClose();
-    }, 180);
-  }, [onClose, translateY]);
+      onCloseRef.current();
+    }, 190);
+  }, [screenHeight, translateY]);
 
   const panGesture = Gesture.Pan()
     .activeOffsetY([-6, 6])
@@ -837,7 +847,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const backdropAnimatedStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       translateY.value,
-      [0, 200],
+      [0, 240],
       [1, 0],
       Extrapolation.CLAMP,
     );
@@ -1002,10 +1012,46 @@ function makeStyles(colors: Palette) {
     color: colors.ink,
   },
   sheetWrap: { flex: 1, justifyContent: "flex-end" },
-  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(20, 24, 31, 0.32)" },
-  sheet: { maxHeight: "88%", backgroundColor: colors.bg, borderTopLeftRadius: 22, borderTopRightRadius: 22 },
-  handle: { width: 36, height: 5, borderRadius: 99, backgroundColor: colors.fillStrong, alignSelf: "center", marginTop: 8 },
-  sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.scheme === "dark" ? "rgba(0, 0, 0, 0.72)" : "rgba(20, 24, 31, 0.40)",
+  },
+  sheet: {
+    maxHeight: "88%",
+    backgroundColor: colors.scheme === "dark" ? "#181b22" : colors.bg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderTopColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.18)" : colors.lineStrong,
+    borderLeftColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : colors.line,
+    borderRightColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : colors.line,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: colors.scheme === "dark" ? 0.5 : 0.12,
+    shadowRadius: 20,
+    elevation: 24,
+  },
+  handle: {
+    width: 38,
+    height: 5,
+    borderRadius: 99,
+    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.32)" : colors.fillStrong,
+    alignSelf: "center",
+    marginTop: 8,
+  },
+  sheetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
   sheetTitle: { flex: 1, fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
   switch: {
     width: 51,
