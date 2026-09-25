@@ -875,7 +875,6 @@ export function Sheet({
   const styles = useStyles();
   const screenHeight = Dimensions.get("window").height;
   const translateY = useSharedValue(screenHeight);
-  const [modalVisible, setModalVisible] = useState(true);
   const [closing, setClosing] = useState(false);
   const isClosing = useRef(false);
   const onCloseRef = useRef(onClose);
@@ -899,21 +898,15 @@ export function Sheet({
     setClosing(true);
     tapPress();
 
-    translateY.value = withTiming(
-      screenHeight,
-      { duration: 180, easing: Easing.out(Easing.cubic) },
-      (finished) => {
-        if (finished) {
-          runOnJS(setModalVisible)(false);
-        }
-      },
-    );
+    translateY.value = withTiming(screenHeight, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+    });
 
     if (dismissTimer.current) clearTimeout(dismissTimer.current);
     dismissTimer.current = setTimeout(() => {
-      setModalVisible(false);
       onCloseRef.current();
-    }, 200);
+    }, 180);
   }, [screenHeight, translateY]);
 
   const panGesture = Gesture.Pan()
@@ -949,17 +942,12 @@ export function Sheet({
     return { opacity };
   });
 
-  if (!modalVisible) return null;
-
   return (
     <Modal
-      visible={modalVisible}
+      visible
       animationType="none"
       transparent
       onRequestClose={dismiss}
-      onDismiss={() => {
-        onCloseRef.current();
-      }}
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
@@ -973,15 +961,13 @@ export function Sheet({
             sheetAnimatedStyle,
           ]}
         >
-          <View style={{ paddingTop: 8, paddingBottom: 6 }}>
-            <GestureDetector gesture={panGesture}>
+          <GestureDetector gesture={panGesture}>
+            <View style={{ paddingTop: 8, paddingBottom: 6 }}>
               <View style={{ paddingVertical: 4 }}>
                 <View style={styles.handle} />
               </View>
-            </GestureDetector>
-            <View style={styles.sheetHead}>
-              <GestureDetector gesture={panGesture}>
-                <View style={{ flex: 1, gap: 2 }}>
+              <View style={styles.sheetHead}>
+                <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
                   <Text style={styles.sheetTitle} numberOfLines={1}>
                     {title}
                   </Text>
@@ -991,12 +977,12 @@ export function Sheet({
                     </Text>
                   ) : null}
                 </View>
-              </GestureDetector>
-              <Pressable onPress={dismiss} hitSlop={16} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
-                <Text style={styles.sectionAction}>Done</Text>
-              </Pressable>
+                <Pressable onPress={dismiss} hitSlop={16} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+                  <Text style={styles.sectionAction}>Done</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          </GestureDetector>
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
             {children}
           </ScrollView>
@@ -1212,8 +1198,8 @@ function makeStyles(colors: Palette) {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
   },
-  sheetTitle: { flex: 1, fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
-  sheetSubtitle: { fontSize: 13, fontWeight: "500", color: colors.muted },
+  sheetTitle: { fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
+  sheetSubtitle: { fontSize: 13, fontWeight: "500", color: colors.muted, marginTop: 1 },
   switch: {
     width: 51,
     height: 31,
