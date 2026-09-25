@@ -14,6 +14,7 @@
     "@expo-google-fonts/fraunces": "^0.4.1",
     "@expo-google-fonts/outfit": "^0.4.3",
     "expo": "~57.0.24",
+    "expo-blur": "~57.0.3",
     "expo-constants": "~57.0.3",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",

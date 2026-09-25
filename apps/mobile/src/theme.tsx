@@ -21,6 +21,14 @@ export type Palette = {
   control: string;
   controlInk: string;
   scheme: "light" | "dark";
+  // Liquid Glass & HIG material tokens
+  glass: string;
+  glassProminent: string;
+  glassBorder: string;
+  glassBorderSubtle: string;
+  navBg: string;
+  sheetBg: string;
+  blurTint: "light" | "dark" | "systemMaterial" | "systemMaterialLight" | "systemMaterialDark" | "systemChromeMaterialLight" | "systemChromeMaterialDark";
 };
 
 export const light: Palette = {
@@ -42,6 +50,13 @@ export const light: Palette = {
   control: "#14181f",
   controlInk: "#ffffff",
   scheme: "light",
+  glass: "rgba(255, 255, 255, 0.78)",
+  glassProminent: "rgba(255, 255, 255, 0.92)",
+  glassBorder: "rgba(255, 255, 255, 0.95)",
+  glassBorderSubtle: "rgba(20, 24, 31, 0.08)",
+  navBg: "rgba(243, 245, 247, 0.82)",
+  sheetBg: "rgba(255, 255, 255, 0.94)",
+  blurTint: "systemChromeMaterialLight",
 };
 
 export const dark: Palette = {
@@ -63,6 +78,13 @@ export const dark: Palette = {
   control: "#f4f1ea",
   controlInk: "#101216",
   scheme: "dark",
+  glass: "rgba(26, 30, 38, 0.72)",
+  glassProminent: "rgba(32, 38, 48, 0.86)",
+  glassBorder: "rgba(255, 255, 255, 0.18)",
+  glassBorderSubtle: "rgba(255, 255, 255, 0.07)",
+  navBg: "rgba(16, 18, 22, 0.82)",
+  sheetBg: "rgba(26, 30, 38, 0.92)",
+  blurTint: "systemChromeMaterialDark",
 };
 
 export type ThemeMode = "system" | "light" | "dark";

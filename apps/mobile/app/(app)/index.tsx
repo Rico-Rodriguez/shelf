@@ -13,6 +13,7 @@ import {
   shortDate,
   todayISO,
 } from "../../src/format";
+import { tapPress } from "../../src/haptic";
 import {
   Button,
   Card,
@@ -132,48 +133,39 @@ export default function HomeScreen() {
 
           {data.budget.plannedCents > 0 ? (
             <Pressable
-              onPress={() => router.push("/(app)/budget")}
-              style={({ pressed }) => [
-                {
-                  padding: 16,
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  backgroundColor: colors.card,
-                  gap: 10,
-                  shadowColor: "#14181f",
-                  shadowOpacity: 0.04,
-                  shadowRadius: 2,
-                  shadowOffset: { width: 0, height: 1 },
-                },
-                pressed ? { backgroundColor: colors.fill } : null,
-              ]}
+              onPress={() => {
+                tapPress();
+                router.push("/(app)/budget");
+              }}
+              style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={{ gap: 2 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    Monthly Budget
-                  </Text>
-                  <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink }}>
-                    {overPlan ? "Over budget" : `${money(left)} left to spend`}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 2 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted }}>
-                    {money(data.budget.spentCents)} of {money(data.budget.plannedCents)}
-                  </Text>
-                  {overPlan ? (
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
-                      +{money(Math.abs(left))} over
+              <Card tone="glass" style={{ padding: 18, gap: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Monthly Budget
                     </Text>
-                  ) : null}
+                    <Text style={{ fontSize: 17, fontWeight: "700", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] }}>
+                      {overPlan ? "Over budget" : `${money(left)} left to spend`}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 2 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {money(data.budget.spentCents)} of {money(data.budget.plannedCents)}
+                    </Text>
+                    {overPlan ? (
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.danger, fontVariant: ["tabular-nums"] }}>
+                        +{money(Math.abs(left))} over
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
-              <Progress
-                value={data.budget.spentCents}
-                max={data.budget.plannedCents}
-                color={overPlan ? colors.danger : colors.positive}
-              />
+                <Progress
+                  value={data.budget.spentCents}
+                  max={data.budget.plannedCents}
+                  color={overPlan ? colors.danger : colors.positive}
+                />
+              </Card>
             </Pressable>
           ) : null}
 

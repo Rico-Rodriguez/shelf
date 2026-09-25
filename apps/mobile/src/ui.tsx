@@ -13,6 +13,7 @@ import { GroupedBars, SpendChart } from "./chart";
 import { flowMoney, money, shiftMonth } from "./format";
 import { tapPress, tapSelect } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
+import { BlurView } from "expo-blur";
 import { colors, useTheme, type Palette } from "./theme";
 
 export { GroupedBars, SpendChart };
@@ -27,9 +28,16 @@ function useStyles() {
 export function Back() {
   const styles = useStyles();
   return (
-    <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
+    <Pressable
+      onPress={() => {
+        tapPress();
+        router.back();
+      }}
+      hitSlop={12}
+      style={styles.backBtn}
+    >
       <View style={{ transform: [{ rotate: "180deg" }] }}>
-        <Icon name="chevron" size={18} color={colors.ink} />
+        <Icon name="chevron" size={17} color={colors.ink} />
       </View>
       <Text style={styles.back}>Back</Text>
     </Pressable>
@@ -136,10 +144,46 @@ export function Card({
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
-  tone?: "default" | "inset";
+  tone?: "default" | "inset" | "glass" | "prominent";
 }) {
   const styles = useStyles();
-  return <View style={[styles.card, tone === "inset" ? styles.cardInset : null, style]}>{children}</View>;
+  const { palette } = useTheme();
+  const isGlass = tone === "glass" || tone === "prominent";
+  return (
+    <View
+      style={[
+        styles.card,
+        tone === "inset" ? styles.cardInset : null,
+        tone === "prominent" ? styles.glassProminent : null,
+        style,
+      ]}
+    >
+      {isGlass ? (
+        <BlurView
+          intensity={palette.scheme === "dark" ? 45 : 65}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      {children}
+    </View>
+  );
+}
+
+export function GlassCard({
+  children,
+  style,
+  tone = "default",
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  tone?: "default" | "prominent" | "inset";
+}) {
+  return (
+    <Card tone={tone === "prominent" ? "prominent" : tone === "inset" ? "inset" : "glass"} style={style}>
+      {children}
+    </Card>
+  );
 }
 
 export function Field({
@@ -263,7 +307,8 @@ export function LedgerRow({
 }) {
   const styles = useStyles();
   const body = (
-    <View style={[styles.ledger, divided ? styles.divided : null]}>
+    <View style={styles.ledger}>
+      {divided ? <View style={[styles.hairline, { left: 64 }]} /> : null}
       <MerchantMark name={name} color={color} />
       <View style={styles.ledgerCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
@@ -290,7 +335,10 @@ function PressScale({ children, onPress, pressedStyle }: { children: ReactNode; 
   const scale = useRef(new Animated.Value(1)).current;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
       onPressIn={() => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
       onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
       style={({ pressed }) => (pressed ? pressedStyle : null)}
@@ -316,7 +364,16 @@ export function Row({ title, detail, icon, onPress }: { title: string; detail?: 
     </View>
   );
   if (!onPress) return body;
-  return <Pressable onPress={onPress}>{body}</Pressable>;
+  return (
+    <Pressable
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+    >
+      {body}
+    </Pressable>
+  );
 }
 
 export function Switch({ on }: { on: boolean }) {
@@ -335,7 +392,14 @@ export function Switch({ on }: { on: boolean }) {
 export function ToggleRow({ label, detail, on, onPress, divided }: { label: string; detail?: string; on: boolean; onPress: () => void; divided?: boolean }) {
   const styles = useStyles();
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
+    <Pressable
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.ledger, pressed ? { backgroundColor: colors.fill } : null]}
+    >
+      {divided ? <View style={[styles.hairline, { left: 16 }]} /> : null}
       <View style={styles.ledgerCopy}>
         <Text style={styles.rowTitle}>{label}</Text>
         {detail ? <Text style={styles.meta}>{detail}</Text> : null}
@@ -348,14 +412,21 @@ export function ToggleRow({ label, detail, on, onPress, divided }: { label: stri
 export function MenuRow({ title, icon, onPress, divided, danger, active }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean; active?: boolean }) {
   const styles = useStyles();
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.ledger, divided ? styles.divided : null, pressed ? { backgroundColor: colors.fill } : null]}>
+    <Pressable
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.ledger, pressed ? { backgroundColor: colors.fill } : null]}
+    >
+      {divided ? <View style={[styles.hairline, { left: icon ? 62 : 16 }]} /> : null}
       {icon ? (
         <View style={[styles.menuGlyph, active ? { backgroundColor: colors.accentSoft } : null]}>
           <Icon name={icon} size={18} color={danger ? colors.danger : active ? colors.accentInk : colors.ink} />
         </View>
       ) : null}
       <Text style={[styles.rowTitle, { fontWeight: "500", color: danger ? colors.danger : active ? colors.accentInk : colors.ink }]}>{title}</Text>
-      {danger ? null : <Icon name="chevron" size={16} color={colors.tertiary} />}
+      {danger ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
     </Pressable>
   );
 }
@@ -962,6 +1033,11 @@ export function Sheet({
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Animated.View style={[styles.sheetBackdrop, { opacity: backdropOpacity }]}>
+          <BlurView
+            intensity={colors.scheme === "dark" ? 30 : 20}
+            tint={colors.scheme === "dark" ? "dark" : "light"}
+            style={StyleSheet.absoluteFill}
+          />
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
         </Animated.View>
         <Animated.View
@@ -972,6 +1048,11 @@ export function Sheet({
             { transform: [{ translateY }] },
           ]}
         >
+          <BlurView
+            intensity={colors.scheme === "dark" ? 75 : 85}
+            tint={colors.blurTint}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={{ paddingTop: 8, paddingBottom: 6 }}>
             <View
               {...panResponder.panHandlers}
@@ -995,11 +1076,11 @@ export function Sheet({
                 onPress={dismiss}
                 hitSlop={16}
                 style={({ pressed }) => [
-                  { paddingHorizontal: 8, paddingVertical: 4 },
+                  styles.sheetDoneBtn,
                   pressed ? { opacity: 0.6 } : null,
                 ]}
               >
-                <Text style={styles.sectionAction}>Done</Text>
+                <Text style={styles.sheetDoneText}>Done</Text>
               </Pressable>
             </View>
           </View>
@@ -1017,237 +1098,369 @@ export function Sheet({
   );
 }
 
-
-
 function makeStyles(colors: Palette) {
+  const isDark = colors.scheme === "dark";
   return StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 16, paddingBottom: 36, gap: 24 },
-  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 32, marginLeft: -2 },
-  back: { color: colors.ink, fontSize: 15, fontWeight: "500", letterSpacing: -0.15 },
-  title: { fontSize: 32, fontWeight: "600", letterSpacing: -1.3, color: colors.ink },
-  subtitle: { marginTop: 4, fontSize: 15, lineHeight: 21, color: colors.muted },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    overflow: "hidden",
-    shadowColor: "#14181f",
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  cardInset: {
-    backgroundColor: colors.scheme === "dark" ? "#161922" : "#f6f8fa",
-    borderColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 24, 31, 0.08)",
-  },
-  field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: "500", color: colors.muted },
-  input: {
-    backgroundColor: colors.scheme === "dark" ? "#161922" : "#f6f8fa",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  multiline: { minHeight: 120, textAlignVertical: "top" },
-  button: { alignSelf: "flex-start", backgroundColor: colors.control, borderRadius: 999, minHeight: 44, paddingHorizontal: 18, alignItems: "center", justifyContent: "center" },
-  buttonBlock: { alignSelf: "stretch" },
-  quiet: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.lineStrong },
-  danger: { backgroundColor: colors.danger },
-  buttonText: { color: colors.controlInk, fontSize: 15, fontWeight: "600" },
-  quietText: { color: colors.ink },
-  row: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 16,
-    minHeight: 56,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-  section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  sectionTitle: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
-  sectionTrail: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3 },
-  sectionAction: { fontSize: 15, fontWeight: "600", color: colors.accentInk },
-  ledger: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 10 },
-  menuGlyph: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
-  divided: { borderTopWidth: 1, borderTopColor: colors.line },
-  ledgerCopy: { flex: 1, gap: 2 },
-  meta: { fontSize: 12, color: colors.tertiary },
-  amount: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
-  rowTitle: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink, letterSpacing: -0.2 },
-  rowDetail: { fontSize: 15, color: colors.muted },
-  note: { color: colors.muted, fontSize: 15, lineHeight: 21 },
-  loading: { paddingVertical: 24, alignItems: "center", gap: 8 },
-  hero: {
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.line,
-    overflow: "hidden",
-    paddingTop: 18,
-    paddingHorizontal: 18,
-    shadowColor: "#14181f",
-    shadowOpacity: 0.05,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-  },
-  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  heroLabel: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
-  heroFigure: { marginTop: 2, fontSize: 48, fontWeight: "600", letterSpacing: -2, color: colors.ink, fontVariant: ["tabular-nums"] },
-  heroEmpty: { fontSize: 28, fontWeight: "500", letterSpacing: -0.6, color: colors.muted },
-  heroFooter: { marginHorizontal: -18, marginTop: 12, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.line, fontSize: 13, color: colors.muted },
-  status: { fontSize: 13, fontWeight: "600", color: colors.muted },
-  chartTag: { position: "absolute", fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" },
-  facts: {
-    marginHorizontal: -18,
-    marginTop: 2,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    flexDirection: "row",
-    gap: 12,
-  },
-  kicker: { fontSize: 12, fontWeight: "500", color: colors.tertiary },
-  factValue: { fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
-  mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill },
-  track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
-  chart: { height: 148, marginHorizontal: -18, marginTop: 8 },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 2 },
-  monthBtn: { width: 28, height: 32, alignItems: "center", justifyContent: "center" },
-  monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
-  monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
-  banner: {
-    minHeight: 58,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    shadowColor: "#14181f",
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  bannerIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: colors.accentSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bannerTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    letterSpacing: -0.3,
-    color: colors.ink,
-  },
-  bannerSubtitle: {
-    fontSize: 13,
-    color: colors.muted,
-  },
-  bannerBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-    backgroundColor: colors.fill,
-  },
-  bannerBadgeText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  search: {
-    backgroundColor: colors.fill,
-    borderRadius: 12,
-    minHeight: 40,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  sheetWrap: { flex: 1, justifyContent: "flex-end" },
-  sheetBackdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.scheme === "dark" ? "rgba(0, 0, 0, 0.76)" : "rgba(15, 23, 42, 0.45)",
-  },
-  sheet: {
-    maxHeight: "88%",
-    backgroundColor: colors.scheme === "dark" ? "#202530" : "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1.5,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderTopColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.22)" : "rgba(0, 0, 0, 0.08)",
-    borderLeftColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
-    borderRightColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: colors.scheme === "dark" ? 0.6 : 0.16,
-    shadowRadius: 24,
-    elevation: 24,
-  },
-  handle: {
-    width: 38,
-    height: 5,
-    borderRadius: 99,
-    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.35)" : colors.fillStrong,
-    alignSelf: "center",
-    marginTop: 8,
-  },
-  sheetHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  sheetTitle: { fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
-  sheetSubtitle: { fontSize: 13, fontWeight: "500", color: colors.muted, marginTop: 1 },
-  switch: {
-    width: 51,
-    height: 31,
-    borderRadius: 999,
-    backgroundColor: "rgba(120, 120, 128, 0.16)",
-    padding: 2,
-    justifyContent: "center",
-  },
-  switchOn: { backgroundColor: colors.positive },
-  knob: {
-    width: 27,
-    height: 27,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  knobOn: { transform: [{ translateX: 20 }] },
-  segment: { position: "relative", minHeight: 40, padding: 3, borderRadius: 999, backgroundColor: colors.fill, flexDirection: "row" },
-  segmentThumb: { position: "absolute", top: 3, bottom: 3, borderRadius: 999, backgroundColor: colors.card },
-  segmentItem: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center" },
-  segmentLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
+    safe: { flex: 1, backgroundColor: colors.bg },
+    scroll: { padding: 16, paddingBottom: 100, gap: 20 },
+    header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    backBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      minHeight: 44,
+      paddingRight: 12,
+      marginLeft: -4,
+    },
+    back: { color: colors.ink, fontSize: 16, fontWeight: "500", letterSpacing: -0.2 },
+    title: { fontSize: 34, fontWeight: "700", letterSpacing: -1.3, color: colors.ink },
+    subtitle: { marginTop: 4, fontSize: 15, lineHeight: 21, color: colors.muted, letterSpacing: -0.1 },
+    card: {
+      backgroundColor: colors.glass,
+      borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.glassBorder,
+      borderBottomColor: colors.glassBorderSubtle,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.35 : 0.05,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 3,
+    },
+    glassCard: {
+      backgroundColor: colors.glass,
+      borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.glassBorder,
+      borderBottomColor: colors.glassBorderSubtle,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.35 : 0.06,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 4,
+    },
+    glassProminent: {
+      backgroundColor: colors.glassProminent,
+      shadowOpacity: isDark ? 0.45 : 0.08,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 10 },
+    },
+    cardInset: {
+      backgroundColor: isDark ? "rgba(18, 22, 29, 0.65)" : "rgba(235, 239, 244, 0.75)",
+      borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 24, 31, 0.07)",
+      borderCurve: "continuous",
+    },
+    field: { gap: 6 },
+    label: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
+    input: {
+      backgroundColor: isDark ? "rgba(24, 28, 36, 0.85)" : "rgba(235, 238, 242, 0.85)",
+      borderRadius: 14,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: colors.line,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      fontSize: 16,
+      color: colors.ink,
+    },
+    multiline: { minHeight: 120, textAlignVertical: "top" },
+    button: {
+      alignSelf: "flex-start",
+      backgroundColor: colors.control,
+      borderRadius: 999,
+      borderCurve: "continuous",
+      minHeight: 46,
+      paddingHorizontal: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: isDark ? 0.25 : 0.1,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    buttonBlock: { alignSelf: "stretch" },
+    quiet: {
+      backgroundColor: colors.glass,
+      borderWidth: 1,
+      borderTopColor: colors.glassBorder,
+      borderBottomColor: colors.glassBorderSubtle,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      shadowOpacity: isDark ? 0.15 : 0.04,
+    },
+    danger: { backgroundColor: colors.danger },
+    buttonText: { color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 },
+    quietText: { color: colors.ink },
+    row: {
+      backgroundColor: colors.glass,
+      borderRadius: 20,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: colors.line,
+      paddingHorizontal: 16,
+      minHeight: 56,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.2 : 0.03,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: -4, marginTop: 4 },
+    sectionTitle: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },
+    sectionTrail: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
+    sectionAction: { fontSize: 15, fontWeight: "600", color: colors.accentInk, letterSpacing: -0.2 },
+    ledger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 58,
+      paddingHorizontal: 16,
+      paddingVertical: 11,
+      position: "relative",
+    },
+    hairline: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.line,
+    },
+    menuGlyph: { width: 34, height: 34, borderRadius: 10, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
+    divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+    ledgerCopy: { flex: 1, gap: 2 },
+    meta: { fontSize: 13, color: colors.tertiary, letterSpacing: -0.1 },
+    amount: { fontSize: 16, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
+    rowTitle: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink, letterSpacing: -0.2 },
+    rowDetail: { fontSize: 15, color: colors.muted, letterSpacing: -0.1 },
+    note: { color: colors.muted, fontSize: 15, lineHeight: 21, letterSpacing: -0.1 },
+    loading: { paddingVertical: 24, alignItems: "center", gap: 8 },
+    hero: {
+      backgroundColor: colors.glassProminent,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.glassBorder,
+      borderBottomColor: colors.glassBorderSubtle,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      overflow: "hidden",
+      paddingTop: 20,
+      paddingHorizontal: 20,
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.45 : 0.08,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 5,
+    },
+    heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+    heroLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },
+    heroFigure: { marginTop: 4, fontSize: 46, fontWeight: "700", letterSpacing: -2, color: colors.ink, fontVariant: ["tabular-nums"] },
+    heroEmpty: { fontSize: 28, fontWeight: "500", letterSpacing: -0.6, color: colors.muted },
+    heroFooter: { marginHorizontal: -20, marginTop: 14, paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, fontSize: 13, color: colors.muted },
+    status: { fontSize: 13, fontWeight: "600", color: colors.muted },
+    chartTag: { position: "absolute", fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" },
+    facts: {
+      marginHorizontal: -20,
+      marginTop: 6,
+      paddingHorizontal: 20,
+      paddingTop: 14,
+      paddingBottom: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+      flexDirection: "row",
+      gap: 12,
+    },
+    kicker: { fontSize: 12, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" },
+    factValue: { fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink, fontVariant: ["tabular-nums"] },
+    mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill, borderRadius: 99, overflow: "hidden" },
+    track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
+    chart: { height: 148, marginHorizontal: -20, marginTop: 8 },
+    monthNav: { flexDirection: "row", alignItems: "center", gap: 4 },
+    monthBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+    monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
+    monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
+    banner: {
+      minHeight: 60,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 22,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.glassBorder,
+      borderBottomColor: colors.glassBorderSubtle,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      backgroundColor: colors.glass,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.3 : 0.05,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 3,
+    },
+    bannerIconWrap: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      borderCurve: "continuous",
+      backgroundColor: colors.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    bannerTitle: {
+      fontSize: 15,
+      fontWeight: "600",
+      letterSpacing: -0.3,
+      color: colors.ink,
+    },
+    bannerSubtitle: {
+      fontSize: 13,
+      color: colors.muted,
+      letterSpacing: -0.1,
+    },
+    bannerBadge: {
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderRadius: 99,
+      backgroundColor: colors.fill,
+    },
+    bannerBadgeText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.ink,
+      fontVariant: ["tabular-nums"],
+    },
+    search: {
+      backgroundColor: isDark ? "rgba(24, 28, 36, 0.85)" : "rgba(235, 238, 242, 0.85)",
+      borderRadius: 14,
+      borderCurve: "continuous",
+      minHeight: 42,
+      paddingHorizontal: 15,
+      fontSize: 16,
+      color: colors.ink,
+      borderWidth: 1,
+      borderColor: colors.line,
+    },
+    sheetWrap: { flex: 1, justifyContent: "flex-end" },
+    sheetBackdrop: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: isDark ? "rgba(0, 0, 0, 0.65)" : "rgba(15, 23, 42, 0.35)",
+      overflow: "hidden",
+    },
+    sheet: {
+      maxHeight: "88%",
+      backgroundColor: colors.sheetBg,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      borderCurve: "continuous",
+      borderTopWidth: 1,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassBorder,
+      borderLeftColor: colors.glassBorderSubtle,
+      borderRightColor: colors.glassBorderSubtle,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: -10 },
+      shadowOpacity: isDark ? 0.65 : 0.16,
+      shadowRadius: 28,
+      elevation: 24,
+      overflow: "hidden",
+    },
+    handle: {
+      width: 36,
+      height: 5,
+      borderRadius: 99,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 0, 0, 0.2)",
+      alignSelf: "center",
+      marginTop: 4,
+    },
+    sheetHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingTop: 8,
+      paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
+    sheetTitle: { fontSize: 17, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
+    sheetSubtitle: { fontSize: 13, fontWeight: "500", color: colors.muted, marginTop: 1 },
+    sheetDoneBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 99,
+      backgroundColor: colors.accentSoft,
+    },
+    sheetDoneText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.accentInk,
+      letterSpacing: -0.2,
+    },
+    switch: {
+      width: 51,
+      height: 31,
+      borderRadius: 999,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(120, 120, 128, 0.16)",
+      padding: 2,
+      justifyContent: "center",
+    },
+    switchOn: { backgroundColor: colors.positive },
+    knob: {
+      width: 27,
+      height: 27,
+      borderRadius: 14,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 3,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    knobOn: { transform: [{ translateX: 20 }] },
+    segment: {
+      position: "relative",
+      minHeight: 42,
+      padding: 3,
+      borderRadius: 999,
+      borderCurve: "continuous",
+      backgroundColor: isDark ? "rgba(38, 43, 52, 0.7)" : "rgba(224, 229, 235, 0.75)",
+      flexDirection: "row",
+    },
+    segmentThumb: {
+      position: "absolute",
+      top: 3,
+      bottom: 3,
+      borderRadius: 999,
+      borderCurve: "continuous",
+      backgroundColor: colors.card,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.14,
+      shadowRadius: 5,
+      elevation: 2,
+    },
+    segmentItem: { flex: 1, minHeight: 36, alignItems: "center", justifyContent: "center" },
+    segmentLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
   });
 }

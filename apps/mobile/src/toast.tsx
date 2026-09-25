@@ -5,7 +5,8 @@ import LottieView from "lottie-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import success from "./success.json";
 import { tapPress, tapSuccess } from "./haptic";
-import { colors } from "./theme";
+import { BlurView } from "expo-blur";
+import { colors, useTheme } from "./theme";
 
 type Listener = (message: string) => void;
 let listener: Listener | null = null;
@@ -55,32 +56,40 @@ export function offerUndo(label: string, undo: () => Promise<void>) {
 
 export function UndoHost() {
   const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
+  const isDark = palette.scheme === "dark";
   const [offer, setOffer] = useState<Offer | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
+  const translateY = useRef(new Animated.Value(14)).current;
+  const scale = useRef(new Animated.Value(0.92)).current;
 
   useEffect(() => {
     pushOffer = (next) => {
       setOffer(next);
       opacity.setValue(0);
-      translateY.setValue(12);
+      translateY.setValue(14);
+      scale.setValue(0.92);
       Animated.parallel([
         Animated.timing(opacity, { toValue: 1, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         Animated.spring(translateY, { toValue: 0, useNativeDriver: true, stiffness: 420, damping: 24 }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 420, damping: 24 }),
       ]).start();
     };
     return () => {
       pushOffer = () => undefined;
     };
-  }, [opacity, translateY]);
+  }, [opacity, translateY, scale]);
 
   useEffect(() => {
     if (!offer) return;
     const timer = setTimeout(() => {
-      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setOffer(null));
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.94, duration: 200, useNativeDriver: true }),
+      ]).start(() => setOffer(null));
     }, 5000);
     return () => clearTimeout(timer);
-  }, [offer, opacity]);
+  }, [offer, opacity, scale]);
 
   if (!offer) return null;
 
@@ -90,41 +99,57 @@ export function UndoHost() {
         position: "absolute",
         left: 20,
         right: 20,
-        bottom: Math.max(insets.bottom + 62, 80),
+        bottom: Math.max(insets.bottom + 64, 84),
         alignItems: "center",
         zIndex: 9998,
         opacity,
-        transform: [{ translateY }],
+        transform: [{ translateY }, { scale }],
       }}
     >
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: 16,
+          gap: 14,
           paddingLeft: 18,
-          paddingRight: 14,
+          paddingRight: 12,
           paddingVertical: 10,
           borderRadius: 999,
-          backgroundColor: colors.ink,
+          borderCurve: "continuous",
+          backgroundColor: isDark ? "rgba(30, 36, 46, 0.85)" : "rgba(20, 24, 31, 0.88)",
+          borderWidth: 1,
+          borderTopColor: "rgba(255, 255, 255, 0.28)",
+          borderBottomColor: "rgba(0, 0, 0, 0.2)",
+          borderLeftColor: "rgba(255, 255, 255, 0.12)",
+          borderRightColor: "rgba(255, 255, 255, 0.12)",
           shadowColor: "#000",
-          shadowOpacity: 0.16,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 6,
+          shadowOpacity: 0.28,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 8,
+          overflow: "hidden",
         }}
       >
-        <Text style={{ color: colors.card, fontSize: 14, fontWeight: "500" }}>{offer.label}</Text>
+        <BlurView
+          intensity={65}
+          tint="dark"
+          style={StyleSheet.absoluteFill}
+        />
+        <Text style={{ color: "#ffffff", fontSize: 14, fontWeight: "600", letterSpacing: -0.2 }}>{offer.label}</Text>
         <Pressable
-          hitSlop={8}
+          hitSlop={12}
           onPress={() => {
             tapPress();
             const run = offer.undo;
             setOffer(null);
             void run();
           }}
+          style={({ pressed }) => [
+            { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: "rgba(255, 255, 255, 0.15)" },
+            pressed ? { opacity: 0.7 } : null,
+          ]}
         >
-          <Text style={{ color: colors.accent, fontSize: 14, fontWeight: "700" }}>Undo</Text>
+          <Text style={{ color: palette.accentInk, fontSize: 14, fontWeight: "700", letterSpacing: -0.2 }}>Undo</Text>
         </Pressable>
       </View>
     </Animated.View>

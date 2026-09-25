@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { BlurView } from "expo-blur";
 import { api } from "./api";
 import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge";
 import { dayLabel, flowMoney, merchantMatchKey, money } from "./format";
 import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
+import { useTheme } from "./theme";
 import { ConfirmMark } from "./toast";
 import { colors, Sheet, Switch } from "./ui";
 
@@ -149,6 +151,9 @@ export function ReviewDeck({
     setTimeout(run, 400);
   }
 
+  const { palette } = useTheme();
+  const isDark = palette.scheme === "dark";
+
   return (
     <View
       style={[
@@ -156,6 +161,11 @@ export function ReviewDeck({
         leaving && { opacity: 0.6 },
       ]}
     >
+      <BlurView
+        intensity={isDark ? 50 : 70}
+        tint={palette.blurTint}
+        style={StyleSheet.absoluteFill}
+      />
       {burst ? (
         <View style={styles.burstOverlay}>
           <ConfirmMark size={72} />
@@ -299,21 +309,30 @@ export function ReviewDeck({
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.glassProminent,
     borderRadius: 24,
+    borderCurve: "continuous",
     borderWidth: 1,
-    borderColor: colors.line,
+    borderTopColor: colors.glassBorder,
+    borderBottomColor: colors.glassBorderSubtle,
+    borderLeftColor: colors.glassBorderSubtle,
+    borderRightColor: colors.glassBorderSubtle,
     padding: 20,
     gap: 14,
     position: "relative",
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   burstOverlay: {
-    ...StyleSheet.absoluteFill,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 40,
     alignItems: "center",
     justifyContent: "center",
@@ -324,13 +343,13 @@ const styles = StyleSheet.create({
     height: 4,
     width: "100%",
     backgroundColor: colors.fill,
-    borderRadius: 2,
+    borderRadius: 99,
     overflow: "hidden",
   },
   meterFill: {
     height: "100%",
     backgroundColor: colors.accent,
-    borderRadius: 2,
+    borderRadius: 99,
   },
   metaSubtitle: {
     fontSize: 13,
@@ -344,7 +363,7 @@ const styles = StyleSheet.create({
   },
   merchantName: {
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "700",
     letterSpacing: -0.4,
     color: colors.ink,
   },
@@ -352,6 +371,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
     marginTop: 2,
+    letterSpacing: -0.1,
   },
   heroAmount: {
     fontSize: 38,
@@ -369,9 +389,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     borderRadius: 999,
+    borderCurve: "continuous",
     backgroundColor: colors.fill,
     borderWidth: 1,
     borderColor: "transparent",
@@ -384,6 +405,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.tertiary,
+    fontVariant: ["tabular-nums"],
   },
   chipNumberSelected: {
     color: colors.accentInk,
@@ -398,8 +420,9 @@ const styles = StyleSheet.create({
     color: colors.accentInk,
   },
   pickerButton: {
-    minHeight: 46,
+    minHeight: 48,
     borderRadius: 14,
+    borderCurve: "continuous",
     backgroundColor: colors.fill,
     borderWidth: 1,
     borderColor: colors.line,
@@ -421,6 +444,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: colors.fill,
     borderRadius: 14,
+    borderCurve: "continuous",
   },
   switchTitle: {
     fontSize: 14,
@@ -441,9 +465,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: colors.card,
+    borderCurve: "continuous",
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.lineStrong,
+    borderTopColor: colors.glassBorder,
+    borderBottomColor: colors.glassBorderSubtle,
+    borderLeftColor: colors.glassBorderSubtle,
+    borderRightColor: colors.glassBorderSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -456,13 +484,19 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: colors.ink,
+    borderCurve: "continuous",
+    backgroundColor: colors.control,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   confirmButtonText: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.card,
+    color: colors.controlInk,
   },
 });
