@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Appearance } from "react-native";
+import { AccessibilityInfo, Appearance } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 export type Palette = {
@@ -26,9 +26,15 @@ export type Palette = {
   glassProminent: string;
   glassBorder: string;
   glassBorderSubtle: string;
+  glassUltraThin: string;
+  glassRegular: string;
+  specularTop: string;
+  specularSides: string;
+  specularBottom: string;
   navBg: string;
   sheetBg: string;
   blurTint: "light" | "dark" | "systemMaterial" | "systemMaterialLight" | "systemMaterialDark" | "systemChromeMaterialLight" | "systemChromeMaterialDark";
+  blurSubtleTint: "light" | "dark" | "systemMaterial" | "systemMaterialLight" | "systemMaterialDark" | "systemThinMaterialLight" | "systemThinMaterialDark";
 };
 
 export const light: Palette = {
@@ -54,9 +60,15 @@ export const light: Palette = {
   glassProminent: "rgba(255, 255, 255, 0.92)",
   glassBorder: "rgba(255, 255, 255, 0.95)",
   glassBorderSubtle: "rgba(20, 24, 31, 0.08)",
+  glassUltraThin: "rgba(255, 255, 255, 0.58)",
+  glassRegular: "rgba(255, 255, 255, 0.80)",
+  specularTop: "rgba(255, 255, 255, 0.96)",
+  specularSides: "rgba(20, 24, 31, 0.08)",
+  specularBottom: "rgba(20, 24, 31, 0.06)",
   navBg: "rgba(243, 245, 247, 0.82)",
   sheetBg: "rgba(255, 255, 255, 0.94)",
   blurTint: "systemChromeMaterialLight",
+  blurSubtleTint: "systemMaterialLight",
 };
 
 export const dark: Palette = {
@@ -82,9 +94,15 @@ export const dark: Palette = {
   glassProminent: "rgba(32, 38, 48, 0.86)",
   glassBorder: "rgba(255, 255, 255, 0.18)",
   glassBorderSubtle: "rgba(255, 255, 255, 0.07)",
+  glassUltraThin: "rgba(26, 30, 38, 0.52)",
+  glassRegular: "rgba(26, 30, 38, 0.75)",
+  specularTop: "rgba(255, 255, 255, 0.22)",
+  specularSides: "rgba(255, 255, 255, 0.08)",
+  specularBottom: "rgba(0, 0, 0, 0.28)",
   navBg: "rgba(16, 18, 22, 0.82)",
   sheetBg: "rgba(26, 30, 38, 0.92)",
   blurTint: "systemChromeMaterialDark",
+  blurSubtleTint: "systemMaterialDark",
 };
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -93,6 +111,23 @@ const KEY = "shelf-theme";
 
 /** Live palette. Call sites read it during render; ThemeProvider updates it before re-rendering. */
 export const colors: Palette = { ...light };
+
+/** Hook to automatically disable blur/materials when Reduce Transparency is enabled in iOS Accessibility. */
+export function useReduceTransparency(): boolean {
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceTransparencyEnabled()
+      .then(setReduceTransparency)
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener("reduceTransparencyChanged", (enabled) => {
+      setReduceTransparency(enabled);
+    });
+    return () => sub.remove();
+  }, []);
+
+  return reduceTransparency;
+}
 
 type ThemeValue = {
   mode: ThemeMode;

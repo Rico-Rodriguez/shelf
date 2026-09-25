@@ -7,7 +7,7 @@ import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
-import { useTheme } from "../../src/theme";
+import { useReduceTransparency, useTheme } from "../../src/theme";
 import { colors } from "../../src/ui";
 
 const TABS = [
@@ -22,15 +22,18 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
   const insets = useSafeAreaInsets();
   const wordmark = useWordmark();
   const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
   return (
-    <View style={{ paddingTop: insets.top, backgroundColor: palette.navBg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line, overflow: "hidden" }}>
-      <BlurView
-        intensity={isDark ? 80 : 90}
-        tint={palette.blurTint}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={{ paddingTop: insets.top, backgroundColor: reduceTransparency ? palette.bg : palette.navBg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line, overflow: "hidden" }}>
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? 85 : 95}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1, justifyContent: "center" }}>
           {syncLabel ? (
@@ -144,25 +147,28 @@ function ShelfTabBar({
 }) {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
   return (
     <View
       style={{
         flexDirection: "row",
-        backgroundColor: palette.glass,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: palette.glassBorderSubtle,
+        backgroundColor: reduceTransparency ? palette.bg : palette.glass,
+        borderTopWidth: 1,
+        borderTopColor: palette.specularTop || palette.glassBorder,
         paddingTop: 8,
-        paddingBottom: Math.max(insets.bottom, 8),
+        paddingBottom: Math.max(insets.bottom, 10),
         overflow: "hidden",
       }}
     >
-      <BlurView
-        intensity={isDark ? 80 : 90}
-        tint={palette.blurTint}
-        style={StyleSheet.absoluteFill}
-      />
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? 85 : 95}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       {state.routes.map((route, index) => {
         const spec = TABS.find((tab) => tab.name === route.name);
         const focused = state.index === index;

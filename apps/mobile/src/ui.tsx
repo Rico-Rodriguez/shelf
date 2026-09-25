@@ -6,7 +6,7 @@ import Reanimated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWordmark } from "./brand";
 import { ScrollLockProvider } from "./scroll";
 import { GroupedBars, SpendChart } from "./chart";
@@ -14,7 +14,7 @@ import { flowMoney, money, shiftMonth } from "./format";
 import { tapPress, tapSelect } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
-import { colors, useTheme, type Palette } from "./theme";
+import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
 
 export { GroupedBars, SpendChart };
 
@@ -25,8 +25,9 @@ function useStyles() {
   return useMemo(() => makeStyles(palette), [palette]);
 }
 
-export function Back() {
+export function Back({ label = "Back" }: { label?: string }) {
   const styles = useStyles();
+  const { palette } = useTheme();
   return (
     <Pressable
       onPress={() => {
@@ -35,11 +36,11 @@ export function Back() {
       }}
       hitSlop={12}
       style={styles.backBtn}
+      accessibilityRole="button"
+      accessibilityLabel={`Go back`}
     >
-      <View style={{ transform: [{ rotate: "180deg" }] }}>
-        <Icon name="chevron" size={17} color={colors.ink} />
-      </View>
-      <Text style={styles.back}>Back</Text>
+      <Icon name="chevron-left" size={18} color={palette.ink} />
+      <Text style={styles.back}>{label}</Text>
     </Pressable>
   );
 }
@@ -66,7 +67,11 @@ export function Screen({
   onRefresh?: () => Promise<unknown> | void;
 }) {
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const wordmark = useWordmark();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
   const [refreshing, setRefreshing] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const setScrollLocked = useCallback((locked: boolean) => {
@@ -77,13 +82,121 @@ export function Screen({
     Promise.resolve(onRefresh?.()).finally(() => setRefreshing(false));
   }
 
+  // Pinned glass header for secondary screens that provide a back/refresh action
+  const hasPinnedNav = !framed && Boolean(refresh);
+
+  const pinnedNav = hasPinnedNav ? (
+    <View
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        paddingTop: insets.top,
+        backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: palette.line,
+        overflow: "hidden",
+      }}
+    >
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? 85 : 95}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View
+        style={{
+          minHeight: 46,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 16,
+        }}
+      >
+        <View style={{ minWidth: 60, alignItems: "flex-start", justifyContent: "center" }}>
+          {refresh}
+        </View>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}>
+          {title ? (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 17,
+                fontWeight: "600",
+                color: palette.ink,
+                letterSpacing: -0.3,
+                fontFamily: title === "Shelf" ? wordmark : undefined,
+              }}
+            >
+              {title}
+            </Text>
+          ) : null}
+        </View>
+        <View style={{ minWidth: 60, alignItems: "flex-end", justifyContent: "center" }}>
+          {/* Reserve space so title stays centered */}
+        </View>
+      </View>
+    </View>
+  ) : null;
+
   if (!scrollable) {
     const rawBody = (
       <ScrollLockProvider value={setScrollLocked}>
         <View style={{ flex: 1 }}>
-          {refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
+          {pinnedNav}
+          <View style={{ flex: 1, paddingTop: hasPinnedNav ? insets.top + 46 : 0 }}>
+            {!hasPinnedNav && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
+            {title ? (
+              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }]}>
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
+                  {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+                </View>
+                {action}
+              </View>
+            ) : null}
+            {children}
+          </View>
+        </View>
+        {footer}
+      </ScrollLockProvider>
+    );
+    if (framed) return <View style={styles.safe}>{rawBody}</View>;
+    return (
+      <SafeAreaView style={styles.safe} edges={hasPinnedNav ? ["left", "right"] : ["top", "left", "right"]}>
+        {rawBody}
+      </SafeAreaView>
+    );
+  }
+
+  const body = (
+    <>
+      {pinnedNav}
+      <ScrollLockProvider value={setScrollLocked}>
+        <ScrollView
+          scrollEnabled={scrollEnabled}
+          contentContainerStyle={[
+            styles.scroll,
+            hasPinnedNav ? { paddingTop: insets.top + 54, paddingBottom: Math.max(insets.bottom + 64, 100) } : null,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={pull}
+                tintColor={colors.ink}
+                progressViewOffset={hasPinnedNav ? insets.top + 46 : 0}
+              />
+            ) : undefined
+          }
+        >
+          {!hasPinnedNav && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
           {title ? (
-            <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }]}>
+            <View style={styles.header}>
               <View style={{ flexShrink: 1 }}>
                 <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                 {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -92,46 +205,14 @@ export function Screen({
             </View>
           ) : null}
           {children}
-        </View>
-        {footer}
-      </ScrollLockProvider>
-    );
-    if (framed) return <View style={styles.safe}>{rawBody}</View>;
-    return (
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        {rawBody}
-      </SafeAreaView>
-    );
-  }
-
-  const body = (
-    <>
-      <ScrollLockProvider value={setScrollLocked}>
-      <ScrollView
-        scrollEnabled={scrollEnabled}
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} /> : undefined}
-      >
-        {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
-        {title ? (
-          <View style={styles.header}>
-            <View style={{ flexShrink: 1 }}>
-              <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-            </View>
-            {action}
-          </View>
-        ) : null}
-        {children}
-      </ScrollView>
+        </ScrollView>
       </ScrollLockProvider>
       {footer}
     </>
   );
   if (framed) return <View style={styles.safe}>{body}</View>;
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safe} edges={hasPinnedNav ? ["left", "right"] : ["top", "left", "right"]}>
       {body}
     </SafeAreaView>
   );
@@ -140,7 +221,7 @@ export function Screen({
 export function Card({
   children,
   style,
-  tone,
+  tone = "default",
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -148,19 +229,23 @@ export function Card({
 }) {
   const styles = useStyles();
   const { palette } = useTheme();
-  const isGlass = tone === "glass" || tone === "prominent";
+  const reduceTransparency = useReduceTransparency();
+  const isInset = tone === "inset";
+  const isProminent = tone === "prominent";
+
   return (
     <View
       style={[
         styles.card,
-        tone === "inset" ? styles.cardInset : null,
-        tone === "prominent" ? styles.glassProminent : null,
+        isInset ? styles.cardInset : null,
+        isProminent ? styles.glassProminent : null,
+        reduceTransparency ? { backgroundColor: palette.card } : null,
         style,
       ]}
     >
-      {isGlass ? (
+      {!isInset && !reduceTransparency ? (
         <BlurView
-          intensity={palette.scheme === "dark" ? 45 : 65}
+          intensity={palette.scheme === "dark" ? (isProminent ? 65 : 45) : (isProminent ? 80 : 60)}
           tint={palette.blurTint}
           style={StyleSheet.absoluteFill}
         />
@@ -245,6 +330,8 @@ export function Button({
   block?: boolean;
 }) {
   const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const scale = useRef(new Animated.Value(1)).current;
   function settle(to: number) {
     Animated.spring(scale, { toValue: to, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start();
@@ -261,6 +348,13 @@ export function Button({
       disabled={busy}
     >
       <Animated.View style={[styles.button, tone === "quiet" && styles.quiet, tone === "danger" && styles.danger, block && styles.buttonBlock, { transform: [{ scale }] }]}>
+        {tone === "quiet" && !reduceTransparency ? (
+          <BlurView
+            intensity={palette.scheme === "dark" ? 40 : 60}
+            tint={palette.blurTint}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
         {busy ? (
           <ActivityIndicator color={tone === "primary" ? "#fff" : colors.ink} />
         ) : (
@@ -617,6 +711,8 @@ export function Hero({
   children?: ReactNode;
 }) {
   const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const shownShares = (shares ?? []).filter((share) => share.cents > 0);
   const charting = (points?.length ?? 0) >= 2;
   const figureText = empty
@@ -629,6 +725,13 @@ export function Hero({
 
   return (
     <View style={styles.hero}>
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={palette.scheme === "dark" ? 65 : 75}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <View style={styles.heroTop}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}>
           <Text style={styles.heroLabel}>{label}</Text>
@@ -833,6 +936,7 @@ export function Progress({
 
 export function MonthNav({ year, month, label, onChange }: { year: number; month: number; label: string; onChange: (year: number, month: number) => void }) {
   const styles = useStyles();
+  const { palette } = useTheme();
   return (
     <View style={styles.monthNav}>
       <Pressable
@@ -842,10 +946,10 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
           const next = shiftMonth(year, month, -1);
           onChange(next.year, next.month);
         }}
-        style={styles.monthBtn}
-        hitSlop={8}
+        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: colors.fill } : null]}
+        hitSlop={12}
       >
-        <Text style={styles.monthChevron}>‹</Text>
+        <Icon name="chevron-left" size={17} color={palette.ink} />
       </Pressable>
       <Text style={styles.monthLabel}>{label}</Text>
       <Pressable
@@ -855,10 +959,10 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
           const next = shiftMonth(year, month, 1);
           onChange(next.year, next.month);
         }}
-        style={styles.monthBtn}
-        hitSlop={8}
+        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: colors.fill } : null]}
+        hitSlop={12}
       >
-        <Text style={styles.monthChevron}>›</Text>
+        <Icon name="chevron" size={17} color={palette.ink} />
       </Pressable>
     </View>
   );
@@ -876,15 +980,27 @@ export function ReviewBanner({
   onPress: () => void;
 }) {
   const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const title = label || "Categorize purchases";
   const desc = subtitle ?? (count ? `${count} ${count === 1 ? "purchase" : "purchases"} to review` : null);
 
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.banner, pressed ? { backgroundColor: colors.fill } : null]}
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.banner, pressed ? { opacity: 0.88, transform: [{ scale: 0.985 }] } : null]}
     >
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={palette.scheme === "dark" ? 55 : 70}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <View style={styles.bannerIconWrap}>
         <Icon name="tag" size={17} color={colors.accentInk} />
       </View>
@@ -908,18 +1024,47 @@ export function ReviewBanner({
   );
 }
 
-export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {
+export function SearchField({
+  value,
+  onChangeText,
+  placeholder,
+  autoFocus,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  autoFocus?: boolean;
+}) {
   const styles = useStyles();
+  const { palette } = useTheme();
+
   return (
-    <TextInput
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={colors.tertiary}
-      autoCapitalize="none"
-      autoCorrect={false}
-      style={styles.search}
-    />
+    <View style={styles.searchWrap}>
+      <Icon name="search" size={18} color={palette.tertiary} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={palette.tertiary}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus={autoFocus}
+        style={styles.search}
+      />
+      {value.length > 0 ? (
+        <Pressable
+          hitSlop={12}
+          onPress={() => {
+            tapPress();
+            onChangeText("");
+          }}
+          style={styles.searchClear}
+          accessibilityLabel="Clear search text"
+        >
+          <Icon name="close" size={12} color="#ffffff" />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -939,6 +1084,7 @@ export function Sheet({
   minHeight?: number | `${number}%`;
 }) {
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
   const translateY = useRef(new Animated.Value(screenHeight)).current;
   const [closing, setClosing] = useState(false);
@@ -1073,7 +1219,10 @@ export function Sheet({
               </View>
               <Pressable
                 accessibilityRole="button"
-                onPress={dismiss}
+                onPress={() => {
+                  tapPress();
+                  dismiss();
+                }}
                 hitSlop={16}
                 style={({ pressed }) => [
                   styles.sheetDoneBtn,
@@ -1088,7 +1237,7 @@ export function Sheet({
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 24, 40), gap: 14 }}
           >
             {children}
           </ScrollView>
@@ -1120,14 +1269,14 @@ function makeStyles(colors: Palette) {
       borderRadius: 22,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.glassBorder,
-      borderBottomColor: colors.glassBorderSubtle,
-      borderLeftColor: colors.glassBorderSubtle,
-      borderRightColor: colors.glassBorderSubtle,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: isDark ? 0.35 : 0.05,
-      shadowRadius: 16,
+      shadowRadius: 18,
       shadowOffset: { width: 0, height: 6 },
       elevation: 3,
     },
@@ -1136,10 +1285,10 @@ function makeStyles(colors: Palette) {
       borderRadius: 22,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.glassBorder,
-      borderBottomColor: colors.glassBorderSubtle,
-      borderLeftColor: colors.glassBorderSubtle,
-      borderRightColor: colors.glassBorderSubtle,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: isDark ? 0.35 : 0.06,
@@ -1149,9 +1298,11 @@ function makeStyles(colors: Palette) {
     },
     glassProminent: {
       backgroundColor: colors.glassProminent,
+      borderTopColor: colors.specularTop || colors.glassBorder,
       shadowOpacity: isDark ? 0.45 : 0.08,
-      shadowRadius: 20,
+      shadowRadius: 22,
       shadowOffset: { width: 0, height: 10 },
+      elevation: 5,
     },
     cardInset: {
       backgroundColor: isDark ? "rgba(18, 22, 29, 0.65)" : "rgba(235, 239, 244, 0.75)",
@@ -1191,11 +1342,12 @@ function makeStyles(colors: Palette) {
     quiet: {
       backgroundColor: colors.glass,
       borderWidth: 1,
-      borderTopColor: colors.glassBorder,
-      borderBottomColor: colors.glassBorderSubtle,
-      borderLeftColor: colors.glassBorderSubtle,
-      borderRightColor: colors.glassBorderSubtle,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       shadowOpacity: isDark ? 0.15 : 0.04,
+      overflow: "hidden",
     },
     danger: { backgroundColor: colors.danger },
     buttonText: { color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 },
@@ -1251,10 +1403,10 @@ function makeStyles(colors: Palette) {
       borderRadius: 24,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.glassBorder,
-      borderBottomColor: colors.glassBorderSubtle,
-      borderLeftColor: colors.glassBorderSubtle,
-      borderRightColor: colors.glassBorderSubtle,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       overflow: "hidden",
       paddingTop: 20,
       paddingHorizontal: 20,
@@ -1287,8 +1439,8 @@ function makeStyles(colors: Palette) {
     mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill, borderRadius: 99, overflow: "hidden" },
     track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
     chart: { height: 148, marginHorizontal: -20, marginTop: 8 },
-    monthNav: { flexDirection: "row", alignItems: "center", gap: 4 },
-    monthBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+    monthNav: { flexDirection: "row", alignItems: "center", gap: 6 },
+    monthBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
     monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
     monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
     banner: {
@@ -1298,14 +1450,15 @@ function makeStyles(colors: Palette) {
       borderRadius: 22,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.glassBorder,
-      borderBottomColor: colors.glassBorderSubtle,
-      borderLeftColor: colors.glassBorderSubtle,
-      borderRightColor: colors.glassBorderSubtle,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       backgroundColor: colors.glass,
       flexDirection: "row",
       alignItems: "center",
       gap: 14,
+      overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: isDark ? 0.3 : 0.05,
       shadowRadius: 14,
@@ -1344,16 +1497,31 @@ function makeStyles(colors: Palette) {
       color: colors.ink,
       fontVariant: ["tabular-nums"],
     },
-    search: {
+    searchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: isDark ? "rgba(24, 28, 36, 0.85)" : "rgba(235, 238, 242, 0.85)",
       borderRadius: 14,
       borderCurve: "continuous",
-      minHeight: 42,
-      paddingHorizontal: 15,
-      fontSize: 16,
-      color: colors.ink,
       borderWidth: 1,
       borderColor: colors.line,
+      minHeight: 44,
+      paddingHorizontal: 14,
+      gap: 10,
+    },
+    search: {
+      flex: 1,
+      fontSize: 16,
+      color: colors.ink,
+      paddingVertical: 10,
+    },
+    searchClear: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: colors.tertiary,
+      alignItems: "center",
+      justifyContent: "center",
     },
     sheetWrap: { flex: 1, justifyContent: "flex-end" },
     sheetBackdrop: {
@@ -1374,7 +1542,7 @@ function makeStyles(colors: Palette) {
       borderTopWidth: 1,
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderRightWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.glassBorder,
+      borderTopColor: colors.specularTop || colors.glassBorder,
       borderLeftColor: colors.glassBorderSubtle,
       borderRightColor: colors.glassBorderSubtle,
       shadowColor: "#000",
@@ -1454,9 +1622,14 @@ function makeStyles(colors: Palette) {
       borderRadius: 999,
       borderCurve: "continuous",
       backgroundColor: colors.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.line,
+      borderLeftColor: colors.line,
+      borderRightColor: colors.line,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.14,
+      shadowOpacity: 0.12,
       shadowRadius: 5,
       elevation: 2,
     },

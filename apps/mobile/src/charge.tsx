@@ -3,9 +3,9 @@ import { useMemo, useState, useEffect } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { api } from "./api";
 import { dayLabel, merchantMatchKey, shelfColor } from "./format";
-import { tapSelect } from "./haptic";
+import { tapPress, tapSelect } from "./haptic";
 import { Icon } from "./icons";
-import { Button, Card, colors, Field, FlowAmount, Note, Section, Sheet, Switch } from "./ui";
+import { Button, Card, colors, Field, FlowAmount, Note, Section, SearchField, Sheet, Switch } from "./ui";
 
 export type ChargeGroup = {
   name: string;
@@ -170,9 +170,7 @@ export function ChargeSheet({
             onPress={() => setPickingCategory(false)}
             style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 }}
           >
-            <View style={{ transform: [{ rotate: "180deg" }] }}>
-              <Icon name="chevron" size={14} color={colors.accentInk} />
-            </View>
+            <Icon name="chevron-left" size={16} color={colors.accentInk} />
             <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>
               Back to details
             </Text>
@@ -205,18 +203,28 @@ export function ChargeSheet({
 
       {/* Dedicated Category Selector Card */}
       <Pressable
-        onPress={() => setPickingCategory(true)}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-          borderRadius: 18,
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.line,
-          gap: 12,
+        onPress={() => {
+          tapPress();
+          setPickingCategory(true);
         }}
+        style={({ pressed }) => [
+          {
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+            borderRadius: 18,
+            borderCurve: "continuous",
+            backgroundColor: colors.glass,
+            borderWidth: 1,
+            borderTopColor: colors.specularTop || colors.glassBorder,
+            borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+            borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+            borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+            gap: 12,
+          },
+          pressed ? { opacity: 0.85, transform: [{ scale: 0.985 }] } : null,
+        ]}
       >
         <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: currentCategoryColor }} />
         <View style={{ flex: 1 }}>
@@ -227,7 +235,7 @@ export function ChargeSheet({
             {categoryName(categoryId)}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, backgroundColor: colors.fill }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99, borderCurve: "continuous", backgroundColor: colors.fill }}>
           <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>Change</Text>
           <Icon name="chevron" size={14} color={colors.ink} />
         </View>
@@ -235,16 +243,23 @@ export function ChargeSheet({
 
       {/* Rule Option */}
       <Pressable
-        onPress={() => setAlways((value) => !value)}
+        onPress={() => {
+          tapSelect();
+          setAlways((value) => !value);
+        }}
         style={{
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
           padding: 16,
           borderRadius: 18,
-          backgroundColor: colors.card,
+          borderCurve: "continuous",
+          backgroundColor: colors.glass,
           borderWidth: 1,
-          borderColor: colors.line,
+          borderTopColor: colors.specularTop || colors.glassBorder,
+          borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+          borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+          borderRightColor: colors.specularSides || colors.glassBorderSubtle,
           gap: 12,
         }}
       >
@@ -436,39 +451,8 @@ export function CategoryPicker({
 
   return (
     <View style={{ gap: 16 }}>
-      {/* Search Input Bar with Icon and Clear */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: colors.fill,
-          borderRadius: 14,
-          paddingHorizontal: 12,
-          minHeight: 44,
-          gap: 8,
-        }}
-      >
-        <Icon name="search" size={18} color={colors.muted} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search categories..."
-          placeholderTextColor={colors.tertiary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={{
-            flex: 1,
-            fontSize: 16,
-            color: colors.ink,
-            paddingVertical: 10,
-          }}
-        />
-        {query ? (
-          <Pressable onPress={() => setQuery("")} hitSlop={8} style={{ padding: 4 }}>
-            <Icon name="close" size={16} color={colors.muted} />
-          </Pressable>
-        ) : null}
-      </View>
+      {/* Search Input Bar with Apple HIG SearchField */}
+      <SearchField value={query} onChangeText={setQuery} placeholder="Search categories..." />
 
       {/* Suggested Quick-Picks when not searching */}
       {!needle && quickCategories.length > 0 ? (
@@ -495,6 +479,7 @@ export function CategoryPicker({
                     paddingHorizontal: 14,
                     paddingVertical: 9,
                     borderRadius: 999,
+                    borderCurve: "continuous",
                     backgroundColor: on ? colors.accentSoft : colors.card,
                     borderWidth: 1,
                     borderColor: on ? colors.accent : colors.line,
@@ -607,7 +592,11 @@ const toggle = {
   minHeight: 52,
   paddingHorizontal: 16,
   borderRadius: 16,
+  borderCurve: "continuous" as const,
   backgroundColor: colors.card,
+  borderWidth: 1,
+  borderColor: colors.line,
+  borderTopColor: colors.specularTop || colors.line,
   flexDirection: "row" as const,
   alignItems: "center" as const,
   justifyContent: "space-between" as const,

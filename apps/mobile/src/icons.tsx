@@ -24,6 +24,7 @@ export function Icon({
   if (name === "wallet") return <Wallet {...mark} />;
   if (name === "more") return <More {...mark} />;
   if (name === "chevron") return <Glyph size={size} color={color} d="M9 6.5 15 12 9 17.5" />;
+  if (name === "chevron-left" || name === "back") return <Glyph size={size} color={color} d="M15 17.5 9 12 15 6.5" />;
   if (name === "search") {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">

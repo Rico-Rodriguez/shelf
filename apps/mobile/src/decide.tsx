@@ -6,7 +6,7 @@ import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge"
 import { dayLabel, flowMoney, merchantMatchKey, money } from "./format";
 import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
-import { useTheme } from "./theme";
+import { useReduceTransparency, useTheme } from "./theme";
 import { ConfirmMark } from "./toast";
 import { colors, Sheet, Switch } from "./ui";
 
@@ -152,22 +152,32 @@ export function ReviewDeck({
   }
 
   const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
   return (
     <View
       style={[
         styles.panel,
+        {
+          borderTopColor: palette.specularTop,
+          borderBottomColor: palette.specularBottom,
+          borderLeftColor: palette.specularSides,
+          borderRightColor: palette.specularSides,
+          backgroundColor: reduceTransparency ? (isDark ? "#1a1e26" : "#ffffff") : palette.glassRegular,
+        },
         leaving && { opacity: 0.6 },
       ]}
     >
-      <BlurView
-        intensity={isDark ? 50 : 70}
-        tint={palette.blurTint}
-        style={StyleSheet.absoluteFill}
-      />
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? 50 : 70}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       {burst ? (
-        <View style={styles.burstOverlay}>
+        <View style={[styles.burstOverlay, { backgroundColor: isDark ? "rgba(20, 24, 30, 0.92)" : "rgba(255, 255, 255, 0.92)" }]}>
           <ConfirmMark size={72} />
         </View>
       ) : null}
