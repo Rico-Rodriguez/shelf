@@ -22,6 +22,7 @@ import {
   LedgerRow,
   Loading,
   Note,
+  Progress,
   ReviewBanner,
   Screen,
   Section,
@@ -120,8 +121,8 @@ export default function HomeScreen() {
                 items={[
                   { kicker: "Income", value: money(data.cashFlow.incomeCents) },
                   {
-                    kicker: data.cashFlow.savedCents < 0 ? "Over income" : "Saved",
-                    value: money(Math.abs(data.cashFlow.savedCents)),
+                    kicker: data.cashFlow.savedCents < 0 ? "Net deficit" : "Net cash flow",
+                    value: `${data.cashFlow.savedCents >= 0 ? "+" : "-"}${money(Math.abs(data.cashFlow.savedCents))}`,
                     color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
                   },
                 ]}
@@ -134,24 +135,45 @@ export default function HomeScreen() {
               onPress={() => router.push("/(app)/budget")}
               style={({ pressed }) => [
                 {
-                  minHeight: 52,
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
+                  padding: 16,
                   borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: colors.line,
                   backgroundColor: colors.card,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
+                  gap: 10,
+                  shadowColor: "#14181f",
+                  shadowOpacity: 0.04,
+                  shadowRadius: 2,
+                  shadowOffset: { width: 0, height: 1 },
                 },
                 pressed ? { backgroundColor: colors.fill } : null,
               ]}
             >
-              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: colors.ink }}>
-                {overPlan ? "Over this month" : "Left this month"}
-              </Text>
-              <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.3, color: overPlan ? colors.danger : colors.positive }}>
-                {money(Math.abs(left))}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ gap: 2 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Monthly Budget
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink }}>
+                    {overPlan ? "Over budget" : `${money(left)} left to spend`}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end", gap: 2 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted }}>
+                    {money(data.budget.spentCents)} of {money(data.budget.plannedCents)}
+                  </Text>
+                  {overPlan ? (
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger }}>
+                      +{money(Math.abs(left))} over
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              <Progress
+                value={data.budget.spentCents}
+                max={data.budget.plannedCents}
+                color={overPlan ? colors.danger : colors.positive}
+              />
             </Pressable>
           ) : null}
 
@@ -165,7 +187,7 @@ export default function HomeScreen() {
             <>
               {data.unreviewed.count > 0 ? (
                 <ReviewBanner
-                  label={categorizeLabel(data.unreviewed.count)}
+                  count={data.unreviewed.count}
                   onPress={() => router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } })}
                 />
               ) : null}

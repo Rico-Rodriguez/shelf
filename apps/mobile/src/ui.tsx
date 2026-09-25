@@ -370,6 +370,24 @@ export function Note({ children }: { children: string }) {
   return <Text style={styles.note}>{children}</Text>;
 }
 
+export function InlineLoading({ count = 2 }: { count?: number }) {
+  const styles = useStyles();
+  return (
+    <View style={{ gap: 12, paddingVertical: 8 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.fill }} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <View style={{ width: "55%", height: 13, borderRadius: 4, backgroundColor: colors.fillStrong }} />
+            <View style={{ width: "35%", height: 10, borderRadius: 4, backgroundColor: colors.fill }} />
+          </View>
+          <View style={{ width: 48, height: 14, borderRadius: 4, backgroundColor: colors.fillStrong }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function Loading({ label = "Loading" }: { label?: string }) {
   const styles = useStyles();
   if (label === "Loading") return <Skeleton />;
@@ -780,12 +798,46 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
   );
 }
 
-export function ReviewBanner({ label, onPress }: { label: string; onPress: () => void }) {
+export function ReviewBanner({
+  label,
+  count,
+  subtitle,
+  onPress,
+}: {
+  label?: string;
+  count?: number;
+  subtitle?: string;
+  onPress: () => void;
+}) {
   const styles = useStyles();
+  const title = label || "Categorize purchases";
+  const desc = subtitle ?? (count ? `${count} ${count === 1 ? "purchase" : "purchases"} to review` : null);
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.banner, pressed ? { backgroundColor: colors.fill } : null]}>
-      <Text style={styles.bannerText}>{label}</Text>
-      <Icon name="chevron" size={18} color={colors.ink} />
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.banner, pressed ? { backgroundColor: colors.fill } : null]}
+    >
+      <View style={styles.bannerIconWrap}>
+        <Icon name="tag" size={17} color={colors.accentInk} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.bannerTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {desc ? (
+          <Text style={styles.bannerSubtitle} numberOfLines={1}>
+            {desc}
+          </Text>
+        ) : null}
+      </View>
+      {count ? (
+        <View style={styles.bannerBadge}>
+          <Text style={styles.bannerBadgeText}>{count}</Text>
+        </View>
+      ) : null}
+      <Icon name="chevron" size={16} color={colors.tertiary} />
     </Pressable>
   );
 }
@@ -945,7 +997,7 @@ export function Sheet({
               </Pressable>
             </View>
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
+          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
             {children}
           </ScrollView>
         </Reanimated.View>
@@ -1066,18 +1118,51 @@ function makeStyles(colors: Palette) {
   monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
   monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
   banner: {
-    minHeight: 56,
+    minHeight: 58,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
+    shadowColor: "#14181f",
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  bannerText: { flex: 1, fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink },
+  bannerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: -0.3,
+    color: colors.ink,
+  },
+  bannerSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  bannerBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+    backgroundColor: colors.fill,
+  },
+  bannerBadgeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.ink,
+    fontVariant: ["tabular-nums"],
+  },
   search: {
     backgroundColor: colors.fill,
     borderRadius: 12,

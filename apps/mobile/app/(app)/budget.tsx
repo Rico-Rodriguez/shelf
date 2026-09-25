@@ -5,7 +5,8 @@ import { api, load as read, peek } from "../../src/api";
 import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, Hero, InlineLoading, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
+import { Icon } from "../../src/icons";
 
 type BudgetRow = {
   category: { id: string; name: string; sortOrder?: number };
@@ -211,15 +212,18 @@ export default function BudgetScreen() {
         framed
         onRefresh={load}
         action={
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <MonthNav
               year={cursor.year}
               month={cursor.month}
               label={monthLabel(cursor.year, cursor.month)}
               onChange={(year, month) => setCursor({ year, month })}
             />
-            <Pressable onPress={() => setPlanOpen(true)} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>
+            <Pressable onPress={() => setPlanOpen(true)} hitSlop={8} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>Target</Text>
+            </Pressable>
+            <Pressable onPress={() => void openAdd()} hitSlop={8} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+              <Icon name="plus" size={18} color={colors.ink} />
             </Pressable>
           </View>
         }
@@ -229,7 +233,7 @@ export default function BudgetScreen() {
         {data ? (
           <>
             <Hero
-              label={hasPlan ? (over ? "Over this month" : "Left this month") : "Spent this month"}
+              label={hasPlan ? (over ? "Over budget" : "Left to spend") : "Spent this month"}
               cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
               tone={hasPlan ? (over ? "bad" : "good") : undefined}
               status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
@@ -240,7 +244,7 @@ export default function BudgetScreen() {
                 <Facts
                   items={[
                     { kicker: "Spent", value: money(data.expenseSpentCents) },
-                    { kicker: "Plan", value: money(plannedTotal) },
+                    { kicker: "Total Budget", value: money(plannedTotal) },
                   ]}
                 />
               ) : null}
@@ -329,6 +333,30 @@ export default function BudgetScreen() {
               );
             })}
 
+            <Pressable
+              onPress={() => void openAdd()}
+              style={({ pressed }) => [
+                {
+                  marginTop: 8,
+                  marginBottom: 12,
+                  paddingVertical: 14,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  borderStyle: "dashed",
+                  backgroundColor: colors.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "row",
+                  gap: 8,
+                },
+                pressed ? { backgroundColor: colors.fill } : null,
+              ]}
+            >
+              <Icon name="plus" size={16} color={colors.accentInk} />
+              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>New Category</Text>
+            </Pressable>
+
             {hiddenCount > 0 ? (
               <Pressable onPress={() => setShowUnused((value) => !value)} style={{ paddingVertical: 8, alignItems: "center" }}>
                 <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>
@@ -340,12 +368,93 @@ export default function BudgetScreen() {
         ) : null}
       </Screen>
 
-      {planOpen ? (
-        <Sheet title="Edit budget" onClose={() => setPlanOpen(false)}>
-          <Field label="Planned income" value={income} onChangeText={setIncome} keyboardType="decimal-pad" />
-          <Button label="Save income" block onPress={() => void saveIncome().then(() => setPlanOpen(false))} />
-          <Button label="Add a category" tone="quiet" block onPress={() => void openAdd()} />
-          {data ? <Note>{`${money(data.leftoverCents)} left to assign`}</Note> : null}
+      {planOpen && data ? (
+        <Sheet
+          title="Monthly Target"
+          subtitle={`${monthLabel(data.year, data.month)} budget allocation`}
+          onClose={() => setPlanOpen(false)}
+        >
+          {/* Allocation Health Card */}
+          <Card tone="inset">
+            <View style={{ padding: 16, gap: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Allocation Overview
+                </Text>
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    backgroundColor: data.leftoverCents < 0 ? "rgba(217, 74, 46, 0.12)" : data.leftoverCents === 0 ? "rgba(27, 122, 98, 0.12)" : colors.fill,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "600",
+                      color: data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
+                    }}
+                  >
+                    {data.leftoverCents < 0 ? "Over allocated" : data.leftoverCents === 0 ? "Fully assigned" : "Unassigned buffer"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <View style={{ gap: 2 }}>
+                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Planned Income</Text>
+                  <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>
+                    {money(Math.round(Number(income || 0) * 100))}
+                  </Text>
+                </View>
+                <View style={{ gap: 2, alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Category Budgets</Text>
+                  <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>
+                    {money(plannedTotal)}
+                  </Text>
+                </View>
+                <View style={{ gap: 2, alignItems: "flex-end" }}>
+                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Left to Assign</Text>
+                  <Text
+                    style={{
+                      fontSize: 17,
+                      fontWeight: "700",
+                      color: data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
+                    }}
+                  >
+                    {money(data.leftoverCents)}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 13, lineHeight: 18, color: colors.muted }}>
+                {data.leftoverCents > 0
+                  ? `You have ${money(data.leftoverCents)} of planned earnings not yet allocated to category budgets.`
+                  : data.leftoverCents < 0
+                    ? `Category budgets exceed planned earnings by ${money(Math.abs(data.leftoverCents))}. Adjust categories or income to balance.`
+                    : "Every dollar of planned earnings is assigned to a category budget."}
+              </Text>
+            </View>
+          </Card>
+
+          <Section title="Edit expected income" />
+          <Card tone="inset">
+            <View style={{ padding: 14, gap: 12 }}>
+              <Field
+                label="Planned monthly income ($)"
+                value={income}
+                onChangeText={setIncome}
+                keyboardType="decimal-pad"
+                placeholder="5000"
+              />
+              <Button
+                label="Save income target"
+                block
+                onPress={() => void saveIncome().then(() => setPlanOpen(false))}
+              />
+            </View>
+          </Card>
         </Sheet>
       ) : null}
 
@@ -407,11 +516,11 @@ export default function BudgetScreen() {
                       <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(editing.spentCents)}</Text>
                     </View>
                     <View style={{ gap: 2, alignItems: "center" }}>
-                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>Plan</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>Budget</Text>
                       <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(editing.plannedCents)}</Text>
                     </View>
                     <View style={{ gap: 2, alignItems: "flex-end" }}>
-                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>{rowOver ? "Over Plan" : "Remaining"}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>{rowOver ? "Over Budget" : "Remaining"}</Text>
                       <Text style={{ fontSize: 15, fontWeight: "600", color: rowOver ? colors.danger : colors.positive }}>
                         {money(figure)}
                       </Text>
@@ -426,9 +535,11 @@ export default function BudgetScreen() {
                 trailing={txs && txCount > 0 ? money(txTotal) : undefined}
               />
               {txs == null ? (
-                <View style={{ paddingVertical: 24, alignItems: "center", justifyContent: "center" }}>
-                  <ActivityIndicator color={colors.ink} />
-                </View>
+                <Card tone="inset">
+                  <View style={{ paddingHorizontal: 16 }}>
+                    <InlineLoading count={2} />
+                  </View>
+                </Card>
               ) : null}
               {txs && txCount === 0 ? (
                 <Card tone="inset">
@@ -474,10 +585,10 @@ export default function BudgetScreen() {
               ) : null}
 
               {/* Edit Budget & Details */}
-              <Section title="Edit budget & name" />
+              <Section title="Budget & name" />
               <Card tone="inset">
                 <View style={{ padding: 14, gap: 12 }}>
-                  <Field label="Monthly plan ($)" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
+                  <Field label="Monthly budget ($)" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
                   <Field label="Category name" value={catName} onChangeText={setCatName} />
                   <Button label="Save changes" block onPress={() => void saveCategory()} />
                 </View>
