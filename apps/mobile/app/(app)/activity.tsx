@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
@@ -313,67 +313,6 @@ export default function ActivityScreen() {
     load().finally(() => setRefreshing(false));
   }, [load]);
 
-  // Review mode view (when focused into review deck)
-  if (focusMode && unreviewedOnly) {
-    return (
-      <Screen
-        title="Review"
-        framed
-        scrollable={false}
-        action={
-          <Pressable
-            onPress={() => {
-              tapPress();
-              setFocusMode(false);
-              setUnreviewedOnly(false);
-            }}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-          >
-            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Done</Text>
-          </Pressable>
-        }
-      >
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
-          {unreviewedRows.length > 0 ? (
-            <ReviewDeck
-              rows={unreviewedRows}
-              remaining={unreviewed}
-              total={reviewBaseline ?? unreviewed}
-              groups={groups}
-              frequentCategoryIds={frequentCategoryIds}
-              faces={faces}
-              onConfirm={handleReviewConfirm}
-              onSkip={handleReviewSkip}
-            />
-          ) : (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 }}>
-              <ConfirmMark size={64} />
-              <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
-                You’re caught up
-              </Text>
-              <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
-                Every transaction has been reviewed.
-              </Text>
-              <Pressable
-                onPress={() => {
-                  tapPress();
-                  setFocusMode(false);
-                  setUnreviewedOnly(false);
-                }}
-                style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 16 }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>
-                  Show all activity
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-        <UndoHost />
-      </Screen>
-    );
-  }
-
   type ListItem =
     | { type: "header"; id: string; title: string; flowText: string }
     | { type: "tx"; id: string; tx: Tx; isFirst: boolean; isLast: boolean };
@@ -401,6 +340,70 @@ export default function ActivityScreen() {
     }
     return list;
   }, [grouped]);
+
+  // Review mode view (when focused into review deck)
+  if (focusMode && unreviewedOnly) {
+    return (
+      <Screen
+        title="Review"
+        framed
+        scrollable={false}
+        action={
+          <Pressable
+            onPress={() => {
+              tapPress();
+              setFocusMode(false);
+              setUnreviewedOnly(false);
+            }}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+          >
+            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Done</Text>
+          </Pressable>
+        }
+      >
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }}
+        >
+          {unreviewedRows.length > 0 ? (
+            <ReviewDeck
+              rows={unreviewedRows}
+              remaining={unreviewed}
+              total={reviewBaseline ?? unreviewed}
+              groups={groups}
+              frequentCategoryIds={frequentCategoryIds}
+              faces={faces}
+              onConfirm={handleReviewConfirm}
+              onSkip={handleReviewSkip}
+            />
+          ) : (
+            <View style={{ alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32, paddingVertical: 40 }}>
+              <ConfirmMark size={64} />
+              <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
+                You’re caught up
+              </Text>
+              <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
+                Every transaction has been reviewed.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  tapPress();
+                  setFocusMode(false);
+                  setUnreviewedOnly(false);
+                }}
+                style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 16 }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>
+                  Show all activity
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+        <UndoHost />
+      </Screen>
+    );
+  }
 
   const listHeader = (
     <View style={{ gap: 12, paddingBottom: 8 }}>

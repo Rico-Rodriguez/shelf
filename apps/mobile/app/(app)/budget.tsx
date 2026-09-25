@@ -190,14 +190,19 @@ export default function BudgetScreen() {
       framed
       onRefresh={load}
       action={
-        <Pressable onPress={() => setPlanOpen(true)}>
-          <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <MonthNav
+            year={cursor.year}
+            month={cursor.month}
+            label={monthLabel(cursor.year, cursor.month)}
+            onChange={(year, month) => setCursor({ year, month })}
+          />
+          <Pressable onPress={() => setPlanOpen(true)} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Edit</Text>
+          </Pressable>
+        </View>
       }
     >
-      {data ? (
-        <MonthNav year={cursor.year} month={cursor.month} label={monthLabel(cursor.year, cursor.month)} onChange={(year, month) => setCursor({ year, month })} />
-      ) : null}
       {error ? <Note>{error}</Note> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
@@ -232,16 +237,20 @@ export default function BudgetScreen() {
                     tapSelect();
                     setClosed({ ...closed, [group.id]: !isClosed });
                   }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 2,
+                    paddingHorizontal: 2,
+                  }}
                 >
-                  <Section
-                    title={group.name}
-                    trailing={available > 0 ? `${money(spent)} / ${money(available)}` : money(spent)}
-                    action={isClosed ? "Show" : "Hide"}
-                    onAction={() => {
-                      tapSelect();
-                      setClosed({ ...closed, [group.id]: !isClosed });
-                    }}
-                  />
+                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 }}>
+                    {group.name}
+                  </Text>
+                  <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                    {available > 0 ? `${money(spent)} / ${money(available)}` : money(spent)}
+                  </Text>
                 </Pressable>
                 {isClosed ? null : (
                   <Card>
@@ -276,7 +285,7 @@ export default function BudgetScreen() {
                             </View>
                             <View style={{ alignItems: "flex-end", gap: 2 }}>
                               {paced ? (
-                                <Text style={{ fontSize: 11, fontWeight: "600", color: rowOver ? colors.danger : colors.tertiary, textTransform: "uppercase" }}>
+                                <Text style={{ fontSize: 12, fontWeight: "500", color: rowOver ? colors.danger : colors.tertiary }}>
                                   {rowOver ? "Over" : "Left"}
                                 </Text>
                               ) : null}
@@ -300,8 +309,8 @@ export default function BudgetScreen() {
           })}
 
           {hiddenCount > 0 ? (
-            <Pressable onPress={() => setShowUnused((value) => !value)}>
-              <Text style={{ color: colors.accentInk, fontWeight: "600" }}>
+            <Pressable onPress={() => setShowUnused((value) => !value)} style={{ paddingVertical: 8, alignItems: "center" }}>
+              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>
                 {showUnused ? "Hide other categories" : `Show ${hiddenCount} other ${hiddenCount === 1 ? "category" : "categories"}`}
               </Text>
             </Pressable>
@@ -312,8 +321,8 @@ export default function BudgetScreen() {
       {planOpen ? (
         <Sheet title="Edit budget" onClose={() => setPlanOpen(false)}>
           <Field label="Planned income" value={income} onChangeText={setIncome} keyboardType="decimal-pad" />
-          <Button label="Save income" onPress={() => void saveIncome().then(() => setPlanOpen(false))} />
-          <Button label="Add a category" tone="quiet" onPress={() => void openAdd()} />
+          <Button label="Save income" block onPress={() => void saveIncome().then(() => setPlanOpen(false))} />
+          <Button label="Add a category" tone="quiet" block onPress={() => void openAdd()} />
           {data ? <Note>{`${money(data.leftoverCents)} left to assign`}</Note> : null}
         </Sheet>
       ) : null}
@@ -321,46 +330,6 @@ export default function BudgetScreen() {
       {editing && data ? (
         <Sheet title={catName || "Category"} onClose={() => setEditing(null)}>
           <Field label="Plan" value={planned} onChangeText={setPlanned} keyboardType="decimal-pad" />
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: 4 }}>
-            {[25, 50, 100, 250].map((delta) => (
-              <Pressable
-                key={delta}
-                onPress={() => {
-                  tapSelect();
-                  const current = Number(planned || 0);
-                  setPlanned(String(Math.max(0, current + delta)));
-                }}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: colors.fill,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink }}>+{delta}</Text>
-              </Pressable>
-            ))}
-            {editing.spentCents > 0 ? (
-              <Pressable
-                onPress={() => {
-                  tapSelect();
-                  setPlanned(String(Math.round(editing.spentCents / 100)));
-                }}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: colors.accentSoft,
-                  borderWidth: 1,
-                  borderColor: colors.accent,
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.accentInk }}>Match spent</Text>
-              </Pressable>
-            ) : null}
-          </View>
           <Field label="Name" value={catName} onChangeText={setCatName} />
           <Section title="This month" />
           {txs == null ? <Loading /> : null}
@@ -398,10 +367,8 @@ export default function BudgetScreen() {
               })}
             </Card>
           ) : null}
-          <Button label="Save" onPress={() => void saveCategory()} />
-          <Button
-            label={confirmDelete ? "Delete this category?" : "Delete"}
-            tone={confirmDelete ? "danger" : "quiet"}
+          <Button label="Save" block onPress={() => void saveCategory()} />
+          <Pressable
             onPress={() => {
               if (!confirmDelete) {
                 setConfirmDelete(true);
@@ -409,7 +376,12 @@ export default function BudgetScreen() {
               }
               void removeCategory();
             }}
-          />
+            style={{ alignItems: "center", paddingVertical: 10 }}
+          >
+            <Text style={{ color: confirmDelete ? colors.danger : colors.muted, fontWeight: "500", fontSize: 15 }}>
+              {confirmDelete ? "Delete this category?" : "Delete"}
+            </Text>
+          </Pressable>
         </Sheet>
       ) : null}
 
@@ -424,6 +396,7 @@ export default function BudgetScreen() {
           <Field label="Name" value={adding.name} onChangeText={(name) => setAdding({ ...adding, name })} />
           <Button
             label="Add"
+            block
             onPress={() =>
               void api("/api/categories", {
                 method: "POST",

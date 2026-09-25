@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/api";
 import { Charge, ChargeGroup } from "../src/charge";
@@ -192,7 +192,10 @@ export default function ReviewScreen() {
 
       {/* Review Deck */}
       {rows !== null && unreviewedRows.length > 0 ? (
-        <View style={styles.deckContainer}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.deckContainer, { paddingBottom: 60 }]}
+        >
           <ReviewDeck
             rows={unreviewedRows}
             remaining={unreviewed}
@@ -203,7 +206,7 @@ export default function ReviewScreen() {
             onConfirm={handleConfirm}
             onSkip={handleSkip}
           />
-        </View>
+        </ScrollView>
       ) : null}
 
       <UndoHost />

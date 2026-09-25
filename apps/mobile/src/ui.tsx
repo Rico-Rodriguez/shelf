@@ -81,7 +81,7 @@ export function Screen({
           {refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
           {title ? (
             <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }]}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flexShrink: 1 }}>
                 <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                 {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
               </View>
@@ -114,7 +114,7 @@ export function Screen({
         {refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
         {title ? (
           <View style={styles.header}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flexShrink: 1 }}>
               <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
@@ -879,7 +879,7 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 16, paddingBottom: 36, gap: 24 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 32, marginLeft: -2 },
   back: { color: colors.ink, fontSize: 15, fontWeight: "500", letterSpacing: -0.15 },
   title: { fontSize: 32, fontWeight: "600", letterSpacing: -1.3, color: colors.ink },
@@ -976,10 +976,10 @@ function makeStyles(colors: Palette) {
   mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill },
   track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
   chart: { height: 148, marginHorizontal: -18, marginTop: 8 },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 4 },
-  monthBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  monthChevron: { fontSize: 26, lineHeight: 28, color: colors.ink },
-  monthLabel: { minWidth: 132, textAlign: "center", fontSize: 17, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 2 },
+  monthBtn: { width: 28, height: 32, alignItems: "center", justifyContent: "center" },
+  monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
+  monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
   banner: {
     minHeight: 56,
     paddingHorizontal: 16,
