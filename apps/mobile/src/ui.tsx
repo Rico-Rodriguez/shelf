@@ -45,6 +45,51 @@ export function Back({ label = "Back" }: { label?: string }) {
   );
 }
 
+export function AmbientLiquidGlow({ isDark }: { isDark: boolean }) {
+  return (
+    <View style={[StyleSheet.absoluteFill, { overflow: "hidden" }]} pointerEvents="none">
+      {/* Top-right luminous emerald light pool */}
+      <View
+        style={{
+          position: "absolute",
+          top: -120,
+          right: -60,
+          width: 360,
+          height: 360,
+          borderRadius: 180,
+          backgroundColor: isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(16, 185, 129, 0.08)",
+          transform: [{ scaleX: 1.4 }],
+        }}
+      />
+      {/* Mid-left ambient cyan/blue fluid pool */}
+      <View
+        style={{
+          position: "absolute",
+          top: "28%",
+          left: -120,
+          width: 320,
+          height: 320,
+          borderRadius: 160,
+          backgroundColor: isDark ? "rgba(20, 184, 166, 0.08)" : "rgba(59, 130, 246, 0.06)",
+          transform: [{ scaleY: 1.3 }],
+        }}
+      />
+      {/* Bottom-right subtle violet/amber warmth aura */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 30,
+          right: -80,
+          width: 340,
+          height: 340,
+          borderRadius: 170,
+          backgroundColor: isDark ? "rgba(139, 92, 246, 0.07)" : "rgba(245, 158, 11, 0.05)",
+        }}
+      />
+    </View>
+  );
+}
+
 export function Screen({
   title,
   subtitle,
@@ -85,6 +130,16 @@ export function Screen({
   // Pinned glass header for secondary screens that provide a back/refresh action
   const hasPinnedNav = !framed && Boolean(refresh);
 
+  const topPadding = framed
+    ? insets.top + 60
+    : hasPinnedNav
+      ? insets.top + 52
+      : insets.top + 16;
+
+  const bottomPadding = framed
+    ? Math.max(insets.bottom + 88, 110)
+    : Math.max(insets.bottom + 24, 40);
+
   const pinnedNav = hasPinnedNav ? (
     <View
       style={{
@@ -95,14 +150,14 @@ export function Screen({
         zIndex: 50,
         paddingTop: insets.top,
         backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: palette.line,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.specularBottom || palette.glassBorderSubtle,
         overflow: "hidden",
       }}
     >
       {!reduceTransparency ? (
         <BlurView
-          intensity={isDark ? 85 : 95}
+          intensity={isDark ? 60 : 80}
           tint={palette.blurTint}
           style={StyleSheet.absoluteFill}
         />
@@ -143,14 +198,15 @@ export function Screen({
   ) : null;
 
   if (!scrollable) {
-    const rawBody = (
-      <ScrollLockProvider value={setScrollLocked}>
-        <View style={{ flex: 1 }}>
-          {pinnedNav}
-          <View style={{ flex: 1, paddingTop: hasPinnedNav ? insets.top + 46 : 0 }}>
-            {!hasPinnedNav && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
+    return (
+      <View style={styles.safe}>
+        {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
+        {pinnedNav}
+        <ScrollLockProvider value={setScrollLocked}>
+          <View style={{ flex: 1, paddingTop: topPadding, paddingBottom: bottomPadding }}>
+            {!hasPinnedNav && !framed && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
             {title ? (
-              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }]}>
+              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 }]}>
                 <View style={{ flexShrink: 1 }}>
                   <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                   {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -160,27 +216,22 @@ export function Screen({
             ) : null}
             {children}
           </View>
-        </View>
+        </ScrollLockProvider>
         {footer}
-      </ScrollLockProvider>
-    );
-    if (framed) return <View style={styles.safe}>{rawBody}</View>;
-    return (
-      <SafeAreaView style={styles.safe} edges={hasPinnedNav ? ["left", "right"] : ["top", "left", "right"]}>
-        {rawBody}
-      </SafeAreaView>
+      </View>
     );
   }
 
   const body = (
-    <>
+    <View style={styles.safe}>
+      {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
       {pinnedNav}
       <ScrollLockProvider value={setScrollLocked}>
         <ScrollView
           scrollEnabled={scrollEnabled}
           contentContainerStyle={[
             styles.scroll,
-            hasPinnedNav ? { paddingTop: insets.top + 54, paddingBottom: Math.max(insets.bottom + 64, 100) } : null,
+            { paddingTop: topPadding, paddingBottom: bottomPadding },
           ]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
@@ -189,12 +240,12 @@ export function Screen({
                 refreshing={refreshing}
                 onRefresh={pull}
                 tintColor={colors.ink}
-                progressViewOffset={hasPinnedNav ? insets.top + 46 : 0}
+                progressViewOffset={hasPinnedNav ? insets.top + 46 : framed ? insets.top + 50 : 0}
               />
             ) : undefined
           }
         >
-          {!hasPinnedNav && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
+          {!hasPinnedNav && !framed && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
           {title ? (
             <View style={styles.header}>
               <View style={{ flexShrink: 1 }}>
@@ -208,14 +259,9 @@ export function Screen({
         </ScrollView>
       </ScrollLockProvider>
       {footer}
-    </>
+    </View>
   );
-  if (framed) return <View style={styles.safe}>{body}</View>;
-  return (
-    <SafeAreaView style={styles.safe} edges={hasPinnedNav ? ["left", "right"] : ["top", "left", "right"]}>
-      {body}
-    </SafeAreaView>
-  );
+  return body;
 }
 
 export function Card({

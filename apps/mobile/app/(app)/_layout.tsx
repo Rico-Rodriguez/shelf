@@ -26,15 +26,28 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
   const isDark = palette.scheme === "dark";
 
   return (
-    <View style={{ paddingTop: insets.top, backgroundColor: reduceTransparency ? palette.bg : palette.navBg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line, overflow: "hidden" }}>
+    <View
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        paddingTop: insets.top,
+        backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.specularBottom || palette.glassBorderSubtle,
+        overflow: "hidden",
+      }}
+    >
       {!reduceTransparency ? (
         <BlurView
-          intensity={isDark ? 85 : 95}
+          intensity={isDark ? 60 : 80}
           tint={palette.blurTint}
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
+      <View style={{ minHeight: 50, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
         <View style={{ flex: 1, justifyContent: "center" }}>
           {syncLabel ? (
             <Text
@@ -99,6 +112,7 @@ function ShelfTabBarItem({
   onPress: () => void;
 }) {
   const { palette } = useTheme();
+  const isDark = palette.scheme === "dark";
   const color = focused ? palette.accentInk : palette.tertiary;
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -108,7 +122,7 @@ function ShelfTabBarItem({
       accessibilityState={focused ? { selected: true } : {}}
       accessibilityLabel={route.name === "activity" && reviewCount > 0 ? `Activity, ${reviewCount} to categorize` : spec?.title}
       onPressIn={() => {
-        Animated.spring(scale, { toValue: 0.92, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+        Animated.spring(scale, { toValue: 0.90, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPressOut={() => {
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
@@ -117,10 +131,19 @@ function ShelfTabBarItem({
         if (!focused) tapSelect();
         onPress();
       }}
-      style={{ flex: 1, alignItems: "center", gap: 3, minHeight: 46 }}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 6,
+        paddingHorizontal: 4,
+        borderRadius: 20,
+        borderCurve: "continuous",
+        backgroundColor: focused ? (isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.05)") : "transparent",
+      }}
     >
-      <Animated.View style={{ position: "relative", transform: [{ scale }] }}>
-        <Icon name={spec?.icon ?? "more"} size={24} color={color} filled={focused} />
+      <Animated.View style={{ position: "relative", alignItems: "center", transform: [{ scale }] }}>
+        <Icon name={spec?.icon ?? "more"} size={22} color={color} filled={focused} />
         {route.name === "activity" && reviewCount > 0 ? (
           <View style={[badge, { backgroundColor: palette.danger }]}>
             <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
@@ -128,10 +151,10 @@ function ShelfTabBarItem({
             </Text>
           </View>
         ) : null}
+        <Text style={{ fontSize: 10, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color, marginTop: 2 }}>
+          {spec?.title}
+        </Text>
       </Animated.View>
-      <Text style={{ fontSize: 11, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color }}>
-        {spec?.title}
-      </Text>
     </Pressable>
   );
 }
@@ -152,37 +175,61 @@ function ShelfTabBar({
 
   return (
     <View
+      pointerEvents="box-none"
       style={{
-        flexDirection: "row",
-        backgroundColor: reduceTransparency ? palette.bg : palette.glass,
-        borderTopWidth: 1,
-        borderTopColor: palette.specularTop || palette.glassBorder,
-        paddingTop: 8,
-        paddingBottom: Math.max(insets.bottom, 10),
-        overflow: "hidden",
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingBottom: Math.max(insets.bottom, 12),
+        paddingHorizontal: 16,
       }}
     >
-      {!reduceTransparency ? (
-        <BlurView
-          intensity={isDark ? 85 : 95}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
-      {state.routes.map((route, index) => {
-        const spec = TABS.find((tab) => tab.name === route.name);
-        const focused = state.index === index;
-        return (
-          <ShelfTabBarItem
-            key={route.key}
-            route={route}
-            focused={focused}
-            reviewCount={reviewCount}
-            spec={spec}
-            onPress={() => onPress(route, focused)}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-around",
+          backgroundColor: reduceTransparency ? (isDark ? "#1a1e26" : "#ffffff") : palette.glassProminent,
+          borderRadius: 28,
+          borderCurve: "continuous",
+          borderWidth: 1,
+          borderTopColor: palette.specularTop || "rgba(255, 255, 255, 0.45)",
+          borderBottomColor: palette.specularBottom || "rgba(255, 255, 255, 0.12)",
+          borderLeftColor: palette.specularSides || "rgba(255, 255, 255, 0.18)",
+          borderRightColor: palette.specularSides || "rgba(255, 255, 255, 0.18)",
+          paddingVertical: 5,
+          paddingHorizontal: 6,
+          overflow: "hidden",
+          shadowColor: "#000",
+          shadowOpacity: isDark ? 0.45 : 0.12,
+          shadowRadius: 20,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 10,
+        }}
+      >
+        {!reduceTransparency ? (
+          <BlurView
+            intensity={isDark ? 60 : 75}
+            tint={palette.blurTint}
+            style={StyleSheet.absoluteFill}
           />
-        );
-      })}
+        ) : null}
+        {state.routes.map((route, index) => {
+          const spec = TABS.find((tab) => tab.name === route.name);
+          const focused = state.index === index;
+          return (
+            <ShelfTabBarItem
+              key={route.key}
+              route={route}
+              focused={focused}
+              reviewCount={reviewCount}
+              spec={spec}
+              onPress={() => onPress(route, focused)}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -287,6 +334,16 @@ export default function AppTabs() {
       )}
       screenOptions={{
         header: () => <MobileBar unread={unread} syncLabel={syncLabel} />,
+        headerTransparent: true,
+        tabBarStyle: {
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          elevation: 0,
+          borderTopWidth: 0,
+          backgroundColor: "transparent",
+        },
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Home" }} />

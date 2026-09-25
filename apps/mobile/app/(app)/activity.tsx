@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
@@ -55,6 +56,7 @@ function txPath(
 }
 
 export default function ActivityScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     q?: string;
     categoryId?: string;
@@ -363,7 +365,7 @@ export default function ActivityScreen() {
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(insets.bottom + 88, 110) }}
         >
           {unreviewedRows.length > 0 ? (
             <ReviewDeck
@@ -513,7 +515,7 @@ export default function ActivityScreen() {
         maxToRenderPerBatch={14}
         windowSize={7}
         initialNumToRender={14}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 88, 110) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} />}
         renderItem={({ item }) => {
           if (item.type === "header") {
