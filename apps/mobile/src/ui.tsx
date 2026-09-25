@@ -1,14 +1,9 @@
 import { router } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Reanimated, {
-  Extrapolation,
-  interpolate,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -874,135 +869,116 @@ export function Sheet({
 }) {
   const styles = useStyles();
   const screenHeight = Dimensions.get("window").height;
-  const translateY = useSharedValue(screenHeight);
-  const isClosing = useSharedValue(false);
-  const [modalVisible, setModalVisible] = useState(true);
+  const translateY = useRef(new Animated.Value(screenHeight)).current;
   const [closing, setClosing] = useState(false);
-  const isClosingJs = useRef(false);
+  const isClosing = useRef(false);
+  const hasClosedRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const hasClosedRef = useRef(false);
-  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleDismissComplete = useCallback(() => {
+  const handleClose = useCallback(() => {
     if (hasClosedRef.current) return;
     hasClosedRef.current = true;
     onCloseRef.current();
   }, []);
 
   useEffect(() => {
-    translateY.value = withSpring(0, {
+    Animated.spring(translateY, {
+      toValue: 0,
       damping: 28,
       stiffness: 340,
       mass: 0.8,
-    });
+      useNativeDriver: true,
+    }).start();
+
     return () => {
-      if (dismissTimer.current) clearTimeout(dismissTimer.current);
-      if (safetyTimer.current) clearTimeout(safetyTimer.current);
+      translateY.stopAnimation();
     };
   }, [translateY]);
 
   const dismiss = useCallback(() => {
-    if (isClosingJs.current) return;
-    isClosingJs.current = true;
-    isClosing.value = true;
+    if (isClosing.current) return;
+    isClosing.current = true;
     setClosing(true);
     Keyboard.dismiss();
     tapPress();
 
-    translateY.value = withTiming(screenHeight, {
+    const fallbackTimer = setTimeout(handleClose, 240);
+
+    Animated.timing(translateY, {
+      toValue: screenHeight,
       duration: 180,
       easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      clearTimeout(fallbackTimer);
+      handleClose();
     });
+  }, [handleClose, screenHeight, translateY]);
 
-    if (dismissTimer.current) clearTimeout(dismissTimer.current);
-    if (safetyTimer.current) clearTimeout(safetyTimer.current);
-
-    dismissTimer.current = setTimeout(() => {
-      setModalVisible(false);
-      // Wait for native modal to finish dismissing
-      // On iOS, onDismiss callback fires when UIKit completes dismissal
-      // As a safety net (or for Android where onDismiss doesn't fire), schedule handleDismissComplete
-      safetyTimer.current = setTimeout(() => {
-        handleDismissComplete();
-      }, Platform.OS === "ios" ? 400 : 30);
-    }, 190);
-  }, [handleDismissComplete, isClosing, screenHeight, translateY]);
-
-  const panGesture = useMemo(
+  const panResponder = useMemo(
     () =>
-      Gesture.Pan()
-        .activeOffsetY([-6, 6])
-        .onUpdate((event) => {
-          'worklet';
-          if (isClosing.value) return;
-          if (event.translationY > 0) {
-            translateY.value = event.translationY;
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 4,
+        onPanResponderGrant: () => {
+          translateY.stopAnimation();
+        },
+        onPanResponderMove: (_, gestureState) => {
+          if (isClosing.current) return;
+          if (gestureState.dy > 0) {
+            translateY.setValue(gestureState.dy);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (isClosing.current) return;
+          if (gestureState.dy > 70 || gestureState.vy > 0.5) {
+            dismiss();
           } else {
-            translateY.value = -Math.pow(Math.abs(event.translationY), 0.72);
+            Animated.spring(translateY, {
+              toValue: 0,
+              damping: 28,
+              stiffness: 420,
+              useNativeDriver: true,
+            }).start();
           }
-        })
-        .onEnd((event) => {
-          'worklet';
-          if (isClosing.value) return;
-          if (event.translationY > 80 || event.velocityY > 450) {
-            isClosing.value = true;
-            runOnJS(dismiss)();
-          } else {
-            translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
-          }
-        })
-        .onFinalize((_event, success) => {
-          'worklet';
-          if (isClosing.value) return;
-          if (!success) {
-            translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
-          }
-        }),
-    [dismiss, isClosing, translateY],
+        },
+      }),
+    [dismiss, translateY],
   );
 
-  const sheetAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  const backdropAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      translateY.value,
-      [0, 240],
-      [1, 0],
-      Extrapolation.CLAMP,
-    );
-    return { opacity };
+  const backdropOpacity = translateY.interpolate({
+    inputRange: [0, 240],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
   });
 
   return (
     <Modal
-      visible={modalVisible}
+      visible
       animationType="none"
       transparent
       onRequestClose={dismiss}
-      onDismiss={handleDismissComplete}
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
-        <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
+        <Animated.View style={[styles.sheetBackdrop, { opacity: backdropOpacity }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
-        </Reanimated.View>
-        <Reanimated.View
+        </Animated.View>
+        <Animated.View
           style={[
             styles.sheet,
             minHeight ? { minHeight } : null,
             height ? { height } : null,
-            sheetAnimatedStyle,
+            { transform: [{ translateY }] },
           ]}
         >
           <View style={{ paddingTop: 8, paddingBottom: 6 }}>
-            <GestureDetector gesture={panGesture}>
-              <View style={{ paddingVertical: 10, paddingHorizontal: 40, alignSelf: "center" }}>
-                <View style={styles.handle} />
-              </View>
-            </GestureDetector>
+            <View
+              {...panResponder.panHandlers}
+              style={{ paddingVertical: 10, paddingHorizontal: 40, alignSelf: "center" }}
+            >
+              <View style={styles.handle} />
+            </View>
             <View style={styles.sheetHead}>
               <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
                 <Text style={styles.sheetTitle} numberOfLines={1}>
@@ -1035,7 +1011,7 @@ export function Sheet({
           >
             {children}
           </ScrollView>
-        </Reanimated.View>
+        </Animated.View>
       </View>
     </Modal>
   );
