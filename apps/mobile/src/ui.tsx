@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Dimensions, Easing, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
   Extrapolation,
@@ -862,8 +862,8 @@ export function Sheet({
   subtitle,
   onClose,
   children,
-  height,
-  minHeight,
+  height = "80%",
+  minHeight = 320,
 }: {
   title: string;
   subtitle?: string;
@@ -875,11 +875,21 @@ export function Sheet({
   const styles = useStyles();
   const screenHeight = Dimensions.get("window").height;
   const translateY = useSharedValue(screenHeight);
+  const isClosing = useSharedValue(false);
+  const [modalVisible, setModalVisible] = useState(true);
   const [closing, setClosing] = useState(false);
-  const isClosing = useRef(false);
+  const isClosingJs = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const hasClosedRef = useRef(false);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDismissComplete = useCallback(() => {
+    if (hasClosedRef.current) return;
+    hasClosedRef.current = true;
+    onCloseRef.current();
+  }, []);
 
   useEffect(() => {
     translateY.value = withSpring(0, {
@@ -889,13 +899,16 @@ export function Sheet({
     });
     return () => {
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
+      if (safetyTimer.current) clearTimeout(safetyTimer.current);
     };
   }, [translateY]);
 
   const dismiss = useCallback(() => {
-    if (isClosing.current) return;
-    isClosing.current = true;
+    if (isClosingJs.current) return;
+    isClosingJs.current = true;
+    isClosing.value = true;
     setClosing(true);
+    Keyboard.dismiss();
     tapPress();
 
     translateY.value = withTiming(screenHeight, {
@@ -904,29 +917,51 @@ export function Sheet({
     });
 
     if (dismissTimer.current) clearTimeout(dismissTimer.current);
-    dismissTimer.current = setTimeout(() => {
-      onCloseRef.current();
-    }, 180);
-  }, [screenHeight, translateY]);
+    if (safetyTimer.current) clearTimeout(safetyTimer.current);
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetY([-6, 6])
-    .onUpdate((event) => {
-      if (isClosing.current) return;
-      if (event.translationY > 0) {
-        translateY.value = event.translationY;
-      } else {
-        translateY.value = -Math.pow(Math.abs(event.translationY), 0.72);
-      }
-    })
-    .onFinalize((event) => {
-      if (isClosing.current) return;
-      if (event.translationY > 80 || event.velocityY > 450) {
-        runOnJS(dismiss)();
-      } else {
-        translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
-      }
-    });
+    dismissTimer.current = setTimeout(() => {
+      setModalVisible(false);
+      // Wait for native modal to finish dismissing
+      // On iOS, onDismiss callback fires when UIKit completes dismissal
+      // As a safety net (or for Android where onDismiss doesn't fire), schedule handleDismissComplete
+      safetyTimer.current = setTimeout(() => {
+        handleDismissComplete();
+      }, Platform.OS === "ios" ? 400 : 30);
+    }, 190);
+  }, [handleDismissComplete, isClosing, screenHeight, translateY]);
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY([-6, 6])
+        .onUpdate((event) => {
+          'worklet';
+          if (isClosing.value) return;
+          if (event.translationY > 0) {
+            translateY.value = event.translationY;
+          } else {
+            translateY.value = -Math.pow(Math.abs(event.translationY), 0.72);
+          }
+        })
+        .onEnd((event) => {
+          'worklet';
+          if (isClosing.value) return;
+          if (event.translationY > 80 || event.velocityY > 450) {
+            isClosing.value = true;
+            runOnJS(dismiss)();
+          } else {
+            translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
+          }
+        })
+        .onFinalize((_event, success) => {
+          'worklet';
+          if (isClosing.value) return;
+          if (!success) {
+            translateY.value = withSpring(0, { damping: 28, stiffness: 480 });
+          }
+        }),
+    [dismiss, isClosing, translateY],
+  );
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -944,10 +979,11 @@ export function Sheet({
 
   return (
     <Modal
-      visible
+      visible={modalVisible}
       animationType="none"
       transparent
       onRequestClose={dismiss}
+      onDismiss={handleDismissComplete}
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Reanimated.View style={[styles.sheetBackdrop, backdropAnimatedStyle]}>
@@ -961,29 +997,42 @@ export function Sheet({
             sheetAnimatedStyle,
           ]}
         >
-          <GestureDetector gesture={panGesture}>
-            <View style={{ paddingTop: 8, paddingBottom: 6 }}>
-              <View style={{ paddingVertical: 4 }}>
+          <View style={{ paddingTop: 8, paddingBottom: 6 }}>
+            <GestureDetector gesture={panGesture}>
+              <View style={{ paddingVertical: 10, paddingHorizontal: 40, alignSelf: "center" }}>
                 <View style={styles.handle} />
               </View>
-              <View style={styles.sheetHead}>
-                <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
-                  <Text style={styles.sheetTitle} numberOfLines={1}>
-                    {title}
+            </GestureDetector>
+            <View style={styles.sheetHead}>
+              <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
+                <Text style={styles.sheetTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                {subtitle ? (
+                  <Text style={styles.sheetSubtitle} numberOfLines={1}>
+                    {subtitle}
                   </Text>
-                  {subtitle ? (
-                    <Text style={styles.sheetSubtitle} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                  ) : null}
-                </View>
-                <Pressable onPress={dismiss} hitSlop={16} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
-                  <Text style={styles.sectionAction}>Done</Text>
-                </Pressable>
+                ) : null}
               </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={dismiss}
+                hitSlop={16}
+                style={({ pressed }) => [
+                  { paddingHorizontal: 8, paddingVertical: 4 },
+                  pressed ? { opacity: 0.6 } : null,
+                ]}
+              >
+                <Text style={styles.sectionAction}>Done</Text>
+              </Pressable>
             </View>
-          </GestureDetector>
-          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}>
+          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36, gap: 14 }}
+          >
             {children}
           </ScrollView>
         </Reanimated.View>

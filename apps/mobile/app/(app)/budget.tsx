@@ -615,15 +615,43 @@ export default function BudgetScreen() {
 
       {adding ? (
         <Sheet title="New category" onClose={() => setAdding(null)}>
-          <Section title="Group" />
-          {groupsList.map((group) => (
-            <Pressable key={group.id} onPress={() => setAdding({ ...adding, groupId: group.id })}>
-              <Text style={{ fontSize: 16, paddingVertical: 8, color: adding.groupId === group.id ? colors.accentInk : colors.ink }}>{group.name}</Text>
-            </Pressable>
-          ))}
-          <Field label="Name" value={adding.name} onChangeText={(name) => setAdding({ ...adding, name })} />
+          <Section title="Select group" />
+          <Card tone="inset">
+            {groupsList.map((group, index) => (
+              <Pressable
+                key={group.id}
+                onPress={() => setAdding({ ...adding, groupId: group.id })}
+                style={({ pressed }) => [
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: colors.line,
+                  },
+                  pressed ? { backgroundColor: colors.fill } : null,
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: adding.groupId === group.id ? "600" : "400",
+                    color: adding.groupId === group.id ? colors.accentInk : colors.ink,
+                  }}
+                >
+                  {group.name}
+                </Text>
+                {adding.groupId === group.id ? (
+                  <Icon name="check" size={16} color={colors.accentInk} />
+                ) : null}
+              </Pressable>
+            ))}
+          </Card>
+          <Field label="Category name" value={adding.name} onChangeText={(name) => setAdding({ ...adding, name })} placeholder="e.g. Groceries, Gym" />
           <Button
-            label="Add"
+            label="Add category"
             block
             onPress={() =>
               void api("/api/categories", {
