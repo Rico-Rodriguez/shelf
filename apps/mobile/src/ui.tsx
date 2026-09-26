@@ -47,43 +47,31 @@ export function Back({ label = "Back" }: { label?: string }) {
 
 export function AmbientLiquidGlow({ isDark }: { isDark: boolean }) {
   return (
-    <View style={[StyleSheet.absoluteFill, { overflow: "hidden" }]} pointerEvents="none">
-      {/* Top-right luminous emerald light pool */}
+    <View style={[StyleSheet.absoluteFill, { overflow: "hidden", opacity: 0.45 }]} pointerEvents="none">
+      {/* Top luminous ambient light pool - whisper-quiet and diffused */}
       <View
         style={{
           position: "absolute",
-          top: -120,
-          right: -60,
-          width: 360,
-          height: 360,
-          borderRadius: 180,
-          backgroundColor: isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(16, 185, 129, 0.08)",
-          transform: [{ scaleX: 1.4 }],
-        }}
-      />
-      {/* Mid-left ambient cyan/blue fluid pool */}
-      <View
-        style={{
-          position: "absolute",
-          top: "28%",
-          left: -120,
-          width: 320,
-          height: 320,
-          borderRadius: 160,
-          backgroundColor: isDark ? "rgba(20, 184, 166, 0.08)" : "rgba(59, 130, 246, 0.06)",
-          transform: [{ scaleY: 1.3 }],
-        }}
-      />
-      {/* Bottom-right subtle violet/amber warmth aura */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 30,
+          top: -160,
           right: -80,
-          width: 340,
-          height: 340,
-          borderRadius: 170,
-          backgroundColor: isDark ? "rgba(139, 92, 246, 0.07)" : "rgba(245, 158, 11, 0.05)",
+          width: 420,
+          height: 420,
+          borderRadius: 210,
+          backgroundColor: isDark ? "rgba(16, 185, 129, 0.04)" : "rgba(16, 185, 129, 0.025)",
+          transform: [{ scaleX: 1.5 }],
+        }}
+      />
+      {/* Subtle bottom-left soft ambient pool */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: -60,
+          left: -100,
+          width: 380,
+          height: 380,
+          borderRadius: 190,
+          backgroundColor: isDark ? "rgba(255, 255, 255, 0.015)" : "rgba(20, 24, 31, 0.012)",
+          transform: [{ scaleY: 1.2 }],
         }}
       />
     </View>
@@ -131,7 +119,7 @@ export function Screen({
   const hasPinnedNav = !framed && Boolean(refresh);
 
   const topPadding = framed
-    ? insets.top + 60
+    ? (title ? insets.top + 16 : insets.top + 60)
     : hasPinnedNav
       ? insets.top + 52
       : insets.top + 16;
@@ -203,10 +191,10 @@ export function Screen({
         {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
         {pinnedNav}
         <ScrollLockProvider value={setScrollLocked}>
-          <View style={{ flex: 1, paddingTop: topPadding, paddingBottom: bottomPadding }}>
+          <View style={{ flex: 1, paddingTop: topPadding }}>
             {!hasPinnedNav && !framed && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
             {title ? (
-              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 }]}>
+              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }]}>
                 <View style={{ flexShrink: 1 }}>
                   <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                   {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}

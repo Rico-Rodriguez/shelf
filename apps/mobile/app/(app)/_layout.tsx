@@ -333,8 +333,7 @@ export default function AppTabs() {
         />
       )}
       screenOptions={{
-        header: () => <MobileBar unread={unread} syncLabel={syncLabel} />,
-        headerTransparent: true,
+        headerShown: false,
         tabBarStyle: {
           position: "absolute",
           bottom: 0,
@@ -346,7 +345,15 @@ export default function AppTabs() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Home",
+          headerShown: true,
+          headerTransparent: true,
+          header: () => <MobileBar unread={unread} syncLabel={syncLabel} />,
+        }}
+      />
       <Tabs.Screen name="activity" options={{ title: "Activity" }} />
       <Tabs.Screen name="budget" options={{ title: "Budget" }} />
       <Tabs.Screen name="accounts" options={{ title: "Accounts" }} />
