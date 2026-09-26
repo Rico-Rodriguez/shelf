@@ -15,8 +15,9 @@ import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
 import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
-import { api, peek } from "./api";
+import { api, load, peek } from "./api";
 import { celebrate } from "./toast";
+import Svg, { Circle } from "react-native-svg";
 
 export { GroupedBars, SpendChart };
 
@@ -290,10 +291,82 @@ export function GlassCard({
   style?: StyleProp<ViewStyle>;
   tone?: "default" | "prominent" | "inset";
 }) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
+  const isProminent = tone === "prominent";
+
   return (
-    <Card tone={tone === "prominent" ? "prominent" : tone === "inset" ? "inset" : "default"} style={style}>
+    <View
+      style={[
+        styles.glassCard,
+        isProminent ? styles.glassProminent : null,
+        style,
+      ]}
+    >
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? (isProminent ? 75 : 60) : (isProminent ? 85 : 75)}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       {children}
-    </Card>
+    </View>
+  );
+}
+
+export function ProgressRing({
+  size = 56,
+  strokeWidth = 5,
+  progress = 0,
+  color,
+  trackColor,
+  children,
+  style,
+}: {
+  size?: number;
+  strokeWidth?: number;
+  progress?: number;
+  color?: string;
+  trackColor?: string;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { palette } = useTheme();
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clampedProgress = Math.max(0, Math.min(progress, 1));
+  const strokeDashoffset = circumference - clampedProgress * circumference;
+  const strokeColor = color || (progress > 1 ? palette.danger : palette.accent);
+  const bgTrack = trackColor || (palette.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)");
+
+  return (
+    <View style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]}>
+      <Svg width={size} height={size} style={{ position: "absolute", transform: [{ rotate: "-90deg" }] }}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={bgTrack}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={strokeColor}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </Svg>
+      {children}
+    </View>
   );
 }
 
@@ -1303,23 +1376,32 @@ export function SearchField({
   );
 }
 
-export function Sheet({
+export function SheetContainer({
+  visible = true,
+  onClose,
   title,
   subtitle,
-  onClose,
+  rightAction,
   children,
-  height = "80%",
   minHeight = 320,
+  height = "80%",
+  scrollable = true,
 }: {
-  title: string;
-  subtitle?: string;
+  visible?: boolean;
   onClose: () => void;
+  title?: string;
+  subtitle?: string;
+  rightAction?: ReactNode;
   children: ReactNode;
-  height?: number | `${number}%`;
   minHeight?: number | `${number}%`;
+  height?: number | `${number}%`;
+  scrollable?: boolean;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
   const screenHeight = Dimensions.get("window").height;
   const translateY = useRef(new Animated.Value(screenHeight)).current;
   const [closing, setClosing] = useState(false);
@@ -1335,18 +1417,20 @@ export function Sheet({
   }, []);
 
   useEffect(() => {
-    Animated.spring(translateY, {
-      toValue: 0,
-      damping: 28,
-      stiffness: 340,
-      mass: 0.8,
-      useNativeDriver: true,
-    }).start();
-
-    return () => {
-      translateY.stopAnimation();
-    };
-  }, [translateY]);
+    if (visible) {
+      isClosing.current = false;
+      hasClosedRef.current = false;
+      setClosing(false);
+      translateY.setValue(screenHeight);
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 28,
+        stiffness: 340,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, screenHeight, translateY]);
 
   const dismiss = useCallback(() => {
     if (isClosing.current) return;
@@ -1399,6 +1483,8 @@ export function Sheet({
     [dismiss, translateY],
   );
 
+  if (!visible) return null;
+
   const backdropOpacity = translateY.interpolate({
     inputRange: [0, 240],
     outputRange: [1, 0],
@@ -1414,11 +1500,13 @@ export function Sheet({
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Animated.View style={[styles.sheetBackdrop, { opacity: backdropOpacity }]}>
-          <BlurView
-            intensity={colors.scheme === "dark" ? 30 : 20}
-            tint={colors.scheme === "dark" ? "dark" : "light"}
-            style={StyleSheet.absoluteFill}
-          />
+          {!reduceTransparency ? (
+            <BlurView
+              intensity={isDark ? 30 : 20}
+              tint={isDark ? "dark" : "light"}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
         </Animated.View>
         <Animated.View
@@ -1429,11 +1517,13 @@ export function Sheet({
             { transform: [{ translateY }] },
           ]}
         >
-          <BlurView
-            intensity={colors.scheme === "dark" ? 75 : 85}
-            tint={colors.blurTint}
-            style={StyleSheet.absoluteFill}
-          />
+          {!reduceTransparency ? (
+            <BlurView
+              intensity={isDark ? 75 : 85}
+              tint={palette.blurTint}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
           <View style={{ paddingTop: 8, paddingBottom: 6 }}>
             <View
               {...panResponder.panHandlers}
@@ -1441,44 +1531,335 @@ export function Sheet({
             >
               <View style={styles.handle} />
             </View>
-            <View style={styles.sheetHead}>
-              <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {title}
-                </Text>
-                {subtitle ? (
-                  <Text style={styles.sheetSubtitle} numberOfLines={1}>
-                    {subtitle}
+            {title ? (
+              <View style={styles.sheetHead}>
+                <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
+                  <Text style={styles.sheetTitle} numberOfLines={1}>
+                    {title}
                   </Text>
-                ) : null}
+                  {subtitle ? (
+                    <Text style={styles.sheetSubtitle} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                {rightAction ? (
+                  rightAction
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      tapPress();
+                      dismiss();
+                    }}
+                    hitSlop={16}
+                    style={({ pressed }) => [
+                      styles.sheetDoneBtn,
+                      pressed ? { opacity: 0.6 } : null,
+                    ]}
+                  >
+                    <Text style={styles.sheetDoneText}>Done</Text>
+                  </Pressable>
+                )}
               </View>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  tapPress();
-                  dismiss();
-                }}
-                hitSlop={16}
-                style={({ pressed }) => [
-                  styles.sheetDoneBtn,
-                  pressed ? { opacity: 0.6 } : null,
-                ]}
-              >
-                <Text style={styles.sheetDoneText}>Done</Text>
-              </Pressable>
-            </View>
+            ) : null}
           </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 24, 40), gap: 14 }}
-          >
-            {children}
-          </ScrollView>
+          {scrollable ? (
+            <ScrollView
+              style={{ flex: 1 }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 24, 40), gap: 14 }}
+            >
+              {children}
+            </ScrollView>
+          ) : (
+            <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom + 16, 24) }}>
+              {children}
+            </View>
+          )}
         </Animated.View>
       </View>
     </Modal>
+  );
+}
+
+export function Sheet({
+  title,
+  subtitle,
+  onClose,
+  children,
+  height = "80%",
+  minHeight = 320,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: ReactNode;
+  height?: number | `${number}%`;
+  minHeight?: number | `${number}%`;
+}) {
+  return (
+    <SheetContainer
+      visible
+      title={title}
+      subtitle={subtitle}
+      onClose={onClose}
+      height={height}
+      minHeight={minHeight}
+    >
+      {children}
+    </SheetContainer>
+  );
+}
+
+function NumberKey({
+  label,
+  icon,
+  onPress,
+  isSpecial,
+}: {
+  label?: string;
+  icon?: string;
+  onPress: () => void;
+  isSpecial?: boolean;
+}) {
+  const { palette } = useTheme();
+  const isDark = palette.scheme === "dark";
+  const scale = useRef(new Animated.Value(1)).current;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label || (icon === "back" ? "Backspace" : "Key")}
+      onPressIn={() => {
+        tapSelect();
+        Animated.spring(scale, { toValue: 0.92, useNativeDriver: true, stiffness: 600, damping: 25 }).start();
+      }}
+      onPressOut={() => {
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 25 }).start();
+      }}
+      onPress={onPress}
+      style={{ flex: 1, height: 48 }}
+    >
+      <Animated.View
+        style={[
+          {
+            flex: 1,
+            borderRadius: 14,
+            borderCurve: "continuous",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: isDark
+              ? isSpecial
+                ? "rgba(255, 255, 255, 0.07)"
+                : "rgba(255, 255, 255, 0.12)"
+              : isSpecial
+                ? "rgba(0, 0, 0, 0.04)"
+                : "rgba(255, 255, 255, 0.95)",
+            borderWidth: 1,
+            borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 1.5 },
+            shadowOpacity: isDark ? 0.22 : 0.04,
+            shadowRadius: 3,
+            elevation: 1,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        {icon === "back" ? (
+          <Icon name="chevron-left" size={18} color={palette.ink} />
+        ) : (
+          <Text
+            style={{
+              fontSize: isSpecial ? 15 : 22,
+              fontWeight: isSpecial ? "600" : "500",
+              color: isSpecial ? palette.muted : palette.ink,
+              fontVariant: ["tabular-nums"],
+            }}
+          >
+            {label}
+          </Text>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+export function NumberPad({
+  onKey,
+  onClear,
+  onBackspace,
+  onDecimal,
+  hasDecimal = false,
+  style,
+}: {
+  onKey: (digit: string) => void;
+  onClear?: () => void;
+  onBackspace: () => void;
+  onDecimal?: () => void;
+  hasDecimal?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[{ gap: 8 }, style]}>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <NumberKey label="1" onPress={() => onKey("1")} />
+        <NumberKey label="2" onPress={() => onKey("2")} />
+        <NumberKey label="3" onPress={() => onKey("3")} />
+      </View>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <NumberKey label="4" onPress={() => onKey("4")} />
+        <NumberKey label="5" onPress={() => onKey("5")} />
+        <NumberKey label="6" onPress={() => onKey("6")} />
+      </View>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <NumberKey label="7" onPress={() => onKey("7")} />
+        <NumberKey label="8" onPress={() => onKey("8")} />
+        <NumberKey label="9" onPress={() => onKey("9")} />
+      </View>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {hasDecimal ? (
+          <NumberKey label="." onPress={() => (onDecimal ? onDecimal() : onKey("."))} isSpecial />
+        ) : (
+          <NumberKey label="C" onPress={() => onClear?.()} isSpecial />
+        )}
+        <NumberKey label="0" onPress={() => onKey("0")} />
+        <NumberKey icon="back" onPress={onBackspace} isSpecial />
+      </View>
+    </View>
+  );
+}
+
+export function EnvelopesGlance({
+  onSelectCategory,
+  onViewAll,
+}: {
+  onSelectCategory?: (categoryId: string) => void;
+  onViewAll?: () => void;
+}) {
+  const { palette } = useTheme();
+  const now = new Date();
+  const budgetPath = `/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`;
+  const [data, setData] = useState<{ rows: { plannedCents: number; spentCents: number; availableCents?: number; remainingCents: number; category: { id: string; name: string; color?: string | null }; group?: { color?: string | null } | null }[] } | null>(() => peek<any>(budgetPath) ?? null);
+
+  useEffect(() => {
+    if (!data) {
+      load<any>(budgetPath)
+        .then((res) => setData(res))
+        .catch(() => undefined);
+    }
+  }, [budgetPath, data]);
+
+  const activeEnvelopes = useMemo(() => {
+    if (!data?.rows) return [];
+    return data.rows
+      .filter((r) => r.plannedCents > 0)
+      .slice(0, 6)
+      .map((r) => {
+        const spent = r.spentCents;
+        const planned = r.availableCents || r.plannedCents;
+        const progress = planned > 0 ? spent / planned : 0;
+        const color = shelfColor(r.group?.color || r.category?.color || "#1B7A62");
+        const remaining = planned - spent;
+        return {
+          id: r.category.id,
+          name: r.category.name,
+          color,
+          spent,
+          planned,
+          progress,
+          remaining,
+        };
+      });
+  }, [data]);
+
+  if (activeEnvelopes.length === 0) return null;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Section
+        title="Category Envelopes"
+        action="View plan"
+        onAction={onViewAll}
+      />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 10, paddingVertical: 2 }}
+      >
+        {activeEnvelopes.map((env) => {
+          const isOver = env.remaining < 0;
+          return (
+            <Pressable
+              key={env.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${env.name}, ${money(Math.abs(env.remaining))} ${isOver ? "over" : "left"}`}
+              onPress={() => {
+                tapPress();
+                onSelectCategory?.(env.id);
+              }}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: palette.card,
+                  borderRadius: 20,
+                  borderCurve: "continuous",
+                  borderWidth: 1,
+                  borderColor: palette.line,
+                  padding: 14,
+                  width: 145,
+                  gap: 10,
+                  shadowColor: "#000",
+                  shadowOpacity: palette.scheme === "dark" ? 0.2 : 0.03,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 3 },
+                  elevation: 2,
+                },
+                pressed ? { opacity: 0.85, transform: [{ scale: 0.97 }] } : null,
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <ProgressRing
+                  size={36}
+                  strokeWidth={3.5}
+                  progress={env.progress}
+                  color={isOver ? palette.danger : env.color}
+                >
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: env.color }} />
+                </ProgressRing>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "600",
+                    color: isOver ? palette.danger : palette.muted,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {Math.round(env.progress * 100)}%
+                </Text>
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: palette.ink }}>
+                  {env.name}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: "500",
+                    color: isOver ? palette.danger : palette.muted,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {isOver ? `-${money(Math.abs(env.remaining))}` : `${money(env.remaining)} left`}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1528,21 +1909,41 @@ export function PacingCard({
 
   const body = (
     <View style={styles.pacingCard}>
-      {/* Top Header: Eyebrow + Pulsing Status Pill */}
+      {/* Top Header: Eyebrow + Pulsing Status Pill + ProgressRing */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Text style={styles.pacingEyebrow}>SAFE DAILY SPEND</Text>
-        <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
-          <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+        <View style={{ gap: 2 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={styles.pacingEyebrow}>SAFE DAILY SPEND</Text>
+            <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
+              <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+            <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
+              {money(Math.max(0, dailyBudgetCents))}
+            </Text>
+            <Text style={styles.pacingFigureUnit}>/ day</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Main Figure: Safe Daily Allowance */}
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-        <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
-          {money(Math.max(0, dailyBudgetCents))}
-        </Text>
-        <Text style={styles.pacingFigureUnit}>/ day</Text>
+        {totalPlannedCents > 0 ? (
+          <ProgressRing
+            size={56}
+            strokeWidth={5}
+            progress={spendRatio}
+            color={statusColor}
+          >
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: palette.ink, fontVariant: ["tabular-nums"] }}>
+                {Math.round(spendRatio * 100)}%
+              </Text>
+              <Text style={{ fontSize: 9, fontWeight: "600", color: palette.tertiary, textTransform: "uppercase" }}>
+                spent
+              </Text>
+            </View>
+          </ProgressRing>
+        ) : null}
       </View>
 
       {/* Context Sentence */}
@@ -1667,25 +2068,6 @@ export function QuickLogModal({
         .catch(() => undefined);
     }
   }, [visible]);
-
-  function handleKey(key: string) {
-    tapSelect();
-    if (key === "clear") {
-      setCents(0);
-      return;
-    }
-    if (key === "back") {
-      setCents((c) => Math.floor(c / 10));
-      return;
-    }
-    const digit = parseInt(key, 10);
-    if (!isNaN(digit)) {
-      setCents((c) => {
-        if (c > 9999999) return c;
-        return c * 10 + digit;
-      });
-    }
-  }
 
   async function handleSave() {
     if (cents <= 0) return;
@@ -1892,54 +2274,46 @@ export function QuickLogModal({
             </Text>
           ) : null}
 
-          <View style={{ paddingHorizontal: 20, gap: 8 }}>
-            {[
-              ["1", "2", "3"],
-              ["4", "5", "6"],
-              ["7", "8", "9"],
-              ["clear", "0", "back"],
-            ].map((row, rIdx) => (
-              <View key={rIdx} style={{ flexDirection: "row", gap: 8 }}>
-                {row.map((k) => (
-                  <Pressable
-                    key={k}
-                    onPress={() => handleKey(k)}
-                    style={({ pressed }) => [
-                      {
-                        flex: 1,
-                        height: 48,
-                        borderRadius: 14,
-                        borderCurve: "continuous",
-                        backgroundColor: isDark
-                          ? (k === "clear" || k === "back" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.12)")
-                          : (k === "clear" || k === "back" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.92)"),
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderWidth: 1,
-                        borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: isDark ? 0.2 : 0.04,
-                        shadowRadius: 3,
-                        elevation: 1,
-                      },
-                      pressed ? { transform: [{ scale: 0.94 }], opacity: 0.75 } : null,
-                    ]}
-                  >
-                    {k === "back" ? (
-                      <Icon name="chevron-left" size={18} color={palette.ink} />
-                    ) : k === "clear" ? (
-                      <Text style={{ fontSize: 15, fontWeight: "600", color: palette.muted }}>C</Text>
-                    ) : (
-                      <Text style={{ fontSize: 22, fontWeight: "600", color: palette.ink, fontVariant: ["tabular-nums"] }}>
-                        {k}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
+          {/* 1-Tap Quick Amount Presets */}
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, paddingHorizontal: 20, marginBottom: 10 }}>
+            {[500, 1000, 2000, 5000].map((preset) => (
+              <Pressable
+                key={preset}
+                onPress={() => {
+                  tapSelect();
+                  setCents((c) => Math.min(9999999, c + preset));
+                }}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 13,
+                    paddingVertical: 6,
+                    borderRadius: 99,
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
+                    borderWidth: 1,
+                    borderColor: palette.glassBorderSubtle,
+                  },
+                  pressed ? { opacity: 0.7, transform: [{ scale: 0.96 }] } : null,
+                ]}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: palette.ink, fontVariant: ["tabular-nums"] }}>
+                  +{money(preset)}
+                </Text>
+              </Pressable>
             ))}
           </View>
+
+          {/* Dedicated Tactile NumberPad */}
+          <NumberPad
+            style={{ paddingHorizontal: 20 }}
+            onKey={(digit) => {
+              setCents((c) => {
+                if (c > 9999999) return c;
+                return c * 10 + parseInt(digit, 10);
+              });
+            }}
+            onClear={() => setCents(0)}
+            onBackspace={() => setCents((c) => Math.floor(c / 10))}
+          />
 
           <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
             <Pressable

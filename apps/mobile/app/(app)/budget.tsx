@@ -5,7 +5,7 @@ import { api, load as read, peek } from "../../src/api";
 import { dayLabel, daysLeftInMonth, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
 import { Icon } from "../../src/icons";
 
 type BudgetRow = {
@@ -270,75 +270,97 @@ export default function BudgetScreen() {
             >
               {/* Top Header: Eyebrow + Allocation Status */}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: colors.muted, textTransform: "uppercase" }}>
-                  ENVELOPE ALLOCATION
-                </Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 5,
-                    paddingHorizontal: 9,
-                    paddingVertical: 4,
-                    borderRadius: 99,
-                    borderCurve: "continuous",
-                    backgroundColor:
-                      data.leftoverCents < 0
-                        ? colors.scheme === "dark"
-                          ? "rgba(255, 107, 74, 0.16)"
-                          : "rgba(217, 74, 46, 0.12)"
-                        : data.leftoverCents === 0
-                          ? colors.scheme === "dark"
-                            ? "rgba(61, 190, 154, 0.16)"
-                            : "rgba(27, 122, 98, 0.12)"
-                          : colors.scheme === "dark"
-                            ? "rgba(255, 255, 255, 0.1)"
-                            : "rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor:
-                        data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
-                    }}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "700",
-                      letterSpacing: -0.1,
-                      color:
-                        data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
-                    }}
-                  >
-                    {data.leftoverCents < 0 ? "Over Allocated" : data.leftoverCents === 0 ? "Balanced" : "Buffer Available"}
-                  </Text>
-                </View>
-              </View>
+                <View style={{ gap: 2 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: colors.muted, textTransform: "uppercase" }}>
+                      ENVELOPE ALLOCATION
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                        paddingHorizontal: 9,
+                        paddingVertical: 4,
+                        borderRadius: 99,
+                        borderCurve: "continuous",
+                        backgroundColor:
+                          data.leftoverCents < 0
+                            ? colors.scheme === "dark"
+                              ? "rgba(255, 107, 74, 0.16)"
+                              : "rgba(217, 74, 46, 0.12)"
+                            : data.leftoverCents === 0
+                              ? colors.scheme === "dark"
+                                ? "rgba(61, 190, 154, 0.16)"
+                                : "rgba(27, 122, 98, 0.12)"
+                              : colors.scheme === "dark"
+                                ? "rgba(255, 255, 255, 0.1)"
+                                : "rgba(0, 0, 0, 0.05)",
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor:
+                            data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
+                        }}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "700",
+                          letterSpacing: -0.1,
+                          color:
+                            data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
+                        }}
+                      >
+                        {data.leftoverCents < 0 ? "Over Allocated" : data.leftoverCents === 0 ? "Balanced" : "Buffer Available"}
+                      </Text>
+                    </View>
+                  </View>
 
-              {/* Primary Allocation Metric */}
-              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-                <Text
-                  style={{
-                    fontSize: 42,
-                    fontWeight: "700",
-                    letterSpacing: -1.6,
-                    color: data.leftoverCents < 0 ? colors.danger : colors.ink,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {data.leftoverCents > 0
-                    ? money(data.leftoverCents)
-                    : data.leftoverCents < 0
-                      ? `-${money(Math.abs(data.leftoverCents))}`
-                      : money(plannedTotal)}
-                </Text>
-                <Text style={{ fontSize: 18, fontWeight: "500", color: colors.muted, letterSpacing: -0.3 }}>
-                  {data.leftoverCents > 0 ? "unassigned" : data.leftoverCents < 0 ? "over budget" : "budgeted"}
-                </Text>
+                  {/* Primary Allocation Metric */}
+                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+                    <Text
+                      style={{
+                        fontSize: 42,
+                        fontWeight: "700",
+                        letterSpacing: -1.6,
+                        color: data.leftoverCents < 0 ? colors.danger : colors.ink,
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {data.leftoverCents > 0
+                        ? money(data.leftoverCents)
+                        : data.leftoverCents < 0
+                          ? `-${money(Math.abs(data.leftoverCents))}`
+                          : money(plannedTotal)}
+                    </Text>
+                    <Text style={{ fontSize: 18, fontWeight: "500", color: colors.muted, letterSpacing: -0.3 }}>
+                      {data.leftoverCents > 0 ? "unassigned" : data.leftoverCents < 0 ? "over budget" : "budgeted"}
+                    </Text>
+                  </View>
+                </View>
+
+                {data.plannedIncomeCents > 0 ? (
+                  <ProgressRing
+                    size={58}
+                    strokeWidth={5}
+                    progress={data.expensePlannedCents / data.plannedIncomeCents}
+                    color={data.leftoverCents < 0 ? colors.danger : colors.accent}
+                  >
+                    <View style={{ alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"] }}>
+                        {Math.round((data.expensePlannedCents / data.plannedIncomeCents) * 100)}%
+                      </Text>
+                      <Text style={{ fontSize: 9, fontWeight: "600", color: colors.tertiary, textTransform: "uppercase" }}>
+                        assigned
+                      </Text>
+                    </View>
+                  </ProgressRing>
+                ) : null}
               </View>
 
               {/* Context Framing */}

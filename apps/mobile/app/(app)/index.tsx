@@ -20,6 +20,7 @@ import {
   Button,
   Card,
   colors,
+  EnvelopesGlance,
   Facts,
   Hero,
   LedgerRow,
@@ -169,6 +170,23 @@ export default function HomeScreen() {
               onPress={() => {
                 tapPress();
                 router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+              }}
+            />
+          ) : null}
+
+          {/* Glanceable Category Envelopes Preview */}
+          {totalPlannedCents > 0 ? (
+            <EnvelopesGlance
+              onSelectCategory={(categoryId) => {
+                tapPress();
+                router.push({
+                  pathname: "/(app)/activity",
+                  params: { categoryId, start: range.start, end: range.end },
+                });
+              }}
+              onViewAll={() => {
+                tapPress();
+                router.push("/(app)/budget");
               }}
             />
           ) : null}

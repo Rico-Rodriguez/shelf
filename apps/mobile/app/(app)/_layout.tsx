@@ -291,22 +291,24 @@ function ShelfQuickLogButton({ onPress }: { onPress: () => void }) {
     >
       <Animated.View
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
+          width: 46,
+          height: 46,
+          borderRadius: 23,
           borderCurve: "continuous",
           backgroundColor: palette.control,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ scale }],
+          borderWidth: 1,
+          borderColor: palette.scheme === "dark" ? "rgba(255, 255, 255, 0.25)" : "rgba(255, 255, 255, 0.35)",
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.25,
-          shadowRadius: 8,
-          elevation: 4,
+          shadowOpacity: palette.scheme === "dark" ? 0.35 : 0.2,
+          shadowRadius: 10,
+          elevation: 5,
         }}
       >
-        <Icon name="plus" size={20} color={palette.controlInk} />
+        <Icon name="plus" size={22} color={palette.controlInk} />
       </Animated.View>
     </Pressable>
   );

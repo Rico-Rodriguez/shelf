@@ -2,6 +2,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BlurView } from "expo-blur";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
@@ -60,6 +61,7 @@ function txPath(
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
   const styles = useMemo(() => makeStyles(palette), [palette]);
   const params = useLocalSearchParams<{
     q?: string;
@@ -433,6 +435,8 @@ export default function ActivityScreen() {
           <SearchField value={query} onChangeText={setQuery} placeholder="Search merchants or notes" />
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open filters"
           onPress={() => {
             tapPress();
             setFilters(true);
@@ -441,6 +445,106 @@ export default function ActivityScreen() {
         >
           <Icon name="filter" size={18} color={colors.ink} />
           {filtered ? <View style={styles.filterDot} /> : null}
+        </Pressable>
+      </View>
+
+      {/* Liquid Glass Quick Filter Capsule */}
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityState={{ selected: !unreviewedOnly && !range }}
+          onPress={() => {
+            tapSelect();
+            setUnreviewedOnly(false);
+            setRange(null);
+          }}
+          style={[
+            styles.quickPill,
+            !unreviewedOnly && !range ? styles.quickPillActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.quickPillText,
+              !unreviewedOnly && !range ? styles.quickPillTextActive : null,
+            ]}
+          >
+            All
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityState={{ selected: unreviewedOnly }}
+          onPress={() => {
+            tapSelect();
+            setUnreviewedOnly((curr) => !curr);
+          }}
+          style={[
+            styles.quickPill,
+            unreviewedOnly ? styles.quickPillActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.quickPillText,
+              unreviewedOnly ? styles.quickPillTextActive : null,
+            ]}
+          >
+            Needs Review
+          </Text>
+          {unreviewed > 0 ? (
+            <View
+              style={{
+                paddingHorizontal: 6,
+                paddingVertical: 1,
+                borderRadius: 99,
+                backgroundColor: unreviewedOnly
+                  ? palette.danger
+                  : palette.scheme === "dark"
+                    ? "rgba(255, 107, 74, 0.2)"
+                    : "rgba(217, 74, 46, 0.12)",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "700",
+                  color: unreviewedOnly ? "#fff" : palette.danger,
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {unreviewed}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityState={{ selected: Boolean(range) }}
+          onPress={() => {
+            tapSelect();
+            if (range) {
+              setRange(null);
+            } else {
+              const now = new Date();
+              setRange(monthRange(now.getFullYear(), now.getMonth() + 1));
+            }
+          }}
+          style={[
+            styles.quickPill,
+            range ? styles.quickPillActive : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.quickPillText,
+              range ? styles.quickPillTextActive : null,
+            ]}
+          >
+            This Month
+          </Text>
         </Pressable>
       </View>
 
@@ -811,6 +915,13 @@ export default function ActivityScreen() {
       {/* Multi-Select Floating Bar */}
       {selecting && selectedIds.length ? (
         <View style={styles.bulkBar}>
+          {!reduceTransparency ? (
+            <BlurView
+              intensity={palette.scheme === "dark" ? 75 : 85}
+              tint={palette.blurTint}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
           <Text style={styles.bulkText}>{`${selectedIds.length} selected`}</Text>
           <Button
             label="Mark reviewed"
@@ -980,23 +1091,55 @@ function makeStyles(colors: Palette) {
     bottom: 24,
     left: 16,
     right: 16,
-    backgroundColor: colors.card,
-    borderRadius: 18,
+    backgroundColor: colors.scheme === "dark" ? "rgba(23, 27, 35, 0.88)" : "rgba(255, 255, 255, 0.90)",
+    borderRadius: 22,
+    borderCurve: "continuous",
     borderWidth: 1,
-    borderColor: colors.lineStrong,
+    borderTopColor: colors.specularTop || colors.glassBorder,
+    borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+    borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+    borderRightColor: colors.specularSides || colors.glassBorderSubtle,
     padding: 14,
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: colors.scheme === "dark" ? 0.45 : 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   bulkText: {
     fontSize: 15,
     fontWeight: "600",
     color: colors.ink,
+  },
+  quickPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 99,
+    borderCurve: "continuous",
+    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
+    borderWidth: 1,
+    borderColor: colors.glassBorderSubtle,
+  },
+  quickPillActive: {
+    backgroundColor: colors.control,
+    borderColor: colors.control,
+  },
+  quickPillText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.muted,
+    letterSpacing: -0.1,
+  },
+  quickPillTextActive: {
+    color: colors.controlInk,
+    fontWeight: "700",
   },
 });
 }
