@@ -48,78 +48,6 @@ export function rankCategories(pool: string[], frequent: string[] = [], limit = 
   return picked.slice(0, limit);
 }
 
-function DockButton({
-  icon,
-  size = 58,
-  iconSize = 26,
-  color,
-  bg,
-  borderColor,
-  onPress,
-  disabled = false,
-  shadowColor,
-  label,
-}: {
-  icon: string;
-  size?: number;
-  iconSize?: number;
-  color: string;
-  bg: string;
-  borderColor?: string;
-  onPress: () => void;
-  disabled?: boolean;
-  shadowColor?: string;
-  label?: string;
-}) {
-  const scale = useSharedValue(1);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPressIn={() => {
-        if (!disabled) {
-          scale.value = withSpring(0.86, { damping: 14, stiffness: 350 });
-        }
-      }}
-      onPressOut={() => {
-        if (!disabled) {
-          scale.value = withSpring(1, { damping: 14, stiffness: 350 });
-        }
-      }}
-      onPress={() => {
-        if (!disabled) onPress();
-      }}
-      style={[
-        styles.dockButton,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: bg,
-          borderColor: borderColor || "transparent",
-        },
-        shadowColor
-          ? {
-              shadowColor,
-              shadowOpacity: 0.28,
-              shadowRadius: 10,
-              shadowOffset: { width: 0, height: 4 },
-              elevation: 4,
-            }
-          : null,
-        disabled && { opacity: 0.35 },
-        animStyle,
-      ]}
-    >
-      <Icon name={icon} size={iconSize} color={color} />
-    </AnimatedPressable>
-  );
-}
 
 function CardContent({
   tx,
@@ -949,66 +877,121 @@ export function ReviewDeck({
         </GestureDetector>
       </View>
 
-      {/* Tinder-style Control Dock */}
-      <View style={styles.dock}>
-        {/* Rewind / Undo Button */}
-        <DockButton
-          icon="undo"
-          size={48}
-          iconSize={20}
-          color={palette.ink}
-          bg={palette.fill}
-          borderColor={palette.line}
-          disabled={!canUndo || busy || isDismissing}
-          onPress={() => {
-            if (onUndo) onUndo();
-          }}
-          label="Undo last action"
-        />
+      {/* Cohesive Liquid-Glass Action Dock */}
+      <View
+        style={[
+          styles.actionDock,
+          {
+            width: cardWidth,
+            borderTopColor: palette.specularTop,
+            borderBottomColor: palette.specularBottom,
+            borderLeftColor: palette.specularSides,
+            borderRightColor: palette.specularSides,
+            backgroundColor: reduceTransparency
+              ? isDark
+                ? "#171a21"
+                : "#ffffff"
+              : palette.dockBg,
+          },
+        ]}
+      >
+        {!reduceTransparency ? (
+          <BlurView
+            intensity={isDark ? 55 : 75}
+            tint={palette.blurTint}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
 
-        {/* Deny / Skip Button */}
-        <DockButton
-          icon="close"
-          size={64}
-          iconSize={28}
-          color="#f43f5e"
-          bg={isDark ? "rgba(244, 63, 94, 0.16)" : "#fff1f2"}
-          borderColor={isDark ? "rgba(244, 63, 94, 0.38)" : "#fecdd3"}
-          shadowColor="#f43f5e"
-          disabled={busy || isDismissing}
-          onPress={handleButtonDeny}
-          label="Skip or Deny"
-        />
+        {/* Left Utility Actions: Undo & Category */}
+        <View style={styles.dockUtilityGroup}>
+          <Pressable
+            accessibilityLabel="Undo last review"
+            disabled={!canUndo || busy || isDismissing}
+            onPress={() => {
+              if (onUndo) onUndo();
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.dockIconBtn,
+              {
+                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
+                borderColor: palette.line,
+              },
+              (!canUndo || busy || isDismissing) && { opacity: 0.3 },
+              pressed && canUndo ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
+            ]}
+          >
+            <Icon name="undo" size={17} color={canUndo ? palette.ink : palette.quaternaryLabel} />
+          </Pressable>
 
-        {/* Category Picker Button */}
-        <DockButton
-          icon="tag"
-          size={48}
-          iconSize={20}
-          color={palette.ink}
-          bg={palette.fill}
-          borderColor={palette.line}
-          disabled={busy || isDismissing}
-          onPress={() => {
-            tapPress();
-            setPicking(true);
-          }}
-          label="Choose Category"
-        />
+          <Pressable
+            accessibilityLabel="Choose category"
+            disabled={busy || isDismissing}
+            onPress={() => {
+              tapPress();
+              setPicking(true);
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.dockIconBtn,
+              {
+                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
+                borderColor: palette.line,
+              },
+              (busy || isDismissing) && { opacity: 0.35 },
+              pressed ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
+            ]}
+          >
+            <Icon name="tag" size={16} color={palette.ink} />
+          </Pressable>
+        </View>
 
-        {/* Approve / Confirm Button */}
-        <DockButton
-          icon="check"
-          size={64}
-          iconSize={30}
-          color="#10b981"
-          bg={isDark ? "rgba(16, 185, 129, 0.18)" : "#ecfdf5"}
-          borderColor={isDark ? "rgba(16, 185, 129, 0.38)" : "#a7f3d0"}
-          shadowColor="#10b981"
-          disabled={busy || isDismissing}
-          onPress={handleButtonApprove}
-          label="Approve and Categorize"
-        />
+        {/* Subtle Divider */}
+        <View style={[styles.dockDivider, { backgroundColor: palette.line }]} />
+
+        {/* Right Primary Decision Actions: Skip & Approve */}
+        <View style={styles.dockDecisionGroup}>
+          {/* Skip Action */}
+          <Pressable
+            accessibilityLabel="Skip transaction"
+            disabled={busy || isDismissing}
+            onPress={handleButtonDeny}
+            style={({ pressed }) => [
+              styles.dockPillBtn,
+              styles.dockSkipBtn,
+              {
+                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
+                borderColor: palette.line,
+              },
+              (busy || isDismissing) && { opacity: 0.35 },
+              pressed ? { transform: [{ scale: 0.96 }], opacity: 0.75 } : null,
+            ]}
+          >
+            <Icon name="close" size={14} color={palette.muted} />
+            <Text style={[styles.dockBtnLabel, { color: palette.ink }]}>Skip</Text>
+          </Pressable>
+
+          {/* Approve Action */}
+          <Pressable
+            accessibilityLabel="Approve transaction"
+            disabled={busy || isDismissing}
+            onPress={handleButtonApprove}
+            style={({ pressed }) => [
+              styles.dockPillBtn,
+              styles.dockApproveBtn,
+              {
+                backgroundColor: palette.accent,
+                borderColor: palette.specularTop,
+              },
+              (busy || isDismissing) && { opacity: 0.35 },
+              pressed ? { transform: [{ scale: 0.96 }], opacity: 0.88 } : null,
+            ]}
+          >
+            <Icon name="check" size={16} color="#ffffff" />
+            <Text style={[styles.dockBtnLabel, styles.dockApproveText]}>Approve</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Category Picker Sheet Modal */}
@@ -1323,19 +1306,81 @@ const styles = StyleSheet.create({
     color: colors.tertiary,
     letterSpacing: -0.1,
   },
-  dock: {
+  actionDock: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 24,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    marginBottom: 4,
+  },
+  dockUtilityGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dockIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dockDivider: {
+    width: 1,
+    height: 22,
+    marginHorizontal: 4,
+  },
+  dockDecisionGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  dockPillBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
-    paddingTop: 8,
-    paddingBottom: 14,
-    width: "100%",
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 19,
+    borderCurve: "continuous",
+    borderWidth: 1,
   },
-  dockButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
+  dockSkipBtn: {
+    flex: 1,
+    maxWidth: 105,
+  },
+  dockApproveBtn: {
+    flex: 1.3,
+    maxWidth: 135,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  dockBtnLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  dockApproveText: {
+    color: "#ffffff",
+    fontWeight: "700",
   },
   emptyContainer: {
     flex: 1,
