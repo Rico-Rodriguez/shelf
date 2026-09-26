@@ -10,11 +10,13 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useWordmark } from "./brand";
 import { ScrollLockProvider } from "./scroll";
 import { GroupedBars, SpendChart } from "./chart";
-import { flowMoney, money, monthLabel, shiftMonth, shortMonthLabel } from "./format";
-import { tapPress, tapSelect } from "./haptic";
+import { flowMoney, money, monthLabel, shiftMonth, shortMonthLabel, todayISO, shelfColor } from "./format";
+import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
 import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
+import { api, peek } from "./api";
+import { celebrate } from "./toast";
 
 export { GroupedBars, SpendChart };
 
@@ -265,6 +267,7 @@ export function Card({
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
   const isInset = tone === "inset";
+  const isGlass = tone === "glass" || tone === "prominent";
   const isProminent = tone === "prominent";
 
   return (
@@ -272,12 +275,12 @@ export function Card({
       style={[
         styles.card,
         isInset ? styles.cardInset : null,
+        isGlass ? styles.glassCard : null,
         isProminent ? styles.glassProminent : null,
-        reduceTransparency ? { backgroundColor: palette.card } : null,
         style,
       ]}
     >
-      {!isInset && !reduceTransparency ? (
+      {isGlass && !reduceTransparency ? (
         <BlurView
           intensity={palette.scheme === "dark" ? (isProminent ? 65 : 45) : (isProminent ? 80 : 60)}
           tint={palette.blurTint}
@@ -722,6 +725,7 @@ export function Hero({
   onPressFigure,
   subtitle,
   children,
+  glass = false,
 }: {
   label: string;
   cents: number;
@@ -743,6 +747,7 @@ export function Hero({
   onPressFigure?: () => void;
   subtitle?: ReactNode;
   children?: ReactNode;
+  glass?: boolean;
 }) {
   const styles = useStyles();
   const { palette } = useTheme();
@@ -758,8 +763,8 @@ export function Hero({
         : money(cents);
 
   return (
-    <View style={styles.hero}>
-      {!reduceTransparency ? (
+    <View style={[styles.hero, glass ? styles.heroGlass : null]}>
+      {glass && !reduceTransparency ? (
         <BlurView
           intensity={palette.scheme === "dark" ? 65 : 75}
           tint={palette.blurTint}
@@ -1416,6 +1421,487 @@ export function Sheet({
   );
 }
 
+export function PacingCard({
+  dailyBudgetCents,
+  daysLeft,
+  monthName,
+  totalPlannedCents,
+  spentCents,
+  fixedBillsCents,
+  discretionaryRemainingCents,
+  onPress,
+}: {
+  dailyBudgetCents: number;
+  daysLeft: number;
+  monthName?: string;
+  totalPlannedCents: number;
+  spentCents: number;
+  fixedBillsCents: number;
+  discretionaryRemainingCents: number;
+  onPress?: () => void;
+}) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+  const isOver = discretionaryRemainingCents < 0 || dailyBudgetCents <= 0;
+  const isCaution = !isOver && totalPlannedCents > 0 && spentCents / totalPlannedCents > 0.85;
+  const statusLabel = isOver ? "Over Pace" : isCaution ? "Caution" : "On Track";
+  const statusColor = isOver ? palette.danger : isCaution ? palette.warn : palette.positive;
+  const statusBg = isOver
+    ? palette.scheme === "dark"
+      ? "rgba(255, 107, 74, 0.15)"
+      : "rgba(217, 74, 46, 0.12)"
+    : isCaution
+      ? palette.scheme === "dark"
+        ? "rgba(224, 161, 90, 0.15)"
+        : "rgba(196, 122, 26, 0.12)"
+      : palette.scheme === "dark"
+        ? "rgba(61, 190, 154, 0.15)"
+        : "rgba(27, 122, 98, 0.12)";
+
+  const body = (
+    <View style={styles.pacingCard}>
+      {/* Top Header: Eyebrow + Status Pill */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={styles.pacingEyebrow}>SAFE DAILY SPEND</Text>
+        <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
+          <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+        </View>
+      </View>
+
+      {/* Main Figure: Safe Daily Allowance */}
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+        <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
+          {money(Math.max(0, dailyBudgetCents))}
+        </Text>
+        <Text style={styles.pacingFigureUnit}>/ day</Text>
+      </View>
+
+      {/* Context Sentence */}
+      <Text style={styles.pacingCaption}>
+        {isOver
+          ? `Discretionary pool exhausted with ${daysLeft} days remaining in ${monthName || "cycle"}.`
+          : `${money(discretionaryRemainingCents)} discretionary pool left for ${daysLeft} days in ${monthName || "cycle"}.`}
+      </Text>
+
+      {/* Progress Track: Spent vs Total */}
+      {totalPlannedCents > 0 ? (
+        <View style={{ marginTop: 4 }}>
+          <Progress
+            value={spentCents}
+            max={totalPlannedCents}
+            color={isOver ? palette.danger : isCaution ? palette.warn : palette.accent}
+          />
+        </View>
+      ) : null}
+
+      {/* Dual-Pool Inset Metrics */}
+      <View style={styles.pacingBreakdown}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.pacingMetricLabel}>Discretionary Pool</Text>
+          <Text style={[styles.pacingMetricValue, isOver ? { color: palette.danger } : null]}>
+            {money(discretionaryRemainingCents)}
+          </Text>
+        </View>
+        <View style={styles.pacingDivider} />
+        <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
+          <Text style={styles.pacingMetricLabel}>Upcoming Bills</Text>
+          <Text style={styles.pacingMetricValue}>{money(fixedBillsCents)}</Text>
+        </View>
+        <View style={styles.pacingDivider} />
+        <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
+          <Text style={styles.pacingMetricLabel}>Total Budget</Text>
+          <Text style={styles.pacingMetricValue}>{money(totalPlannedCents)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (!onPress) return body;
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : null)}>
+      {body}
+    </Pressable>
+  );
+}
+
+export function QuickLogModal({
+  visible,
+  onClose,
+  onSuccess,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
+
+  const [cents, setCents] = useState(0);
+  const [isIncome, setIsIncome] = useState(false);
+  const [merchant, setMerchant] = useState("");
+  const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [accountId, setAccountId] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setCents(0);
+    setIsIncome(false);
+    setMerchant("");
+    setError(null);
+    setBusy(false);
+
+    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories");
+    if (cachedCats?.groups) {
+      const flat = cachedCats.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
+      setCategories(flat);
+      if (flat[0]) setSelectedCatId(flat[0].id);
+    } else {
+      void api<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories")
+        .then((res) => {
+          const flat = res.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
+          setCategories(flat);
+          if (flat[0]) setSelectedCatId(flat[0].id);
+        })
+        .catch(() => undefined);
+    }
+
+    const cachedAccts = peek<{ accounts: { id: string; name: string }[] }>("/api/accounts");
+    if (cachedAccts?.accounts?.length) {
+      setAccounts(cachedAccts.accounts);
+      setAccountId(cachedAccts.accounts[0].id);
+    } else {
+      void api<{ accounts: { id: string; name: string }[] }>("/api/accounts")
+        .then((res) => {
+          setAccounts(res.accounts);
+          if (res.accounts[0]) setAccountId(res.accounts[0].id);
+        })
+        .catch(() => undefined);
+    }
+  }, [visible]);
+
+  function handleKey(key: string) {
+    tapSelect();
+    if (key === "clear") {
+      setCents(0);
+      return;
+    }
+    if (key === "back") {
+      setCents((c) => Math.floor(c / 10));
+      return;
+    }
+    const digit = parseInt(key, 10);
+    if (!isNaN(digit)) {
+      setCents((c) => {
+        if (c > 9999999) return c;
+        return c * 10 + digit;
+      });
+    }
+  }
+
+  async function handleSave() {
+    if (cents <= 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const chosenCat = categories.find((c) => c.id === selectedCatId);
+      const label = merchant.trim() || chosenCat?.name || (isIncome ? "Income" : "Expense");
+      const signedDollars = (cents / 100) * (isIncome ? -1 : 1);
+
+      await api("/api/transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          name: label,
+          amount: signedDollars,
+          date: todayISO(),
+          categoryId: selectedCatId || undefined,
+          accountId: accountId || undefined,
+        }),
+      });
+
+      celebrate(isIncome ? "Income logged" : "Expense logged");
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to log charge");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!visible) return null;
+
+  const quickPillCats = categories.slice(0, 8);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+        <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.68)" : "rgba(15,23,42,0.36)" }]}
+          onPress={onClose}
+        >
+          {!reduceTransparency ? (
+            <BlurView intensity={isDark ? 25 : 18} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          ) : null}
+        </Pressable>
+
+        <View
+          style={{
+            backgroundColor: reduceTransparency ? palette.card : palette.sheetBg,
+            borderTopLeftRadius: 32,
+            borderTopRightRadius: 32,
+            borderCurve: "continuous",
+            borderTopWidth: 1,
+            borderTopColor: palette.specularTop || "rgba(255,255,255,0.4)",
+            overflow: "hidden",
+            paddingBottom: Math.max(insets.bottom + 12, 28),
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: -12 },
+            shadowOpacity: isDark ? 0.6 : 0.16,
+            shadowRadius: 28,
+            elevation: 24,
+          }}
+        >
+          {!reduceTransparency ? (
+            <BlurView intensity={isDark ? 75 : 85} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
+          ) : null}
+
+          <View style={{ width: 36, height: 5, borderRadius: 99, backgroundColor: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)", alignSelf: "center", marginTop: 10, marginBottom: 8 }} />
+
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 10 }}>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Text style={{ fontSize: 16, color: palette.muted, fontWeight: "500" }}>Cancel</Text>
+            </Pressable>
+
+            <View style={{ flexDirection: "row", backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)", borderRadius: 99, padding: 3 }}>
+              <Pressable
+                onPress={() => {
+                  tapSelect();
+                  setIsIncome(false);
+                }}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 5,
+                  borderRadius: 99,
+                  backgroundColor: !isIncome ? palette.control : "transparent",
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: !isIncome ? palette.controlInk : palette.muted }}>
+                  Expense
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  tapSelect();
+                  setIsIncome(true);
+                }}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 5,
+                  borderRadius: 99,
+                  backgroundColor: isIncome ? palette.positive : "transparent",
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: isIncome ? "#ffffff" : palette.muted }}>
+                  Income
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={{ width: 50 }} />
+          </View>
+
+          <View style={{ alignItems: "center", paddingVertical: 10 }}>
+            <Text
+              style={{
+                fontSize: 48,
+                fontWeight: "700",
+                letterSpacing: -2,
+                color: isIncome ? palette.positive : palette.ink,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {isIncome && cents > 0 ? "+" : ""}{money(cents)}
+            </Text>
+          </View>
+
+          <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
+                borderRadius: 14,
+                borderCurve: "continuous",
+                paddingHorizontal: 14,
+                paddingVertical: 9,
+                borderWidth: 1,
+                borderColor: palette.line,
+              }}
+            >
+              <Icon name="pencil" size={15} color={palette.tertiary} />
+              <TextInput
+                value={merchant}
+                onChangeText={setMerchant}
+                placeholder="Merchant or description (optional)"
+                placeholderTextColor={palette.tertiary}
+                style={{ flex: 1, fontSize: 15, color: palette.ink, marginLeft: 8, padding: 0 }}
+                autoCapitalize="sentences"
+              />
+              {merchant ? (
+                <Pressable onPress={() => setMerchant("")} hitSlop={8}>
+                  <Icon name="close" size={14} color={palette.tertiary} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 12 }}
+          >
+            {quickPillCats.map((cat) => {
+              const selected = selectedCatId === cat.id;
+              return (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => {
+                    tapSelect();
+                    setSelectedCatId(cat.id);
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 99,
+                    borderCurve: "continuous",
+                    backgroundColor: selected ? (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)") : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                    borderWidth: 1,
+                    borderColor: selected ? (cat.color || palette.accent) : "transparent",
+                  }}
+                >
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }} />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: selected ? "700" : "500",
+                      color: selected ? palette.ink : palette.muted,
+                    }}
+                  >
+                    {cat.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {error ? (
+            <Text style={{ textAlign: "center", color: palette.danger, fontSize: 13, marginBottom: 8, paddingHorizontal: 20 }}>
+              {error}
+            </Text>
+          ) : null}
+
+          <View style={{ paddingHorizontal: 20, gap: 8 }}>
+            {[
+              ["1", "2", "3"],
+              ["4", "5", "6"],
+              ["7", "8", "9"],
+              ["clear", "0", "back"],
+            ].map((row, rIdx) => (
+              <View key={rIdx} style={{ flexDirection: "row", gap: 8 }}>
+                {row.map((k) => (
+                  <Pressable
+                    key={k}
+                    onPress={() => handleKey(k)}
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
+                        height: 48,
+                        borderRadius: 14,
+                        borderCurve: "continuous",
+                        backgroundColor: isDark
+                          ? (k === "clear" || k === "back" ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.12)")
+                          : (k === "clear" || k === "back" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.92)"),
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: isDark ? 0.2 : 0.04,
+                        shadowRadius: 3,
+                        elevation: 1,
+                      },
+                      pressed ? { transform: [{ scale: 0.94 }], opacity: 0.75 } : null,
+                    ]}
+                  >
+                    {k === "back" ? (
+                      <Icon name="chevron-left" size={18} color={palette.ink} />
+                    ) : k === "clear" ? (
+                      <Text style={{ fontSize: 15, fontWeight: "600", color: palette.muted }}>C</Text>
+                    ) : (
+                      <Text style={{ fontSize: 22, fontWeight: "600", color: palette.ink, fontVariant: ["tabular-nums"] }}>
+                        {k}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            ))}
+          </View>
+
+          <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
+            <Pressable
+              onPress={handleSave}
+              disabled={busy || cents <= 0}
+              style={({ pressed }) => [
+                {
+                  height: 52,
+                  borderRadius: 18,
+                  borderCurve: "continuous",
+                  backgroundColor: cents > 0 ? (isIncome ? palette.positive : palette.control) : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: cents > 0 ? (isDark ? 0.35 : 0.15) : 0,
+                  shadowRadius: 10,
+                  elevation: cents > 0 ? 3 : 0,
+                },
+                pressed ? { transform: [{ scale: 0.98 }], opacity: 0.88 } : null,
+              ]}
+            >
+              {busy ? (
+                <ActivityIndicator color={palette.controlInk} />
+              ) : (
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: cents > 0 ? palette.controlInk : palette.tertiary,
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  {cents > 0 ? `Save ${isIncome ? "Income" : "Expense"} (${money(cents)})` : "Enter an amount"}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function makeStyles(colors: Palette) {
   const isDark = colors.scheme === "dark";
   return StyleSheet.create({
@@ -1446,20 +1932,17 @@ function makeStyles(colors: Palette) {
     title: { fontSize: 26, fontWeight: "700", letterSpacing: -0.7, color: colors.ink },
     subtitle: { marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.muted, letterSpacing: -0.1 },
     card: {
-      backgroundColor: colors.glass,
-      borderRadius: 22,
+      backgroundColor: colors.card,
+      borderRadius: 20,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+      borderColor: colors.line,
       overflow: "hidden",
       shadowColor: "#000",
-      shadowOpacity: isDark ? 0.35 : 0.05,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 3,
+      shadowOpacity: isDark ? 0.22 : 0.03,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
     },
     glassCard: {
       backgroundColor: colors.glass,
@@ -1486,8 +1969,8 @@ function makeStyles(colors: Palette) {
       elevation: 5,
     },
     cardInset: {
-      backgroundColor: isDark ? "rgba(18, 22, 29, 0.65)" : "rgba(235, 239, 244, 0.75)",
-      borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(20, 24, 31, 0.07)",
+      backgroundColor: colors.cardInset,
+      borderColor: colors.line,
       borderCurve: "continuous",
     },
     field: { gap: 6 },
@@ -1580,22 +2063,113 @@ function makeStyles(colors: Palette) {
     note: { color: colors.muted, fontSize: 15, lineHeight: 21, letterSpacing: -0.1 },
     loading: { paddingVertical: 24, alignItems: "center", gap: 8 },
     hero: {
-      backgroundColor: colors.glassProminent,
+      backgroundColor: colors.card,
       borderRadius: 24,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+      borderColor: colors.line,
       overflow: "hidden",
       paddingTop: 20,
       paddingHorizontal: 20,
       shadowColor: "#000",
+      shadowOpacity: isDark ? 0.28 : 0.04,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
+    },
+    heroGlass: {
+      backgroundColor: colors.glassProminent,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       shadowOpacity: isDark ? 0.45 : 0.08,
       shadowRadius: 22,
       shadowOffset: { width: 0, height: 10 },
       elevation: 5,
+    },
+    pacingCard: {
+      backgroundColor: colors.card,
+      borderRadius: 24,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: colors.line,
+      padding: 20,
+      gap: 12,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.28 : 0.04,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 3,
+    },
+    pacingEyebrow: {
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.muted,
+      textTransform: "uppercase",
+    },
+    pacingBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      borderRadius: 99,
+      borderCurve: "continuous",
+    },
+    pacingBadgeText: {
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: -0.1,
+    },
+    pacingFigure: {
+      fontSize: 42,
+      fontWeight: "700",
+      letterSpacing: -1.6,
+      color: colors.ink,
+      fontVariant: ["tabular-nums"],
+    },
+    pacingFigureUnit: {
+      fontSize: 18,
+      fontWeight: "500",
+      color: colors.muted,
+      letterSpacing: -0.3,
+    },
+    pacingCaption: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.muted,
+      letterSpacing: -0.1,
+    },
+    pacingBreakdown: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingTop: 12,
+      marginTop: 4,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.line,
+    },
+    pacingMetricLabel: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: colors.tertiary,
+      letterSpacing: -0.1,
+      textTransform: "uppercase",
+    },
+    pacingMetricValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.ink,
+      fontVariant: ["tabular-nums"],
+      letterSpacing: -0.2,
+      marginTop: 2,
+    },
+    pacingDivider: {
+      width: StyleSheet.hairlineWidth,
+      height: 28,
+      backgroundColor: colors.line,
     },
     heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
     heroLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },

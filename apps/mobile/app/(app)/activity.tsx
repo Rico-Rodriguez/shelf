@@ -26,6 +26,7 @@ import {
   Segment,
   Sheet,
 } from "../../src/ui";
+import { useReduceTransparency, useTheme, type Palette } from "../../src/theme";
 
 type Tx = Charge;
 type TxPayload = {
@@ -58,6 +59,8 @@ function txPath(
 
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
+  const styles = useMemo(() => makeStyles(palette), [palette]);
   const params = useLocalSearchParams<{
     q?: string;
     categoryId?: string;
@@ -837,7 +840,8 @@ export default function ActivityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: Palette) {
+  return StyleSheet.create({
   filterButton: {
     width: 44,
     height: 44,
@@ -995,3 +999,4 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 });
+}

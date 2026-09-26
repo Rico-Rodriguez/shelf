@@ -5,6 +5,7 @@ import * as SecureStore from "expo-secure-store";
 export type Palette = {
   bg: string;
   card: string;
+  cardInset: string;
   fill: string;
   fillStrong: string;
   ink: string;
@@ -28,6 +29,7 @@ export type Palette = {
   glassBorderSubtle: string;
   glassUltraThin: string;
   glassRegular: string;
+  dockBg: string;
   specularTop: string;
   specularSides: string;
   specularBottom: string;
@@ -38,10 +40,11 @@ export type Palette = {
 };
 
 export const light: Palette = {
-  bg: "#f3f5f7",
+  bg: "#f3f5f8",
   card: "#ffffff",
-  fill: "#e8ecf0",
-  fillStrong: "#d5dbe3",
+  cardInset: "#f0f3f6",
+  fill: "#e8ecf1",
+  fillStrong: "#d5dbe4",
   ink: "#14181f",
   accentInk: "#0f5241",
   muted: "#5c6570",
@@ -62,26 +65,28 @@ export const light: Palette = {
   glassBorderSubtle: "rgba(20, 24, 31, 0.08)",
   glassUltraThin: "rgba(255, 255, 255, 0.55)",
   glassRegular: "rgba(255, 255, 255, 0.78)",
+  dockBg: "rgba(255, 255, 255, 0.84)",
   specularTop: "rgba(255, 255, 255, 0.96)",
   specularSides: "rgba(20, 24, 31, 0.08)",
   specularBottom: "rgba(20, 24, 31, 0.06)",
-  navBg: "rgba(243, 245, 247, 0.76)",
-  sheetBg: "rgba(255, 255, 255, 0.94)",
+  navBg: "rgba(243, 245, 248, 0.78)",
+  sheetBg: "rgba(255, 255, 255, 0.95)",
   blurTint: "systemChromeMaterialLight",
   blurSubtleTint: "systemMaterialLight",
 };
 
 export const dark: Palette = {
   bg: "#0c0e12",
-  card: "#1a1e26",
-  fill: "#262b34",
-  fillStrong: "#343b46",
+  card: "#171a22",
+  cardInset: "#12151b",
+  fill: "#242933",
+  fillStrong: "#323946",
   ink: "#f4f1ea",
   accentInk: "#b7f3df",
-  muted: "#b0b6c0",
-  tertiary: "#8b939e",
-  line: "rgba(244, 241, 234, 0.1)",
-  lineStrong: "rgba(244, 241, 234, 0.18)",
+  muted: "#a3abb8",
+  tertiary: "#717987",
+  line: "rgba(244, 241, 234, 0.09)",
+  lineStrong: "rgba(244, 241, 234, 0.16)",
   positive: "#3dbe9a",
   danger: "#ff6b4a",
   accent: "#3dbe9a",
@@ -96,11 +101,12 @@ export const dark: Palette = {
   glassBorderSubtle: "rgba(255, 255, 255, 0.07)",
   glassUltraThin: "rgba(22, 26, 34, 0.50)",
   glassRegular: "rgba(22, 26, 34, 0.74)",
-  specularTop: "rgba(255, 255, 255, 0.24)",
+  dockBg: "rgba(23, 27, 35, 0.82)",
+  specularTop: "rgba(255, 255, 255, 0.22)",
   specularSides: "rgba(255, 255, 255, 0.08)",
-  specularBottom: "rgba(0, 0, 0, 0.28)",
-  navBg: "rgba(12, 14, 18, 0.72)",
-  sheetBg: "rgba(26, 30, 38, 0.92)",
+  specularBottom: "rgba(0, 0, 0, 0.32)",
+  navBg: "rgba(12, 14, 18, 0.76)",
+  sheetBg: "rgba(23, 27, 35, 0.94)",
   blurTint: "systemChromeMaterialDark",
   blurSubtleTint: "systemMaterialDark",
 };

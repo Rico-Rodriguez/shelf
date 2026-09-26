@@ -7,18 +7,25 @@ import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
+import { money } from "../../src/format";
 import { useReduceTransparency, useTheme } from "../../src/theme";
-import { colors } from "../../src/ui";
+import { colors, QuickLogModal } from "../../src/ui";
 
 const TABS = [
-  { name: "index", title: "Home", icon: "home" },
+  { name: "index", title: "Today", icon: "home" },
+  { name: "budget", title: "Plan", icon: "chart" },
   { name: "activity", title: "Activity", icon: "list" },
-  { name: "budget", title: "Budget", icon: "chart" },
-  { name: "accounts", title: "Accounts", icon: "wallet" },
-  { name: "more", title: "More", icon: "more" },
 ] as const;
 
-function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string }) {
+function MobileBar({
+  unread,
+  syncLabel,
+  netWorth,
+}: {
+  unread: number;
+  syncLabel: string;
+  netWorth: number | null;
+}) {
   const insets = useSafeAreaInsets();
   const wordmark = useWordmark();
   const { palette } = useTheme();
@@ -35,7 +42,7 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
         zIndex: 100,
         paddingTop: insets.top,
         backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
-        borderBottomWidth: 1,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: palette.specularBottom || palette.glassBorderSubtle,
         overflow: "hidden",
       }}
@@ -47,39 +54,118 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View style={{ minHeight: 50, flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8 }}>
-        <View style={{ flex: 1, justifyContent: "center" }}>
-          {syncLabel ? (
-            <Text
-              style={{
-                fontSize: 12,
-                fontWeight: "600",
-                letterSpacing: -0.1,
-                color: syncLabel === "Sync failed" ? palette.danger : palette.muted,
-              }}
-              numberOfLines={1}
-            >
-              {syncLabel}
-            </Text>
-          ) : null}
-        </View>
-        <View style={{ alignItems: "center", justifyContent: "center", height: 36 }}>
-          <Text style={{ fontFamily: wordmark, fontSize: 20, fontWeight: "600", letterSpacing: -0.5, color: palette.ink }}>
+      <View
+        style={{
+          minHeight: 50,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingLeft: 16,
+          paddingRight: 12,
+        }}
+      >
+        {/* Brand Wordmark & Live Sync Pill */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text
+            style={{
+              fontFamily: wordmark,
+              fontSize: 22,
+              fontWeight: "600",
+              letterSpacing: -0.6,
+              color: palette.ink,
+            }}
+          >
             Shelf
           </Text>
+          {syncLabel ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: 7,
+                paddingVertical: 2,
+                borderRadius: 99,
+                backgroundColor:
+                  syncLabel === "Sync failed"
+                    ? isDark
+                      ? "rgba(255, 107, 74, 0.16)"
+                      : "rgba(217, 74, 46, 0.1)"
+                    : isDark
+                      ? "rgba(255, 255, 255, 0.08)"
+                      : "rgba(0, 0, 0, 0.05)",
+              }}
+            >
+              <View
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: 2.5,
+                  backgroundColor:
+                    syncLabel === "Sync failed"
+                      ? palette.danger
+                      : syncLabel === "Syncing"
+                        ? palette.warn
+                        : palette.positive,
+                }}
+              />
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "600",
+                  letterSpacing: -0.1,
+                  color: syncLabel === "Sync failed" ? palette.danger : palette.muted,
+                }}
+                numberOfLines={1}
+              >
+                {syncLabel}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
-          <Pressable
-            accessibilityLabel="Settings"
-            onPress={() => {
-              tapPress();
-              router.push("/settings");
-            }}
-            style={barButton}
-            hitSlop={8}
-          >
-            <Icon name="gear" size={20} color={palette.ink} />
-          </Pressable>
+
+        {/* Right Chrome Controls: Floating Net Worth Pill, Bell, Gear */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {netWorth !== null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Net worth ${money(netWorth)}, view accounts`}
+              onPress={() => {
+                tapPress();
+                router.push("/(app)/accounts");
+              }}
+              style={({ pressed }) => [
+                {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 99,
+                  borderCurve: "continuous",
+                  backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+                  borderWidth: 1,
+                  borderColor: palette.glassBorderSubtle,
+                },
+                pressed ? { opacity: 0.75, transform: [{ scale: 0.96 }] } : null,
+              ]}
+              hitSlop={6}
+            >
+              <Icon name="wallet" size={13} color={palette.accentInk} filled />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: palette.ink,
+                  fontVariant: ["tabular-nums"],
+                  letterSpacing: -0.2,
+                }}
+              >
+                {money(netWorth)}
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityLabel="Notifications"
             onPress={() => {
@@ -89,8 +175,20 @@ function MobileBar({ unread, syncLabel }: { unread: number; syncLabel: string })
             style={barButton}
             hitSlop={8}
           >
-            <Icon name="bell" size={20} color={palette.ink} />
+            <Icon name="bell" size={18} color={palette.ink} />
             {unread ? <View style={[unreadDot, { backgroundColor: palette.danger }]} /> : null}
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="Settings"
+            onPress={() => {
+              tapPress();
+              router.push("/settings");
+            }}
+            style={barButton}
+            hitSlop={8}
+          >
+            <Icon name="gear" size={18} color={palette.ink} />
           </Pressable>
         </View>
       </View>
@@ -120,7 +218,11 @@ function ShelfTabBarItem({
     <Pressable
       accessibilityRole="button"
       accessibilityState={focused ? { selected: true } : {}}
-      accessibilityLabel={route.name === "activity" && reviewCount > 0 ? `Activity, ${reviewCount} to categorize` : spec?.title}
+      accessibilityLabel={
+        route.name === "activity" && reviewCount > 0
+          ? `Activity, ${reviewCount} to categorize`
+          : spec?.title
+      }
       onPressIn={() => {
         Animated.spring(scale, { toValue: 0.90, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
@@ -137,13 +239,17 @@ function ShelfTabBarItem({
         justifyContent: "center",
         paddingVertical: 6,
         paddingHorizontal: 4,
-        borderRadius: 20,
+        borderRadius: 22,
         borderCurve: "continuous",
-        backgroundColor: focused ? (isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.05)") : "transparent",
+        backgroundColor: focused
+          ? isDark
+            ? "rgba(255, 255, 255, 0.12)"
+            : "rgba(0, 0, 0, 0.05)"
+          : "transparent",
       }}
     >
       <Animated.View style={{ position: "relative", alignItems: "center", transform: [{ scale }] }}>
-        <Icon name={spec?.icon ?? "more"} size={22} color={color} filled={focused} />
+        <Icon name={spec?.icon ?? "more"} size={21} color={color} filled={focused} />
         {route.name === "activity" && reviewCount > 0 ? (
           <View style={[badge, { backgroundColor: palette.danger }]}>
             <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
@@ -151,9 +257,56 @@ function ShelfTabBarItem({
             </Text>
           </View>
         ) : null}
-        <Text style={{ fontSize: 10, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color, marginTop: 2 }}>
+        <Text style={{ fontSize: 11, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color, marginTop: 2 }}>
           {spec?.title}
         </Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function ShelfQuickLogButton({ onPress }: { onPress: () => void }) {
+  const { palette } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Quick log expense"
+      onPressIn={() => {
+        Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+      }}
+      onPressOut={() => {
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+      }}
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={{
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 6,
+      }}
+    >
+      <Animated.View
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          borderCurve: "continuous",
+          backgroundColor: palette.control,
+          alignItems: "center",
+          justifyContent: "center",
+          transform: [{ scale }],
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          elevation: 4,
+        }}
+      >
+        <Icon name="plus" size={20} color={palette.controlInk} />
       </Animated.View>
     </Pressable>
   );
@@ -163,15 +316,22 @@ function ShelfTabBar({
   state,
   reviewCount,
   onPress,
+  onQuickLog,
 }: {
   state: { index: number; routes: { key: string; name: string }[] };
   reviewCount: number;
   onPress: (route: { key: string; name: string }, focused: boolean) => void;
+  onQuickLog: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
+
+  // Filter routes to primary tabs only
+  const visibleRoutes = state.routes.filter((route) =>
+    TABS.some((tab) => tab.name === route.name),
+  );
 
   return (
     <View
@@ -182,28 +342,32 @@ function ShelfTabBar({
         left: 0,
         right: 0,
         paddingBottom: Math.max(insets.bottom, 12),
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
       }}
     >
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-around",
-          backgroundColor: reduceTransparency ? (isDark ? "#1a1e26" : "#ffffff") : palette.glassProminent,
-          borderRadius: 28,
+          justifyContent: "space-between",
+          backgroundColor: reduceTransparency
+            ? isDark
+              ? "#1a1e26"
+              : "#ffffff"
+            : palette.dockBg,
+          borderRadius: 36,
           borderCurve: "continuous",
           borderWidth: 1,
           borderTopColor: palette.specularTop || "rgba(255, 255, 255, 0.45)",
           borderBottomColor: palette.specularBottom || "rgba(255, 255, 255, 0.12)",
           borderLeftColor: palette.specularSides || "rgba(255, 255, 255, 0.18)",
           borderRightColor: palette.specularSides || "rgba(255, 255, 255, 0.18)",
-          paddingVertical: 5,
-          paddingHorizontal: 6,
+          paddingVertical: 6,
+          paddingHorizontal: 8,
           overflow: "hidden",
           shadowColor: "#000",
           shadowOpacity: isDark ? 0.45 : 0.12,
-          shadowRadius: 20,
+          shadowRadius: 22,
           shadowOffset: { width: 0, height: 8 },
           elevation: 10,
         }}
@@ -215,9 +379,13 @@ function ShelfTabBar({
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        {state.routes.map((route, index) => {
-          const spec = TABS.find((tab) => tab.name === route.name);
-          const focused = state.index === index;
+
+        {/* Tab 1: Today */}
+        {(() => {
+          const route = visibleRoutes.find((r) => r.name === "index");
+          if (!route) return null;
+          const focused = state.routes[state.index]?.name === "index";
+          const spec = TABS.find((t) => t.name === "index");
           return (
             <ShelfTabBarItem
               key={route.key}
@@ -228,18 +396,57 @@ function ShelfTabBar({
               onPress={() => onPress(route, focused)}
             />
           );
-        })}
+        })()}
+
+        {/* Tab 2: Plan */}
+        {(() => {
+          const route = visibleRoutes.find((r) => r.name === "budget");
+          if (!route) return null;
+          const focused = state.routes[state.index]?.name === "budget";
+          const spec = TABS.find((t) => t.name === "budget");
+          return (
+            <ShelfTabBarItem
+              key={route.key}
+              route={route}
+              focused={focused}
+              reviewCount={reviewCount}
+              spec={spec}
+              onPress={() => onPress(route, focused)}
+            />
+          );
+        })()}
+
+        {/* Ergonomic Center Liquid Glass (+) Quick-Log Button */}
+        <ShelfQuickLogButton onPress={onQuickLog} />
+
+        {/* Tab 3: Activity (with live unreviewed counter badge) */}
+        {(() => {
+          const route = visibleRoutes.find((r) => r.name === "activity");
+          if (!route) return null;
+          const focused = state.routes[state.index]?.name === "activity";
+          const spec = TABS.find((t) => t.name === "activity");
+          return (
+            <ShelfTabBarItem
+              key={route.key}
+              route={route}
+              focused={focused}
+              reviewCount={reviewCount}
+              spec={spec}
+              onPress={() => onPress(route, focused)}
+            />
+          );
+        })()}
       </View>
     </View>
   );
 }
 
-const barButton = { width: 40, height: 40, alignItems: "center" as const, justifyContent: "center" as const };
-const unreadDot = { position: "absolute" as const, right: 10, top: 10, width: 8, height: 8, borderRadius: 4 };
+const barButton = { width: 36, height: 36, alignItems: "center" as const, justifyContent: "center" as const };
+const unreadDot = { position: "absolute" as const, right: 8, top: 8, width: 7, height: 7, borderRadius: 3.5 };
 const badge = {
   position: "absolute" as const,
   top: -4,
-  right: -12,
+  right: -10,
   minWidth: 16,
   height: 16,
   borderRadius: 8,
@@ -253,6 +460,8 @@ export default function AppTabs() {
   const [reviewCount, setReviewCount] = useState(0);
   const [unread, setUnread] = useState(0);
   const [syncLabel, setSyncLabel] = useState("");
+  const [netWorth, setNetWorth] = useState<number | null>(null);
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -301,11 +510,29 @@ export default function AppTabs() {
     if (counted) setReviewCount(counted.unreviewed);
     const notes = peek<{ unread: number }>("/api/notifications");
     if (notes) setUnread(notes.unread);
+
+    const updateNetWorth = (accts?: { currentBalanceCents: number; type: string; isHidden: boolean }[]) => {
+      if (!accts) return;
+      const assets = accts
+        .filter((a) => !a.isHidden && a.type !== "credit" && a.type !== "loan")
+        .reduce((s, a) => s + a.currentBalanceCents, 0);
+      const debts = accts
+        .filter((a) => !a.isHidden && (a.type === "credit" || a.type === "loan"))
+        .reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
+      setNetWorth(assets - debts);
+    };
+
+    const cachedAccts = peek<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts");
+    if (cachedAccts?.accounts) updateNetWorth(cachedAccts.accounts);
+
     void load<{ unreviewed: number }>("/api/transactions?countOnly=1")
       .then((res) => setReviewCount(res.unreviewed))
       .catch(() => undefined);
     void load<{ notifications: unknown[]; unread: number }>("/api/notifications")
       .then((res) => setUnread(res.unread))
+      .catch(() => undefined);
+    void load<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts")
+      .then((res) => updateNetWorth(res.accounts))
       .catch(() => undefined);
 
     const unsubCount = subscribeCache<{ unreviewed: number }>("/api/transactions?countOnly=1", (res) => {
@@ -314,44 +541,67 @@ export default function AppTabs() {
     const unsubNotes = subscribeCache<{ unread: number }>("/api/notifications", (res) => {
       if (res && typeof res.unread === "number") setUnread(res.unread);
     });
+    const unsubAccts = subscribeCache<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts", (res) => {
+      if (res?.accounts) updateNetWorth(res.accounts);
+    });
     return () => {
       unsubCount();
       unsubNotes();
+      unsubAccts();
     };
   }, [path]);
 
+  const refreshAfterLog = () => {
+    const now = new Date();
+    void load("/api/dashboard").catch(() => undefined);
+    void load("/api/transactions?").catch(() => undefined);
+    void load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined);
+    void load("/api/transactions?countOnly=1").catch(() => undefined);
+    void load("/api/accounts").catch(() => undefined);
+  };
+
   return (
-    <Tabs
-      tabBar={(props) => (
-        <ShelfTabBar
-          state={props.state}
-          reviewCount={reviewCount}
-          onPress={(route, focused) => {
-            const event = props.navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-            if (!focused && !event.defaultPrevented) props.navigation.navigate(route.name);
-          }}
-        />
-      )}
-      screenOptions={{
-        headerShown: true,
-        headerTransparent: true,
-        header: () => <MobileBar unread={unread} syncLabel={syncLabel} />,
-        tabBarStyle: {
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          elevation: 0,
-          borderTopWidth: 0,
-          backgroundColor: "transparent",
-        },
-      }}
-    >
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
-      <Tabs.Screen name="activity" options={{ title: "Activity" }} />
-      <Tabs.Screen name="budget" options={{ title: "Budget" }} />
-      <Tabs.Screen name="accounts" options={{ title: "Accounts" }} />
-      <Tabs.Screen name="more" options={{ title: "More" }} />
-    </Tabs>
+    <>
+      <Tabs
+        tabBar={(props) => (
+          <ShelfTabBar
+            state={props.state}
+            reviewCount={reviewCount}
+            onPress={(route, focused) => {
+              const event = props.navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+              if (!focused && !event.defaultPrevented) props.navigation.navigate(route.name);
+            }}
+            onQuickLog={() => setQuickLogOpen(true)}
+          />
+        )}
+        screenOptions={{
+          headerShown: true,
+          headerTransparent: true,
+          header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={netWorth} />,
+          tabBarStyle: {
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            elevation: 0,
+            borderTopWidth: 0,
+            backgroundColor: "transparent",
+          },
+        }}
+      >
+        <Tabs.Screen name="index" options={{ title: "Today" }} />
+        <Tabs.Screen name="budget" options={{ title: "Plan" }} />
+        <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+        <Tabs.Screen name="accounts" options={{ href: null, title: "Accounts" }} />
+        <Tabs.Screen name="more" options={{ href: null, title: "More" }} />
+      </Tabs>
+
+      {/* Global Frictionless Quick-Log Sheet */}
+      <QuickLogModal
+        visible={quickLogOpen}
+        onClose={() => setQuickLogOpen(false)}
+        onSuccess={refreshAfterLog}
+      />
+    </>
   );
 }

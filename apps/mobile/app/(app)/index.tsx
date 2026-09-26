@@ -5,9 +5,11 @@ import { api, load as read, peek } from "../../src/api";
 import {
   categorizeLabel,
   dayLabel,
+  daysLeftInMonth,
   flowMoney,
   inDaysPhrase,
   money,
+  monthLabel,
   monthRange,
   shelfColor,
   shortDate,
@@ -23,6 +25,7 @@ import {
   LedgerRow,
   Loading,
   Note,
+  PacingCard,
   Progress,
   ReviewBanner,
   Screen,
@@ -58,7 +61,6 @@ export default function HomeScreen() {
   const [data, setData] = useState<Dash | null>(() => peek<Dash>("/api/dashboard") ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
     return read<Dash>("/api/dashboard")
@@ -90,103 +92,114 @@ export default function HomeScreen() {
   const today = todayISO();
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
-  const bills = (data?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today).slice(0, 4);
+  const currentMonthName = now.toLocaleDateString("en-US", { month: "long" });
+  const daysLeft = daysLeftInMonth(now);
+
+  const bills = (data?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
+  const upcomingBillsSlice = bills.slice(0, 3);
+  const upcomingBillsTotalCents = bills.reduce((sum, b) => sum + b.amountCents, 0);
+
   const categories = (data?.spending ?? []).filter((row) => row.cents > 0);
-  const restCents = categories.slice(5).reduce((sum, row) => sum + row.cents, 0);
+  const restCents = categories.slice(4).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
     restCents > 0
-      ? [...categories.slice(0, 5), { id: "rest", name: "Everything else", cents: restCents, color: "#8B939E" }]
-      : categories;
+      ? [...categories.slice(0, 4), { id: "rest", name: "Other categories", cents: restCents, color: "#8B939E" }]
+      : categories.slice(0, 5);
+
   const latest = data?.transactions.slice(0, 4) ?? [];
   const suggestions = data?.suggestedSubscriptions?.length ?? 0;
-  const left = data?.budget.remainingCents ?? 0;
-  const overPlan = Boolean(data && data.budget.plannedCents > 0 && left < 0);
-  const showCash = Boolean(data && (data.cashFlow.incomeCents !== 0 || data.cashFlow.spendingCents !== 0));
-  const shown = scrub?.cents ?? data?.cashFlow.spendingCents ?? 0;
+
+  // Context-Aware Financial Pacing calculations
+  const totalPlannedCents = data?.budget.plannedCents ?? 0;
+  const spentCents = data?.budget.spentCents ?? 0;
+  const totalRemainingCents = totalPlannedCents - spentCents;
+
+  // Discretionary pool = remaining budget minus upcoming fixed commitments
+  const discretionaryRemainingCents = Math.max(0, totalRemainingCents - upcomingBillsTotalCents);
+  const safeDailyCents = daysLeft > 0 ? Math.round(discretionaryRemainingCents / daysLeft) : 0;
 
   return (
     <Screen framed onRefresh={load}>
       {error ? <Note>{error}</Note> : null}
       {!data && !error ? <Loading /> : null}
+
       {data ? (
         <>
-          <Hero
-            label={scrub ? dayLabel(scrub.date) : "Spent this month"}
-            cents={shown}
-            points={data.spendSeries}
-            onScrub={setScrub}
-            live={scrub != null}
-          >
-            {scrub || !showCash ? null : (
-              <Facts
-                items={[
-                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-                  {
-                    kicker: data.cashFlow.savedCents < 0 ? "Net deficit" : "Net cash flow",
-                    value: `${data.cashFlow.savedCents >= 0 ? "+" : "-"}${money(Math.abs(data.cashFlow.savedCents))}`,
-                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-                  },
-                ]}
-              />
-            )}
-          </Hero>
-
-          {data.budget.plannedCents > 0 ? (
-            <Pressable
+          {/* Primary Financial Pacing Engine */}
+          {totalPlannedCents > 0 ? (
+            <PacingCard
+              dailyBudgetCents={safeDailyCents}
+              daysLeft={daysLeft}
+              monthName={currentMonthName}
+              totalPlannedCents={totalPlannedCents}
+              spentCents={spentCents}
+              fixedBillsCents={upcomingBillsTotalCents}
+              discretionaryRemainingCents={discretionaryRemainingCents}
               onPress={() => {
                 tapPress();
                 router.push("/(app)/budget");
               }}
-              style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
+            />
+          ) : (
+            <Hero
+              label="Cash flow this month"
+              cents={data.cashFlow.savedCents}
+              signed
+              status={{ label: "No budget set", tone: "neutral" }}
+              points={data.spendSeries}
             >
-              <Card tone="glass" style={{ padding: 18, gap: 12 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  <View style={{ gap: 2 }}>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                      Monthly Budget
-                    </Text>
-                    <Text style={{ fontSize: 17, fontWeight: "700", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] }}>
-                      {overPlan ? "Over budget" : `${money(left)} left to spend`}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end", gap: 2 }}>
-                    <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {money(data.budget.spentCents)} of {money(data.budget.plannedCents)}
-                    </Text>
-                    {overPlan ? (
-                      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.danger, fontVariant: ["tabular-nums"] }}>
-                        +{money(Math.abs(left))} over
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                <Progress
-                  value={data.budget.spentCents}
-                  max={data.budget.plannedCents}
-                  color={overPlan ? colors.danger : colors.positive}
-                />
-              </Card>
-            </Pressable>
+              <Facts
+                items={[
+                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
+                  { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
+                  {
+                    kicker: data.cashFlow.savedCents < 0 ? "Net deficit" : "Net saved",
+                    value: money(Math.abs(data.cashFlow.savedCents)),
+                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+                  },
+                ]}
+              />
+            </Hero>
+          )}
+
+          {/* Quick Review Prompt when Unreviewed Charges Exist */}
+          {data.unreviewed.count > 0 ? (
+            <ReviewBanner
+              count={data.unreviewed.count}
+              onPress={() => {
+                tapPress();
+                router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+              }}
+            />
           ) : null}
 
+          {/* First run / empty state */}
           {data.accountCount === 0 && data.transactions.length === 0 ? (
-            <View style={{ gap: 12, alignItems: "center", paddingVertical: 16 }}>
-              <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>Start with one account</Text>
-              <Button label="Add an account" onPress={() => router.push("/(app)/accounts")} />
-              <Button label={busy ? "Loading…" : "Load sample data"} tone="quiet" onPress={() => void sample()} busy={busy} />
-            </View>
+            <Card>
+              <View style={{ gap: 14, alignItems: "center", padding: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.ink }}>
+                  Welcome to Shelf
+                </Text>
+                <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
+                  Connect your bank or load demo data to track daily pacing and organize your budget.
+                </Text>
+                <Button label="Add an account" onPress={() => router.push("/(app)/accounts")} block />
+                <Button label={busy ? "Loading…" : "Load demo data"} tone="quiet" onPress={() => void sample()} busy={busy} block />
+              </View>
+            </Card>
           ) : (
             <>
-              {data.unreviewed.count > 0 ? (
-                <ReviewBanner
-                  count={data.unreviewed.count}
-                  onPress={() => router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } })}
-                />
-              ) : null}
-
+              {/* Latest Transactions Ledger */}
               {latest.length > 0 ? (
                 <View style={{ gap: 8 }}>
-                  <Section title="Latest" action="Activity" onAction={() => router.push("/(app)/activity")} />
+                  <Section
+                    title="Latest Activity"
+                    action="See all"
+                    onAction={() => {
+                      tapPress();
+                      router.push("/(app)/activity");
+                    }}
+                  />
                   <Card>
                     {latest.map((tx, index) => {
                       const when = dayLabel(tx.date);
@@ -202,7 +215,10 @@ export default function HomeScreen() {
                           meta={[whenShort, tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
                           amount={flow.text}
                           amountColor={flow.color}
-                          onPress={() => router.push({ pathname: "/(app)/activity", params: { q: label } })}
+                          onPress={() => {
+                            tapPress();
+                            router.push({ pathname: "/(app)/activity", params: { q: label } });
+                          }}
                         />
                       );
                     })}
@@ -210,79 +226,107 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {bills.length > 0 || suggestions > 0 ? (
+              {/* Upcoming Fixed Commitments (Bills & Subscriptions) */}
+              {upcomingBillsSlice.length > 0 || suggestions > 0 ? (
                 <View style={{ gap: 8 }}>
-                  <Section title="Coming up" action="Bills" onAction={() => router.push("/bills")} />
+                  <Section
+                    title="Committed Bills"
+                    action="All bills"
+                    onAction={() => {
+                      tapPress();
+                      router.push("/bills");
+                    }}
+                  />
                   <Card>
-                    {bills.map((bill, index) => (
+                    {upcomingBillsSlice.map((bill, index) => (
                       <LedgerRow
                         key={bill.id}
                         divided={index > 0}
                         name={bill.merchantName}
                         meta={inDaysPhrase(bill.nextDate)}
                         amount={money(bill.amountCents)}
-                        onPress={() => router.push("/bills")}
+                        onPress={() => {
+                          tapPress();
+                          router.push("/bills");
+                        }}
                       />
                     ))}
                     {suggestions > 0 ? (
                       <Pressable
-                        onPress={() => router.push("/bills")}
-                        style={({ pressed }) => [
-                          {
-                            minHeight: 56,
-                            paddingHorizontal: 16,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            borderTopWidth: bills.length ? 1 : 0,
-                            borderTopColor: colors.line,
-                          },
-                          pressed ? { backgroundColor: colors.fill } : null,
-                        ]}
-                      >
-                        <Text style={{ fontSize: 16, color: colors.ink }}>
-                          {suggestions === 1 ? "1 charge looks like a bill" : `${suggestions} charges look like bills`}
-                        </Text>
-                        <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>Check</Text>
-                      </Pressable>
-                    ) : null}
-                  </Card>
-                </View>
-              ) : null}
-
-              {spendRows.length > 0 ? (
-                <View style={{ gap: 8 }}>
-                  <Section title="Where it went" trailing={money(data.cashFlow.spendingCents)} action="Compare" onAction={() => router.push("/insights")} />
-                  <Card>
-                    <SpendMix rows={spendRows.map((row) => ({ key: row.id || row.name, cents: row.cents, color: shelfColor(row.color) }))} />
-                    {spendRows.map((row, index) => (
-                      <Pressable
-                        key={row.id || row.name}
-                        onPress={() =>
-                          router.push(
-                            row.id === "rest"
-                              ? "/insights"
-                              : { pathname: "/(app)/activity", params: { categoryId: row.id, start: range.start, end: range.end } },
-                          )
-                        }
+                        onPress={() => {
+                          tapPress();
+                          router.push("/bills");
+                        }}
                         style={({ pressed }) => [
                           {
                             minHeight: 52,
                             paddingHorizontal: 16,
                             flexDirection: "row",
                             alignItems: "center",
-                            gap: 8,
-                            borderTopWidth: index === 0 ? 0 : 1,
+                            justifyContent: "space-between",
+                            borderTopWidth: upcomingBillsSlice.length ? StyleSheet.hairlineWidth : 0,
+                            borderTopColor: colors.line,
+                          },
+                          pressed ? { backgroundColor: colors.fill } : null,
+                        ]}
+                      >
+                        <Text style={{ fontSize: 15, color: colors.ink }}>
+                          {suggestions === 1 ? "1 potential recurring charge" : `${suggestions} potential recurring charges`}
+                        </Text>
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accentInk }}>Review</Text>
+                      </Pressable>
+                    ) : null}
+                  </Card>
+                </View>
+              ) : null}
+
+              {/* Where It Went (Category Spending) */}
+              {spendRows.length > 0 ? (
+                <View style={{ gap: 8 }}>
+                  <Section
+                    title="Where It Went"
+                    trailing={money(data.cashFlow.spendingCents)}
+                    action="Insights"
+                    onAction={() => {
+                      tapPress();
+                      router.push("/insights");
+                    }}
+                  />
+                  <Card>
+                    <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+                      <SpendMix rows={spendRows.map((row) => ({ key: row.id || row.name, cents: row.cents, color: shelfColor(row.color) }))} />
+                    </View>
+                    {spendRows.map((row, index) => (
+                      <Pressable
+                        key={row.id || row.name}
+                        onPress={() => {
+                          tapPress();
+                          router.push(
+                            row.id === "rest"
+                              ? "/insights"
+                              : { pathname: "/(app)/activity", params: { categoryId: row.id, start: range.start, end: range.end } },
+                          );
+                        }}
+                        style={({ pressed }) => [
+                          {
+                            minHeight: 50,
+                            paddingHorizontal: 16,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 10,
+                            borderTopWidth: index === 0 ? StyleSheet.hairlineWidth : StyleSheet.hairlineWidth,
                             borderTopColor: colors.line,
                           },
                           pressed ? { backgroundColor: colors.fill } : null,
                         ]}
                       >
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: shelfColor(row.color) }} />
-                        <Text style={{ flex: 1, fontSize: 16, color: colors.ink }} numberOfLines={1}>
+                        <Text style={{ flex: 1, fontSize: 15, color: colors.ink }} numberOfLines={1}>
                           {row.name}
                         </Text>
-                        <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(row.cents)}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>
+                          {money(row.cents)}
+                        </Text>
                       </Pressable>
                     ))}
                   </Card>

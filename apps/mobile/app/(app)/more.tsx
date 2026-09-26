@@ -1,7 +1,7 @@
 import { router, usePathname } from "expo-router";
 import { Text } from "react-native";
 import { useSession } from "../../src/session";
-import { Button, Card, colors, MenuRow, Screen, Section } from "../../src/ui";
+import { Back, Button, Card, colors, MenuRow, Screen, Section } from "../../src/ui";
 
 const PRIMARY = [
   ["/insights", "Insights", "spark"],
@@ -21,7 +21,11 @@ export default function MoreScreen() {
   const { signOut } = useSession();
   const path = usePathname();
   return (
-    <Screen title="More" framed>
+    <Screen
+      title="More"
+      framed={!router.canGoBack()}
+      refresh={router.canGoBack() ? <Back label="Today" /> : undefined}
+    >
       <Card>
         {PRIMARY.map(([href, label, icon], index) => (
           <MenuRow key={href} title={label} icon={icon} divided={index > 0} active={path.startsWith(href)} onPress={() => router.push(href)} />

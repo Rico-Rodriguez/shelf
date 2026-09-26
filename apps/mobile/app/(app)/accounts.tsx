@@ -5,7 +5,7 @@ import { api, load as read, peek } from "../../src/api";
 import { isLiability, money, signed } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
-import { Button, Card, colors, Field, GlassButton, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
+import { Back, Button, Card, colors, Field, GlassButton, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
 
 type Account = {
   id: string;
@@ -122,7 +122,8 @@ export default function AccountsScreen() {
   return (
     <Screen
       title="Accounts"
-      framed
+      framed={!router.canGoBack()}
+      refresh={router.canGoBack() ? <Back label="Today" /> : undefined}
       onRefresh={load}
       action={
         <GlassButton

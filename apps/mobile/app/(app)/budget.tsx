@@ -2,7 +2,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
+import { dayLabel, daysLeftInMonth, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
@@ -204,11 +204,14 @@ export default function BudgetScreen() {
   const hasPlan = plannedTotal > 0;
   const left = plannedTotal - (data?.expenseSpentCents ?? 0);
   const over = hasPlan && left < 0;
+  const isCurrentMonth = cursor.year === now.getFullYear() && cursor.month === now.getMonth() + 1;
+  const daysLeft = isCurrentMonth ? daysLeftInMonth(now) : 0;
+  const dailyLeft = daysLeft > 0 && left > 0 ? Math.round(left / daysLeft) : 0;
 
   return (
     <>
       <Screen
-        title="Budget"
+        title="Plan"
         framed
         onRefresh={load}
         action={
@@ -244,7 +247,7 @@ export default function BudgetScreen() {
               label={hasPlan ? (over ? "Over budget" : "Left to spend") : "Spent this month"}
               cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
               tone={hasPlan ? (over ? "bad" : "good") : undefined}
-              status={hasPlan ? null : { label: "No plan yet", tone: "neutral" }}
+              status={hasPlan ? (over ? { label: "Over pace", tone: "bad" } : isCurrentMonth ? { label: "On pace", tone: "good" } : null) : { label: "No plan yet", tone: "neutral" }}
               points={hasPlan ? undefined : data.spendSeries}
               meter={hasPlan ? { value: data.expenseSpentCents, max: plannedTotal } : undefined}
             >
@@ -252,7 +255,10 @@ export default function BudgetScreen() {
                 <Facts
                   items={[
                     { kicker: "Spent", value: money(data.expenseSpentCents) },
-                    { kicker: "Total Budget", value: money(plannedTotal) },
+                    { kicker: "Allocated", value: money(plannedTotal) },
+                    ...(isCurrentMonth && daysLeft > 0 && !over
+                      ? [{ kicker: "Daily Safe", value: `${money(dailyLeft)}/d`, color: colors.accentInk }]
+                      : []),
                   ]}
                 />
               ) : null}
