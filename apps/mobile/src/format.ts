@@ -81,6 +81,10 @@ export function monthLabel(year: number, month: number): string {
   return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+export function shortMonthLabel(year: number, month: number): string {
+  return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const date = new Date(year, month - 1 + delta, 1);
   return { year: date.getFullYear(), month: date.getMonth() + 1 };

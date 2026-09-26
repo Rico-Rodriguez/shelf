@@ -2,10 +2,10 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor } from "../../src/format";
+import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, Hero, InlineLoading, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, Screen, Section, Sheet } from "../../src/ui";
 import { Icon } from "../../src/icons";
 
 type BudgetRow = {
@@ -216,15 +216,23 @@ export default function BudgetScreen() {
             <MonthNav
               year={cursor.year}
               month={cursor.month}
-              label={monthLabel(cursor.year, cursor.month)}
+              compact
               onChange={(year, month) => setCursor({ year, month })}
             />
-            <Pressable onPress={() => setPlanOpen(true)} hitSlop={8} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-              <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>Target</Text>
-            </Pressable>
-            <Pressable onPress={() => void openAdd()} hitSlop={8} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
-              <Icon name="plus" size={18} color={colors.ink} />
-            </Pressable>
+            <GlassIconButton
+              icon="flag"
+              label="Set target"
+              size={34}
+              iconSize={15}
+              onPress={() => setPlanOpen(true)}
+            />
+            <GlassIconButton
+              icon="plus"
+              label="Add category"
+              size={34}
+              iconSize={16}
+              onPress={() => void openAdd()}
+            />
           </View>
         }
       >

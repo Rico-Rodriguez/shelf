@@ -15,6 +15,7 @@ import {
   Card,
   colors,
   Field,
+  GlassButton,
   Loading,
   MonthNav,
   Note,
@@ -351,16 +352,16 @@ export default function ActivityScreen() {
         framed
         scrollable={false}
         action={
-          <Pressable
+          <GlassButton
+            label="Done"
             onPress={() => {
               tapPress();
               setFocusMode(false);
               setUnreviewedOnly(false);
             }}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-          >
-            <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 16 }}>Done</Text>
-          </Pressable>
+            compact
+            tone="accent"
+          />
         }
       >
         <ScrollView
@@ -495,15 +496,15 @@ export default function ActivityScreen() {
       framed
       scrollable={false}
       action={
-        <Pressable
+        <GlassButton
+          label="Add"
+          icon="plus"
           onPress={() => {
             tapPress();
             setAdding(true);
           }}
-          style={styles.addButton}
-        >
-          <Text style={styles.addButtonText}>Add</Text>
-        </Pressable>
+          compact
+        />
       }
     >
       <FlatList
@@ -842,13 +843,19 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 14,
     borderCurve: "continuous",
-    backgroundColor: colors.card,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: colors.line,
-    borderTopColor: colors.specularTop || colors.line,
+    borderTopColor: colors.specularTop || colors.glassBorder,
+    borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+    borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+    borderRightColor: colors.specularSides || colors.glassBorderSubtle,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
   },
   filterDot: {
     position: "absolute",

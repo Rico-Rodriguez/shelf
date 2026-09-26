@@ -5,7 +5,7 @@ import { api, load as read, peek } from "../../src/api";
 import { isLiability, money, signed } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
-import { Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Field, GlassButton, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
 
 type Account = {
   id: string;
@@ -125,9 +125,12 @@ export default function AccountsScreen() {
       framed
       onRefresh={load}
       action={
-        <Pressable onPress={() => setOpen(true)} style={{ backgroundColor: colors.control, borderRadius: 999, minHeight: 36, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.controlInk, fontWeight: "600" }}>Add</Text>
-        </Pressable>
+        <GlassButton
+          label="Add"
+          icon="plus"
+          onPress={() => setOpen(true)}
+          compact
+        />
       }
     >
       {error ? <Note>{error}</Note> : null}

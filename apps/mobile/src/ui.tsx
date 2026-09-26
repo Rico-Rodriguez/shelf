@@ -10,7 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useWordmark } from "./brand";
 import { ScrollLockProvider } from "./scroll";
 import { GroupedBars, SpendChart } from "./chart";
-import { flowMoney, money, shiftMonth } from "./format";
+import { flowMoney, money, monthLabel, shiftMonth, shortMonthLabel } from "./format";
 import { tapPress, tapSelect } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
@@ -119,7 +119,7 @@ export function Screen({
   const hasPinnedNav = !framed && Boolean(refresh);
 
   const topPadding = framed
-    ? (title ? insets.top + 16 : insets.top + 60)
+    ? insets.top + 58
     : hasPinnedNav
       ? insets.top + 52
       : insets.top + 16;
@@ -194,12 +194,12 @@ export function Screen({
           <View style={{ flex: 1, paddingTop: topPadding }}>
             {!hasPinnedNav && !framed && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
             {title ? (
-              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }]}>
-                <View style={{ flexShrink: 1 }}>
+              <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 }]}>
+                <View style={{ flexShrink: 1, justifyContent: "center" }}>
                   <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                   {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
                 </View>
-                {action}
+                {action ? <View style={styles.headerAction}>{action}</View> : null}
               </View>
             ) : null}
             {children}
@@ -236,11 +236,11 @@ export function Screen({
           {!hasPinnedNav && !framed && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
           {title ? (
             <View style={styles.header}>
-              <View style={{ flexShrink: 1 }}>
+              <View style={{ flexShrink: 1, justifyContent: "center" }}>
                 <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
                 {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
               </View>
-              {action}
+              {action ? <View style={styles.headerAction}>{action}</View> : null}
             </View>
           ) : null}
           {children}
@@ -968,11 +968,143 @@ export function Progress({
   );
 }
 
-export function MonthNav({ year, month, label, onChange }: { year: number; month: number; label: string; onChange: (year: number, month: number) => void }) {
+export function GlassIconButton({
+  icon,
+  onPress,
+  label,
+  size = 34,
+  iconSize = 16,
+  color,
+  active,
+}: {
+  icon: string;
+  onPress: () => void;
+  label: string;
+  size?: number;
+  iconSize?: number;
+  color?: string;
+  active?: boolean;
+}) {
   const styles = useStyles();
   const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.glassIconBtn,
+        { width: size, height: size, borderRadius: size / 2 },
+        active ? { backgroundColor: palette.accentSoft } : null,
+        pressed ? { opacity: 0.75, transform: [{ scale: 0.94 }] } : null,
+      ]}
+      hitSlop={8}
+    >
+      {!reduceTransparency && !active ? (
+        <BlurView
+          intensity={isDark ? 50 : 65}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <Icon name={icon} size={iconSize} color={color || (active ? palette.accentInk : palette.ink)} />
+    </Pressable>
+  );
+}
+
+export function GlassButton({
+  label,
+  icon,
+  onPress,
+  compact = false,
+  tone = "default",
+}: {
+  label: string;
+  icon?: string;
+  onPress: () => void;
+  compact?: boolean;
+  tone?: "default" | "primary" | "accent";
+}) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
+  const isPrimary = tone === "primary";
+  const isAccent = tone === "accent";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        tapPress();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.glassBtn,
+        compact ? { minHeight: 32, paddingHorizontal: 10 } : null,
+        isPrimary ? { backgroundColor: palette.control } : null,
+        isAccent ? { backgroundColor: palette.accentSoft, borderColor: palette.accent } : null,
+        pressed ? { opacity: 0.8, transform: [{ scale: 0.96 }] } : null,
+      ]}
+      hitSlop={8}
+    >
+      {!reduceTransparency && !isPrimary && !isAccent ? (
+        <BlurView
+          intensity={isDark ? 50 : 65}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      {icon ? <Icon name={icon} size={compact ? 13 : 15} color={isPrimary ? palette.controlInk : isAccent ? palette.accentInk : palette.ink} /> : null}
+      <Text
+        style={[
+          styles.glassBtnText,
+          compact ? { fontSize: 12 } : null,
+          isPrimary ? { color: palette.controlInk } : null,
+          isAccent ? { color: palette.accentInk } : null,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function MonthNav({
+  year,
+  month,
+  label,
+  onChange,
+  compact = false,
+}: {
+  year: number;
+  month: number;
+  label?: string;
+  onChange: (year: number, month: number) => void;
+  compact?: boolean;
+}) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+  const reduceTransparency = useReduceTransparency();
+  const isDark = palette.scheme === "dark";
+  const displayLabel = label ?? (compact ? shortMonthLabel(year, month) : monthLabel(year, month));
+
   return (
     <View style={styles.monthNav}>
+      {!reduceTransparency ? (
+        <BlurView
+          intensity={isDark ? 50 : 65}
+          tint={palette.blurTint}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <Pressable
         accessibilityLabel="Previous month"
         onPress={() => {
@@ -980,12 +1112,15 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
           const next = shiftMonth(year, month, -1);
           onChange(next.year, next.month);
         }}
-        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: colors.fill } : null]}
-        hitSlop={12}
+        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)" } : null]}
+        hitSlop={8}
       >
-        <Icon name="chevron-left" size={17} color={palette.ink} />
+        <Icon name="chevron-left" size={14} color={palette.ink} />
       </Pressable>
-      <Text style={styles.monthLabel}>{label}</Text>
+      <View style={styles.monthLabelWrap}>
+        <Icon name="calendar" size={12} color={palette.muted} />
+        <Text style={styles.monthLabel}>{displayLabel}</Text>
+      </View>
       <Pressable
         accessibilityLabel="Next month"
         onPress={() => {
@@ -993,10 +1128,10 @@ export function MonthNav({ year, month, label, onChange }: { year: number; month
           const next = shiftMonth(year, month, 1);
           onChange(next.year, next.month);
         }}
-        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: colors.fill } : null]}
-        hitSlop={12}
+        style={({ pressed }) => [styles.monthBtn, pressed ? { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)" } : null]}
+        hitSlop={8}
       >
-        <Icon name="chevron" size={17} color={palette.ink} />
+        <Icon name="chevron" size={14} color={palette.ink} />
       </Pressable>
     </View>
   );
@@ -1286,7 +1421,19 @@ function makeStyles(colors: Palette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
     scroll: { padding: 16, paddingBottom: 100, gap: 20 },
-    header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      minHeight: 40,
+      marginBottom: 2,
+    },
+    headerAction: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
     backBtn: {
       flexDirection: "row",
       alignItems: "center",
@@ -1296,8 +1443,8 @@ function makeStyles(colors: Palette) {
       marginLeft: -4,
     },
     back: { color: colors.ink, fontSize: 16, fontWeight: "500", letterSpacing: -0.2 },
-    title: { fontSize: 34, fontWeight: "700", letterSpacing: -1.3, color: colors.ink },
-    subtitle: { marginTop: 4, fontSize: 15, lineHeight: 21, color: colors.muted, letterSpacing: -0.1 },
+    title: { fontSize: 26, fontWeight: "700", letterSpacing: -0.7, color: colors.ink },
+    subtitle: { marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.muted, letterSpacing: -0.1 },
     card: {
       backgroundColor: colors.glass,
       borderRadius: 22,
@@ -1472,11 +1619,94 @@ function makeStyles(colors: Palette) {
     factValue: { fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink, fontVariant: ["tabular-nums"] },
     mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill, borderRadius: 99, overflow: "hidden" },
     track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
-    chart: { height: 148, marginHorizontal: -20, marginTop: 8 },
-    monthNav: { flexDirection: "row", alignItems: "center", gap: 6 },
-    monthBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-    monthChevron: { fontSize: 24, lineHeight: 26, color: colors.ink },
-    monthLabel: { minWidth: 104, textAlign: "center", fontSize: 16, fontWeight: "600", letterSpacing: -0.4, color: colors.ink },
+    monthNav: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.glass,
+      borderRadius: 19,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.25 : 0.05,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    monthBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    monthChevron: { fontSize: 18, lineHeight: 20, color: colors.ink },
+    monthLabelWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 7,
+    },
+    monthLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+      color: colors.ink,
+      fontVariant: ["tabular-nums"],
+    },
+    glassBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      minHeight: 34,
+      paddingHorizontal: 12,
+      borderRadius: 17,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+      backgroundColor: colors.glass,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.25 : 0.05,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    glassBtnText: {
+      fontSize: 13,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+      color: colors.ink,
+    },
+    glassIconBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+      backgroundColor: colors.glass,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.25 : 0.05,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
     banner: {
       minHeight: 60,
       paddingHorizontal: 16,
@@ -1534,14 +1764,22 @@ function makeStyles(colors: Palette) {
     searchWrap: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: isDark ? "rgba(24, 28, 36, 0.85)" : "rgba(235, 238, 242, 0.85)",
-      borderRadius: 14,
+      backgroundColor: colors.glass,
+      borderRadius: 16,
       borderCurve: "continuous",
       borderWidth: 1,
-      borderColor: colors.line,
+      borderTopColor: colors.specularTop || colors.glassBorder,
+      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
+      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
+      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       minHeight: 44,
       paddingHorizontal: 14,
       gap: 10,
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0.2 : 0.04,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
     },
     search: {
       flex: 1,
