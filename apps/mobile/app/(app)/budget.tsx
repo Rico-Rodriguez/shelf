@@ -243,26 +243,171 @@ export default function BudgetScreen() {
         {!data && !error ? <Loading /> : null}
         {data ? (
           <>
-            <Hero
-              label={hasPlan ? (over ? "Over budget" : "Left to spend") : "Spent this month"}
-              cents={hasPlan ? Math.abs(left) : data.expenseSpentCents}
-              tone={hasPlan ? (over ? "bad" : "good") : undefined}
-              status={hasPlan ? (over ? { label: "Over pace", tone: "bad" } : isCurrentMonth ? { label: "On pace", tone: "good" } : null) : { label: "No plan yet", tone: "neutral" }}
-              points={hasPlan ? undefined : data.spendSeries}
-              meter={hasPlan ? { value: data.expenseSpentCents, max: plannedTotal } : undefined}
+            {/* Purpose-Built Envelope Allocation Overview */}
+            <Pressable
+              onPress={() => {
+                tapPress();
+                setPlanOpen(true);
+              }}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.card,
+                  borderRadius: 24,
+                  borderCurve: "continuous",
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  padding: 20,
+                  gap: 12,
+                  overflow: "hidden",
+                  shadowColor: "#000",
+                  shadowOpacity: colors.scheme === "dark" ? 0.28 : 0.04,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: 5 },
+                  elevation: 3,
+                },
+                pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null,
+              ]}
             >
-              {hasPlan ? (
-                <Facts
-                  items={[
-                    { kicker: "Spent", value: money(data.expenseSpentCents) },
-                    { kicker: "Allocated", value: money(plannedTotal) },
-                    ...(isCurrentMonth && daysLeft > 0 && !over
-                      ? [{ kicker: "Daily Safe", value: `${money(dailyLeft)}/d`, color: colors.accentInk }]
-                      : []),
-                  ]}
-                />
+              {/* Top Header: Eyebrow + Allocation Status */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: colors.muted, textTransform: "uppercase" }}>
+                  ENVELOPE ALLOCATION
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
+                    paddingHorizontal: 9,
+                    paddingVertical: 4,
+                    borderRadius: 99,
+                    borderCurve: "continuous",
+                    backgroundColor:
+                      data.leftoverCents < 0
+                        ? colors.scheme === "dark"
+                          ? "rgba(255, 107, 74, 0.16)"
+                          : "rgba(217, 74, 46, 0.12)"
+                        : data.leftoverCents === 0
+                          ? colors.scheme === "dark"
+                            ? "rgba(61, 190, 154, 0.16)"
+                            : "rgba(27, 122, 98, 0.12)"
+                          : colors.scheme === "dark"
+                            ? "rgba(255, 255, 255, 0.1)"
+                            : "rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor:
+                        data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "700",
+                      letterSpacing: -0.1,
+                      color:
+                        data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
+                    }}
+                  >
+                    {data.leftoverCents < 0 ? "Over Allocated" : data.leftoverCents === 0 ? "Balanced" : "Buffer Available"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Primary Allocation Metric */}
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+                <Text
+                  style={{
+                    fontSize: 42,
+                    fontWeight: "700",
+                    letterSpacing: -1.6,
+                    color: data.leftoverCents < 0 ? colors.danger : colors.ink,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {data.leftoverCents > 0
+                    ? money(data.leftoverCents)
+                    : data.leftoverCents < 0
+                      ? `-${money(Math.abs(data.leftoverCents))}`
+                      : money(plannedTotal)}
+                </Text>
+                <Text style={{ fontSize: 18, fontWeight: "500", color: colors.muted, letterSpacing: -0.3 }}>
+                  {data.leftoverCents > 0 ? "unassigned" : data.leftoverCents < 0 ? "over budget" : "budgeted"}
+                </Text>
+              </View>
+
+              {/* Context Framing */}
+              <Text style={{ fontSize: 14, lineHeight: 20, color: colors.muted, letterSpacing: -0.1 }}>
+                {data.leftoverCents > 0
+                  ? `You have ${money(data.leftoverCents)} of expected earnings unallocated. Tap to assign to categories.`
+                  : data.leftoverCents < 0
+                    ? `Category budgets exceed planned earnings by ${money(Math.abs(data.leftoverCents))}. Tap to adjust envelopes.`
+                    : `Every dollar of ${money(data.plannedIncomeCents)} planned earnings is assigned across ${data.rows.length} categories.`}
+              </Text>
+
+              {/* Visual Allocation Track */}
+              {data.plannedIncomeCents > 0 ? (
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <Progress
+                    value={data.expensePlannedCents}
+                    max={data.plannedIncomeCents}
+                    color={data.leftoverCents < 0 ? colors.danger : colors.accent}
+                  />
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {`Allocated ${money(data.expensePlannedCents)} of ${money(data.plannedIncomeCents)}`}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {`${Math.round((data.expensePlannedCents / (data.plannedIncomeCents || 1)) * 100)}% assigned`}
+                    </Text>
+                  </View>
+                </View>
               ) : null}
-            </Hero>
+
+              {/* 3 Inset Metrics */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingTop: 12,
+                  marginTop: 4,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.line,
+                }}
+              >
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
+                    Expected Income
+                  </Text>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
+                    {money(data.plannedIncomeCents)}
+                  </Text>
+                </View>
+                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
+                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
+                    Allocated
+                  </Text>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
+                    {money(data.expensePlannedCents)}
+                  </Text>
+                </View>
+                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
+                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
+                    Total Spent
+                  </Text>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
+                    {money(data.expenseSpentCents)}
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
 
             {visibleGroups.map((group) => {
               const available = group.rows.reduce((sum, row) => sum + row.availableCents, 0);

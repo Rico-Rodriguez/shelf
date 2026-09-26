@@ -264,10 +264,7 @@ export function Card({
   tone?: "default" | "inset" | "glass" | "prominent";
 }) {
   const styles = useStyles();
-  const { palette } = useTheme();
-  const reduceTransparency = useReduceTransparency();
   const isInset = tone === "inset";
-  const isGlass = tone === "glass" || tone === "prominent";
   const isProminent = tone === "prominent";
 
   return (
@@ -275,18 +272,10 @@ export function Card({
       style={[
         styles.card,
         isInset ? styles.cardInset : null,
-        isGlass ? styles.glassCard : null,
-        isProminent ? styles.glassProminent : null,
+        isProminent ? styles.cardProminent : null,
         style,
       ]}
     >
-      {isGlass && !reduceTransparency ? (
-        <BlurView
-          intensity={palette.scheme === "dark" ? (isProminent ? 65 : 45) : (isProminent ? 80 : 60)}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       {children}
     </View>
   );
@@ -302,9 +291,81 @@ export function GlassCard({
   tone?: "default" | "prominent" | "inset";
 }) {
   return (
-    <Card tone={tone === "prominent" ? "prominent" : tone === "inset" ? "inset" : "glass"} style={style}>
+    <Card tone={tone === "prominent" ? "prominent" : tone === "inset" ? "inset" : "default"} style={style}>
       {children}
     </Card>
+  );
+}
+
+export function GroupedCard({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const styles = useStyles();
+  return <View style={[styles.groupedCard, style]}>{children}</View>;
+}
+
+export function GroupedRow({
+  icon,
+  merchantMark,
+  color,
+  title,
+  subtitle,
+  trailing,
+  trailingColor,
+  onPress,
+  divided = false,
+  chevron = false,
+}: {
+  icon?: string;
+  merchantMark?: string;
+  color?: string | null;
+  title: string;
+  subtitle?: string;
+  trailing?: string;
+  trailingColor?: string;
+  onPress?: () => void;
+  divided?: boolean;
+  chevron?: boolean;
+}) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+
+  const body = (
+    <View style={styles.ledger}>
+      {divided ? <View style={[styles.hairline, { left: merchantMark || icon ? 64 : 16 }]} /> : null}
+      {merchantMark ? (
+        <MerchantMark name={merchantMark} color={color} />
+      ) : icon ? (
+        <View style={styles.menuGlyph}>
+          <Icon name={icon} size={18} color={palette.ink} />
+        </View>
+      ) : null}
+      <View style={styles.ledgerCopy}>
+        <Text numberOfLines={1} style={styles.rowTitle}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text numberOfLines={1} style={styles.meta}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {trailing ? (
+        <Text style={[styles.amount, trailingColor ? { color: trailingColor } : null]}>{trailing}</Text>
+      ) : null}
+      {chevron ? <Icon name="chevron" size={15} color={palette.tertiary} /> : null}
+    </View>
+  );
+
+  if (!onPress) return body;
+  return (
+    <PressScale onPress={onPress} pressedStyle={{ backgroundColor: palette.fill }}>
+      {body}
+    </PressScale>
   );
 }
 
@@ -1442,25 +1503,32 @@ export function PacingCard({
 }) {
   const styles = useStyles();
   const { palette } = useTheme();
-  const isOver = discretionaryRemainingCents < 0 || dailyBudgetCents <= 0;
-  const isCaution = !isOver && totalPlannedCents > 0 && spentCents / totalPlannedCents > 0.85;
+
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const currentDay = Math.min(daysInMonth, Math.max(1, daysInMonth - daysLeft + 1));
+  const elapsedRatio = daysInMonth > 0 ? currentDay / daysInMonth : 0;
+  const spendRatio = totalPlannedCents > 0 ? spentCents / totalPlannedCents : 0;
+
+  const isOver = discretionaryRemainingCents <= 0 || dailyBudgetCents <= 0;
+  const isCaution = !isOver && totalPlannedCents > 0 && spendRatio > elapsedRatio + 0.10;
   const statusLabel = isOver ? "Over Pace" : isCaution ? "Caution" : "On Track";
   const statusColor = isOver ? palette.danger : isCaution ? palette.warn : palette.positive;
   const statusBg = isOver
     ? palette.scheme === "dark"
-      ? "rgba(255, 107, 74, 0.15)"
+      ? "rgba(255, 107, 74, 0.16)"
       : "rgba(217, 74, 46, 0.12)"
     : isCaution
       ? palette.scheme === "dark"
-        ? "rgba(224, 161, 90, 0.15)"
+        ? "rgba(224, 161, 90, 0.16)"
         : "rgba(196, 122, 26, 0.12)"
       : palette.scheme === "dark"
-        ? "rgba(61, 190, 154, 0.15)"
+        ? "rgba(61, 190, 154, 0.16)"
         : "rgba(27, 122, 98, 0.12)";
 
   const body = (
     <View style={styles.pacingCard}>
-      {/* Top Header: Eyebrow + Status Pill */}
+      {/* Top Header: Eyebrow + Pulsing Status Pill */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={styles.pacingEyebrow}>SAFE DAILY SPEND</Text>
         <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
@@ -1470,7 +1538,7 @@ export function PacingCard({
       </View>
 
       {/* Main Figure: Safe Daily Allowance */}
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
         <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
           {money(Math.max(0, dailyBudgetCents))}
         </Text>
@@ -1480,25 +1548,34 @@ export function PacingCard({
       {/* Context Sentence */}
       <Text style={styles.pacingCaption}>
         {isOver
-          ? `Discretionary pool exhausted with ${daysLeft} days remaining in ${monthName || "cycle"}.`
-          : `${money(discretionaryRemainingCents)} discretionary pool left for ${daysLeft} days in ${monthName || "cycle"}.`}
+          ? `Discretionary pool exhausted with ${daysLeft} days left in ${monthName || "cycle"}. Bills (${money(fixedBillsCents)}) protected.`
+          : `${money(discretionaryRemainingCents)} discretionary pool for ${daysLeft} days remaining in ${monthName || "cycle"}. Upcoming bills (${money(fixedBillsCents)}) reserved.`}
       </Text>
 
-      {/* Progress Track: Spent vs Total */}
+      {/* Visual Dual-Marker Pacing Track: Spent vs Calendar Time */}
       {totalPlannedCents > 0 ? (
-        <View style={{ marginTop: 4 }}>
+        <View style={{ gap: 6, marginTop: 4 }}>
           <Progress
             value={spentCents}
             max={totalPlannedCents}
             color={isOver ? palette.danger : isCaution ? palette.warn : palette.accent}
+            markerRatio={elapsedRatio}
           />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
+              {`Spent ${money(spentCents)} of ${money(totalPlannedCents)}`}
+            </Text>
+            <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
+              {`Day ${currentDay} of ${daysInMonth} (${Math.round(elapsedRatio * 100)}%)`}
+            </Text>
+          </View>
         </View>
       ) : null}
 
       {/* Dual-Pool Inset Metrics */}
       <View style={styles.pacingBreakdown}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.pacingMetricLabel}>Discretionary Pool</Text>
+          <Text style={styles.pacingMetricLabel}>Discretionary</Text>
           <Text style={[styles.pacingMetricValue, isOver ? { color: palette.danger } : null]}>
             {money(discretionaryRemainingCents)}
           </Text>
@@ -1519,7 +1596,12 @@ export function PacingCard({
 
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.9, transform: [{ scale: 0.99 }] } : null)}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Safe daily spend ${money(dailyBudgetCents)} per day, tap to view plan`}
+      style={({ pressed }) => (pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null)}
+    >
       {body}
     </Pressable>
   );
@@ -1943,6 +2025,21 @@ function makeStyles(colors: Palette) {
       shadowRadius: 10,
       shadowOffset: { width: 0, height: 3 },
       elevation: 2,
+    },
+    cardProminent: {
+      borderColor: colors.lineStrong,
+      shadowOpacity: isDark ? 0.32 : 0.06,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 3,
+    },
+    groupedCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      borderCurve: "continuous",
+      borderWidth: 1,
+      borderColor: colors.line,
+      overflow: "hidden",
     },
     glassCard: {
       backgroundColor: colors.glass,

@@ -22,7 +22,17 @@ export type Palette = {
   control: string;
   controlInk: string;
   scheme: "light" | "dark";
-  // Liquid Glass & HIG material tokens
+  // Apple HIG System Materials & Vibrancy
+  label: string;
+  secondaryLabel: string;
+  tertiaryLabel: string;
+  quaternaryLabel: string;
+  systemBackground: string;
+  secondarySystemBackground: string;
+  systemGroupedBackground: string;
+  secondarySystemGroupedBackground: string;
+  separator: string;
+  // Liquid Glass & HIG functional layer tokens
   glass: string;
   glassProminent: string;
   glassBorder: string;
@@ -40,7 +50,7 @@ export type Palette = {
 };
 
 export const light: Palette = {
-  bg: "#f3f5f8",
+  bg: "#f2f4f7",
   card: "#ffffff",
   cardInset: "#f0f3f6",
   fill: "#e8ecf1",
@@ -59,17 +69,28 @@ export const light: Palette = {
   control: "#14181f",
   controlInk: "#ffffff",
   scheme: "light",
-  glass: "rgba(255, 255, 255, 0.76)",
+  // Apple HIG Vibrancy & System Layers
+  label: "#14181f",
+  secondaryLabel: "#5c6570",
+  tertiaryLabel: "#8b939e",
+  quaternaryLabel: "#b4bac3",
+  systemBackground: "#f2f4f7",
+  secondarySystemBackground: "#ffffff",
+  systemGroupedBackground: "#f2f4f7",
+  secondarySystemGroupedBackground: "#ffffff",
+  separator: "rgba(20, 24, 31, 0.08)",
+  // Functional Liquid Glass Chrome
+  glass: "rgba(255, 255, 255, 0.72)",
   glassProminent: "rgba(255, 255, 255, 0.88)",
   glassBorder: "rgba(255, 255, 255, 0.95)",
   glassBorderSubtle: "rgba(20, 24, 31, 0.08)",
-  glassUltraThin: "rgba(255, 255, 255, 0.55)",
-  glassRegular: "rgba(255, 255, 255, 0.78)",
-  dockBg: "rgba(255, 255, 255, 0.84)",
+  glassUltraThin: "rgba(255, 255, 255, 0.50)",
+  glassRegular: "rgba(255, 255, 255, 0.76)",
+  dockBg: "rgba(255, 255, 255, 0.82)",
   specularTop: "rgba(255, 255, 255, 0.96)",
   specularSides: "rgba(20, 24, 31, 0.08)",
-  specularBottom: "rgba(20, 24, 31, 0.06)",
-  navBg: "rgba(243, 245, 248, 0.78)",
+  specularBottom: "rgba(20, 24, 31, 0.05)",
+  navBg: "rgba(242, 244, 247, 0.76)",
   sheetBg: "rgba(255, 255, 255, 0.95)",
   blurTint: "systemChromeMaterialLight",
   blurSubtleTint: "systemMaterialLight",
@@ -95,17 +116,28 @@ export const dark: Palette = {
   control: "#f4f1ea",
   controlInk: "#101216",
   scheme: "dark",
-  glass: "rgba(22, 26, 34, 0.72)",
+  // Apple HIG Vibrancy & System Layers
+  label: "#f4f1ea",
+  secondaryLabel: "#a3abb8",
+  tertiaryLabel: "#717987",
+  quaternaryLabel: "#4a5260",
+  systemBackground: "#0c0e12",
+  secondarySystemBackground: "#171a22",
+  systemGroupedBackground: "#0c0e12",
+  secondarySystemGroupedBackground: "#171a22",
+  separator: "rgba(244, 241, 234, 0.09)",
+  // Functional Liquid Glass Chrome
+  glass: "rgba(22, 26, 34, 0.70)",
   glassProminent: "rgba(28, 34, 44, 0.84)",
   glassBorder: "rgba(255, 255, 255, 0.18)",
   glassBorderSubtle: "rgba(255, 255, 255, 0.07)",
-  glassUltraThin: "rgba(22, 26, 34, 0.50)",
-  glassRegular: "rgba(22, 26, 34, 0.74)",
-  dockBg: "rgba(23, 27, 35, 0.82)",
+  glassUltraThin: "rgba(22, 26, 34, 0.48)",
+  glassRegular: "rgba(22, 26, 34, 0.72)",
+  dockBg: "rgba(23, 27, 35, 0.80)",
   specularTop: "rgba(255, 255, 255, 0.22)",
   specularSides: "rgba(255, 255, 255, 0.08)",
   specularBottom: "rgba(0, 0, 0, 0.32)",
-  navBg: "rgba(12, 14, 18, 0.76)",
+  navBg: "rgba(12, 14, 18, 0.75)",
   sheetBg: "rgba(23, 27, 35, 0.94)",
   blurTint: "systemChromeMaterialDark",
   blurSubtleTint: "systemMaterialDark",
