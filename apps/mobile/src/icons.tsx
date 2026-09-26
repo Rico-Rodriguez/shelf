@@ -73,6 +73,14 @@ export function Icon({
       </Svg>
     );
   }
+  if (name === "undo" || name === "rotate-ccw") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M3 10h10a5 5 0 0 1 5 5v2" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <Path d="M7 6 3 10l4 4" stroke={color} strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </Svg>
+    );
+  }
   if (name === "tag") {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">

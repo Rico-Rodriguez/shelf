@@ -51,7 +51,7 @@ export default function LoginScreen() {
 
   if (!state || state.needsGoogle) {
     return (
-      <Screen title="Sign in" subtitle="Use your Google account. A new Shelf asks you to create a key. An existing Shelf asks for the key already saved.">
+      <Screen title="Sign in">
         {error ? <Note>{error}</Note> : null}
         {state ? <Button label="Sign in with Google" onPress={() => void google()} busy={busy} /> : null}
         {googleRedirectHint() ? (
@@ -64,7 +64,7 @@ export default function LoginScreen() {
   if (state.needsSetup) return <Redirect href="/setup" />;
 
   return (
-    <Screen title="Unlock" subtitle={state.googleEmail ? `${state.googleEmail}. Enter the Shelf key already saved. It is not your Google password.` : "Enter the Shelf key already saved."}>
+    <Screen title="Unlock" subtitle={state.googleEmail ?? undefined}>
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />

@@ -243,7 +243,7 @@ export default function BudgetScreen() {
         {!data && !error ? <Loading /> : null}
         {data ? (
           <>
-            {/* Purpose-Built Envelope Allocation Overview */}
+            {/* iOS Health Style Monthly Budget Tile */}
             <Pressable
               onPress={() => {
                 tapPress();
@@ -252,13 +252,12 @@ export default function BudgetScreen() {
               style={({ pressed }) => [
                 {
                   backgroundColor: colors.card,
-                  borderRadius: 24,
+                  borderRadius: 22,
                   borderCurve: "continuous",
                   borderWidth: 1,
                   borderColor: colors.line,
-                  padding: 20,
+                  padding: 18,
                   gap: 12,
-                  overflow: "hidden",
                   shadowColor: "#000",
                   shadowOpacity: colors.scheme === "dark" ? 0.28 : 0.04,
                   shadowRadius: 16,
@@ -268,124 +267,88 @@ export default function BudgetScreen() {
                 pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null,
               ]}
             >
-              {/* Top Header: Eyebrow + Allocation Status */}
+              {/* Tile Header: Eyebrow + Status Badge */}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={{ gap: 2 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: colors.muted, textTransform: "uppercase" }}>
-                      ENVELOPE ALLOCATION
-                    </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Icon name="chart" size={14} color={colors.accentInk} />
+                  <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.6, color: colors.muted, textTransform: "uppercase" }}>
+                    {hasPlan ? "Monthly Budget" : "Spending So Far"}
+                  </Text>
+                </View>
+                {hasPlan ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 99,
+                      borderCurve: "continuous",
+                      backgroundColor:
+                        over
+                          ? colors.scheme === "dark"
+                            ? "rgba(255, 107, 74, 0.16)"
+                            : "rgba(217, 74, 46, 0.12)"
+                          : colors.scheme === "dark"
+                            ? "rgba(61, 190, 154, 0.16)"
+                            : "rgba(27, 122, 98, 0.12)",
+                    }}
+                  >
                     <View
                       style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 5,
-                        paddingHorizontal: 9,
-                        paddingVertical: 4,
-                        borderRadius: 99,
-                        borderCurve: "continuous",
-                        backgroundColor:
-                          data.leftoverCents < 0
-                            ? colors.scheme === "dark"
-                              ? "rgba(255, 107, 74, 0.16)"
-                              : "rgba(217, 74, 46, 0.12)"
-                            : data.leftoverCents === 0
-                              ? colors.scheme === "dark"
-                                ? "rgba(61, 190, 154, 0.16)"
-                                : "rgba(27, 122, 98, 0.12)"
-                              : colors.scheme === "dark"
-                                ? "rgba(255, 255, 255, 0.1)"
-                                : "rgba(0, 0, 0, 0.05)",
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: over ? colors.danger : colors.positive,
                       }}
-                    >
-                      <View
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 3,
-                          backgroundColor:
-                            data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
-                        }}
-                      />
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: "700",
-                          letterSpacing: -0.1,
-                          color:
-                            data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
-                        }}
-                      >
-                        {data.leftoverCents < 0 ? "Over Allocated" : data.leftoverCents === 0 ? "Balanced" : "Buffer Available"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Primary Allocation Metric */}
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+                    />
                     <Text
                       style={{
-                        fontSize: 42,
+                        fontSize: 11,
                         fontWeight: "700",
-                        letterSpacing: -1.6,
-                        color: data.leftoverCents < 0 ? colors.danger : colors.ink,
-                        fontVariant: ["tabular-nums"],
+                        letterSpacing: -0.1,
+                        color: over ? colors.danger : colors.positive,
                       }}
                     >
-                      {data.leftoverCents > 0
-                        ? money(data.leftoverCents)
-                        : data.leftoverCents < 0
-                          ? `-${money(Math.abs(data.leftoverCents))}`
-                          : money(plannedTotal)}
-                    </Text>
-                    <Text style={{ fontSize: 18, fontWeight: "500", color: colors.muted, letterSpacing: -0.3 }}>
-                      {data.leftoverCents > 0 ? "unassigned" : data.leftoverCents < 0 ? "over budget" : "budgeted"}
+                      {over ? "Over Budget" : "On Track"}
                     </Text>
                   </View>
-                </View>
-
-                {data.plannedIncomeCents > 0 ? (
-                  <ProgressRing
-                    size={58}
-                    strokeWidth={5}
-                    progress={data.expensePlannedCents / data.plannedIncomeCents}
-                    color={data.leftoverCents < 0 ? colors.danger : colors.accent}
-                  >
-                    <View style={{ alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"] }}>
-                        {Math.round((data.expensePlannedCents / data.plannedIncomeCents) * 100)}%
-                      </Text>
-                      <Text style={{ fontSize: 9, fontWeight: "600", color: colors.tertiary, textTransform: "uppercase" }}>
-                        assigned
-                      </Text>
-                    </View>
-                  </ProgressRing>
                 ) : null}
               </View>
 
-              {/* Context Framing */}
-              <Text style={{ fontSize: 14, lineHeight: 20, color: colors.muted, letterSpacing: -0.1 }}>
-                {data.leftoverCents > 0
-                  ? `You have ${money(data.leftoverCents)} of expected earnings unallocated. Tap to assign to categories.`
-                  : data.leftoverCents < 0
-                    ? `Category budgets exceed planned earnings by ${money(Math.abs(data.leftoverCents))}. Tap to adjust envelopes.`
-                    : `Every dollar of ${money(data.plannedIncomeCents)} planned earnings is assigned across ${data.rows.length} categories.`}
-              </Text>
+              {/* Primary Value */}
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+                <Text
+                  style={{
+                    fontSize: 38,
+                    fontWeight: "700",
+                    letterSpacing: -1.4,
+                    color: over ? colors.danger : colors.ink,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(data.expenseSpentCents ?? 0)}
+                </Text>
+                <Text style={{ fontSize: 16, fontWeight: "500", color: colors.muted }}>
+                  {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
+                </Text>
+              </View>
 
-              {/* Visual Allocation Track */}
-              {data.plannedIncomeCents > 0 ? (
-                <View style={{ gap: 6, marginTop: 4 }}>
+              {/* Visual Progress Bar */}
+              {hasPlan ? (
+                <View style={{ gap: 6 }}>
                   <Progress
-                    value={data.expensePlannedCents}
-                    max={data.plannedIncomeCents}
-                    color={data.leftoverCents < 0 ? colors.danger : colors.accent}
+                    value={data.expenseSpentCents}
+                    max={plannedTotal}
+                    color={over ? colors.danger : colors.accent}
                   />
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`Allocated ${money(data.expensePlannedCents)} of ${money(data.plannedIncomeCents)}`}
+                      {`Spent ${money(data.expenseSpentCents)} of ${money(plannedTotal)}`}
                     </Text>
                     <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`${Math.round((data.expensePlannedCents / (data.plannedIncomeCents || 1)) * 100)}% assigned`}
+                      {`${Math.round((data.expenseSpentCents / (plannedTotal || 1)) * 100)}% spent`}
                     </Text>
                   </View>
                 </View>
@@ -397,35 +360,44 @@ export default function BudgetScreen() {
                   flexDirection: "row",
                   alignItems: "center",
                   paddingTop: 12,
-                  marginTop: 4,
+                  marginTop: 2,
                   borderTopWidth: 1,
                   borderTopColor: colors.line,
                 }}
               >
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    Expected Income
+                    Planned
                   </Text>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
-                    {money(data.plannedIncomeCents)}
+                    {money(plannedTotal)}
                   </Text>
                 </View>
                 <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
                 <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
                   <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    Allocated
-                  </Text>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
-                    {money(data.expensePlannedCents)}
-                  </Text>
-                </View>
-                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
-                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    Total Spent
+                    Spent
                   </Text>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
                     {money(data.expenseSpentCents)}
+                  </Text>
+                </View>
+                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
+                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
+                    {over ? "Over By" : dailyLeft > 0 ? "Daily Pace" : "Remaining"}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: "700",
+                      color: over ? colors.danger : colors.ink,
+                      fontVariant: ["tabular-nums"],
+                      letterSpacing: -0.2,
+                      marginTop: 2,
+                    }}
+                  >
+                    {over ? money(Math.abs(left)) : dailyLeft > 0 ? `${money(dailyLeft)}/d` : money(left)}
                   </Text>
                 </View>
               </View>
@@ -552,7 +524,6 @@ export default function BudgetScreen() {
       {planOpen && data ? (
         <Sheet
           title="Monthly Target"
-          subtitle={`${monthLabel(data.year, data.month)} budget allocation`}
           onClose={() => setPlanOpen(false)}
         >
           {/* Allocation Health Card */}
@@ -608,14 +579,6 @@ export default function BudgetScreen() {
                   </Text>
                 </View>
               </View>
-
-              <Text style={{ fontSize: 13, lineHeight: 18, color: colors.muted }}>
-                {data.leftoverCents > 0
-                  ? `You have ${money(data.leftoverCents)} of planned earnings not yet allocated to category budgets.`
-                  : data.leftoverCents < 0
-                    ? `Category budgets exceed planned earnings by ${money(Math.abs(data.leftoverCents))}. Adjust categories or income to balance.`
-                    : "Every dollar of planned earnings is assigned to a category budget."}
-              </Text>
             </View>
           </Card>
 
@@ -651,7 +614,6 @@ export default function BudgetScreen() {
           return (
             <Sheet
               title={catName || editing.category.name}
-              subtitle={editing.group?.name ? `${editing.group.name} · ${monthLabel(data.year, data.month)}` : monthLabel(data.year, data.month)}
               height="80%"
               onClose={() => setEditing(null)}
             >

@@ -1,12 +1,12 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/api";
 import { Charge, ChargeGroup } from "../src/charge";
 import { ReviewDeck } from "../src/decide";
 import { merchantMatchKey } from "../src/format";
-import { tapPress } from "../src/haptic";
+import { tapCelebration, tapPress } from "../src/haptic";
 import { Icon } from "../src/icons";
 import { ConfirmMark, offerUndo, UndoHost } from "../src/toast";
 import { colors, Loading } from "../src/ui";
@@ -18,6 +18,15 @@ type TxPayload = {
   frequentCategoryIds?: string[];
 };
 
+type UndoAction = {
+  tx: Charge;
+  label: string;
+  appliedIds: string[];
+  previousEntries: { id: string; categoryId: string | null }[];
+  createdRuleId: string | null;
+  undoFn: () => Promise<void>;
+};
+
 export default function ReviewScreen() {
   const [rows, setRows] = useState<Charge[] | null>(null);
   const [groups, setGroups] = useState<ChargeGroup[]>([]);
@@ -26,6 +35,7 @@ export default function ReviewScreen() {
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const [unreviewed, setUnreviewed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [undoHistory, setUndoHistory] = useState<UndoAction[]>([]);
   const cleared = useRef(new Set<string>());
 
   const load = useCallback(() => {
@@ -95,7 +105,7 @@ export default function ReviewScreen() {
         }
       }
 
-      offerUndo(appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed", async () => {
+      const undoFn = async () => {
         restoreCleared([tx.id, ...appliedIds]);
         await api(`/api/transactions/${tx.id}`, {
           method: "PATCH",
@@ -110,7 +120,24 @@ export default function ReviewScreen() {
         if (createdRuleId) {
           await api(`/api/rules/${createdRuleId}`, { method: "DELETE" });
         }
-        load();
+        setRows((current) => (current ? [tx, ...current] : [tx]));
+        setUnreviewed((count) => count + 1 + appliedIds.length);
+      };
+
+      const undoItem: UndoAction = {
+        tx,
+        label: appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed",
+        appliedIds,
+        previousEntries,
+        createdRuleId,
+        undoFn,
+      };
+
+      setUndoHistory((prev) => [undoItem, ...prev]);
+
+      offerUndo(undoItem.label, async () => {
+        await undoFn();
+        setUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
       });
     } catch {
       load();
@@ -118,6 +145,23 @@ export default function ReviewScreen() {
   }
 
   function handleSkip(tx: Charge) {
+    const undoItem: UndoAction = {
+      tx,
+      label: "Skipped",
+      appliedIds: [],
+      previousEntries: [],
+      createdRuleId: null,
+      undoFn: async () => {
+        setRows((current) => {
+          if (!current) return [tx];
+          const without = current.filter((r) => r.id !== tx.id);
+          return [tx, ...without];
+        });
+      },
+    };
+
+    setUndoHistory((prev) => [undoItem, ...prev]);
+
     setRows((current) => {
       if (!current || current.length < 2) return current;
       const index = current.findIndex((r) => r.id === tx.id);
@@ -128,6 +172,14 @@ export default function ReviewScreen() {
       return next;
     });
   }
+
+  const handleUndo = useCallback(async () => {
+    if (undoHistory.length === 0) return;
+    const [last, ...rest] = undoHistory;
+    setUndoHistory(rest);
+    tapCelebration();
+    await last.undoFn();
+  }, [undoHistory]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
@@ -146,7 +198,16 @@ export default function ReviewScreen() {
             <Icon name="chevron" size={20} color={colors.ink} />
           </View>
         </Pressable>
-        <Text style={styles.headerTitle}>Review</Text>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Review</Text>
+          {unreviewed > 0 ? (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{unreviewed}</Text>
+            </View>
+          ) : null}
+        </View>
+
         <Pressable
           onPress={() => {
             tapPress();
@@ -173,11 +234,17 @@ export default function ReviewScreen() {
       {/* All caught up empty state */}
       {rows !== null && unreviewedRows.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <ConfirmMark size={64} />
+          <ConfirmMark size={68} />
           <Text style={styles.emptyTitle}>You’re caught up</Text>
           <Text style={styles.emptySubtitle}>
             Every transaction has been reviewed.
           </Text>
+          {undoHistory.length > 0 ? (
+            <Pressable onPress={handleUndo} style={styles.undoCaughtUpButton}>
+              <Icon name="undo" size={16} color={colors.accentInk} />
+              <Text style={styles.undoCaughtUpText}>Undo last review</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => {
               tapPress();
@@ -192,10 +259,7 @@ export default function ReviewScreen() {
 
       {/* Review Deck */}
       {rows !== null && unreviewedRows.length > 0 ? (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.deckContainer, { paddingBottom: 60 }]}
-        >
+        <View style={styles.deckContainer}>
           <ReviewDeck
             rows={unreviewedRows}
             remaining={unreviewed}
@@ -205,8 +269,10 @@ export default function ReviewScreen() {
             faces={faces}
             onConfirm={handleConfirm}
             onSkip={handleSkip}
+            onUndo={handleUndo}
+            canUndo={undoHistory.length > 0}
           />
-        </ScrollView>
+        </View>
       ) : null}
 
       <UndoHost />
@@ -234,11 +300,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   headerTitle: {
     fontSize: 17,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.ink,
     letterSpacing: -0.2,
+  },
+  headerBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 99,
+    backgroundColor: colors.fill,
+  },
+  headerBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.muted,
   },
   doneButton: {
     paddingHorizontal: 8,
@@ -264,7 +346,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 14,
     paddingHorizontal: 32,
   },
   emptyTitle: {
@@ -279,6 +361,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+  undoCaughtUpButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 99,
+    backgroundColor: colors.fill,
+  },
+  undoCaughtUpText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.accentInk,
+  },
   emptyButton: {
     marginTop: 8,
     paddingVertical: 10,
@@ -292,7 +389,7 @@ const styles = StyleSheet.create({
   deckContainer: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 16,
-    justifyContent: "flex-start",
+    paddingTop: 8,
+    paddingBottom: 8,
   },
 });

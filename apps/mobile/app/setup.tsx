@@ -32,12 +32,8 @@ export default function SetupScreen() {
 
   return (
     <Screen
-      title="Start Shelf"
-      subtitle={
-        state?.googleEmail
-          ? "Google is done, and this Shelf has no key yet. Choose one with at least 12 characters."
-          : "Choose a key of at least 12 characters. This is what locks your data."
-      }
+      title="Create Key"
+      subtitle="Choose a key of at least 12 characters to secure your data."
     >
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note>{error}</Note> : null}

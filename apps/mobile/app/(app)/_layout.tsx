@@ -77,7 +77,7 @@ function MobileBar({
           >
             Shelf
           </Text>
-          {syncLabel ? (
+          {syncLabel === "Syncing" || syncLabel === "Sync failed" ? (
             <View
               style={{
                 flexDirection: "row",
@@ -104,9 +104,7 @@ function MobileBar({
                   backgroundColor:
                     syncLabel === "Sync failed"
                       ? palette.danger
-                      : syncLabel === "Syncing"
-                        ? palette.warn
-                        : palette.positive,
+                      : palette.warn,
                 }}
               />
               <Text
@@ -577,9 +575,7 @@ export default function AppTabs() {
           />
         )}
         screenOptions={{
-          headerShown: true,
-          headerTransparent: true,
-          header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={netWorth} />,
+          headerShown: false,
           tabBarStyle: {
             position: "absolute",
             bottom: 0,
@@ -591,9 +587,17 @@ export default function AppTabs() {
           },
         }}
       >
-        <Tabs.Screen name="index" options={{ title: "Today" }} />
-        <Tabs.Screen name="budget" options={{ title: "Plan" }} />
-        <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Today",
+            headerShown: true,
+            headerTransparent: true,
+            header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={netWorth} />,
+          }}
+        />
+        <Tabs.Screen name="budget" options={{ title: "Plan", headerShown: false }} />
+        <Tabs.Screen name="activity" options={{ title: "Activity", headerShown: false }} />
         <Tabs.Screen name="accounts" options={{ href: null, title: "Accounts" }} />
         <Tabs.Screen name="more" options={{ href: null, title: "More" }} />
       </Tabs>

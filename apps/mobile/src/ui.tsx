@@ -121,8 +121,8 @@ export function Screen({
   // Pinned glass header for secondary screens that provide a back/refresh action
   const hasPinnedNav = !framed && Boolean(refresh);
 
-  const topPadding = framed
-    ? insets.top + 58
+  const topPadding = framed && !title
+    ? insets.top + 54
     : hasPinnedNav
       ? insets.top + 52
       : insets.top + 16;
@@ -1290,8 +1290,7 @@ export function ReviewBanner({
   const styles = useStyles();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
-  const title = label || "Categorize purchases";
-  const desc = subtitle ?? (count ? `${count} ${count === 1 ? "purchase" : "purchases"} to review` : null);
+  const title = label || (count ? `${count} ${count === 1 ? "purchase" : "purchases"} to review` : "Review purchases");
 
   return (
     <Pressable
@@ -1312,22 +1311,20 @@ export function ReviewBanner({
       <View style={styles.bannerIconWrap}>
         <Icon name="tag" size={17} color={colors.accentInk} />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 1 }}>
         <Text style={styles.bannerTitle} numberOfLines={1}>
           {title}
         </Text>
-        {desc ? (
+        {subtitle ? (
           <Text style={styles.bannerSubtitle} numberOfLines={1}>
-            {desc}
+            {subtitle}
           </Text>
         ) : null}
       </View>
-      {count ? (
-        <View style={styles.bannerBadge}>
-          <Text style={styles.bannerBadgeText}>{count}</Text>
-        </View>
-      ) : null}
-      <Icon name="chevron" size={16} color={colors.tertiary} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.accentInk }}>Review</Text>
+        <Icon name="chevron" size={13} color={palette.accentInk} />
+      </View>
     </Pressable>
   );
 }
@@ -1909,86 +1906,61 @@ export function PacingCard({
 
   const body = (
     <View style={styles.pacingCard}>
-      {/* Top Header: Eyebrow + Pulsing Status Pill + ProgressRing */}
+      {/* Top Header: Tile Eyebrow + Status Badge */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <View style={{ gap: 2 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={styles.pacingEyebrow}>SAFE DAILY SPEND</Text>
-            <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
-              <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 4 }}>
-            <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
-              {money(Math.max(0, dailyBudgetCents))}
-            </Text>
-            <Text style={styles.pacingFigureUnit}>/ day</Text>
-          </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Icon name="spark" size={14} color={palette.accentInk} />
+          <Text style={styles.pacingEyebrow}>DAILY SPEND</Text>
         </View>
-
-        {totalPlannedCents > 0 ? (
-          <ProgressRing
-            size={56}
-            strokeWidth={5}
-            progress={spendRatio}
-            color={statusColor}
-          >
-            <View style={{ alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: palette.ink, fontVariant: ["tabular-nums"] }}>
-                {Math.round(spendRatio * 100)}%
-              </Text>
-              <Text style={{ fontSize: 9, fontWeight: "600", color: palette.tertiary, textTransform: "uppercase" }}>
-                spent
-              </Text>
-            </View>
-          </ProgressRing>
-        ) : null}
+        <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
+          <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+        </View>
       </View>
 
-      {/* Context Sentence */}
-      <Text style={styles.pacingCaption}>
-        {isOver
-          ? `Discretionary pool exhausted with ${daysLeft} days left in ${monthName || "cycle"}. Bills (${money(fixedBillsCents)}) protected.`
-          : `${money(discretionaryRemainingCents)} discretionary pool for ${daysLeft} days remaining in ${monthName || "cycle"}. Upcoming bills (${money(fixedBillsCents)}) reserved.`}
-      </Text>
+      {/* Primary Value */}
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+        <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
+          {money(Math.max(0, dailyBudgetCents))}
+        </Text>
+        <Text style={styles.pacingFigureUnit}>/ day</Text>
+      </View>
 
-      {/* Visual Dual-Marker Pacing Track: Spent vs Calendar Time */}
+      {/* Visual Pacing Track */}
       {totalPlannedCents > 0 ? (
-        <View style={{ gap: 6, marginTop: 4 }}>
+        <View style={{ gap: 6, marginTop: 6 }}>
           <Progress
             value={spentCents}
             max={totalPlannedCents}
             color={isOver ? palette.danger : isCaution ? palette.warn : palette.accent}
-            markerRatio={elapsedRatio}
           />
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
               {`Spent ${money(spentCents)} of ${money(totalPlannedCents)}`}
             </Text>
             <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
-              {`Day ${currentDay} of ${daysInMonth} (${Math.round(elapsedRatio * 100)}%)`}
+              {`${daysLeft} days left`}
             </Text>
           </View>
         </View>
       ) : null}
 
-      {/* Dual-Pool Inset Metrics */}
+      {/* 3 Inset Metrics */}
       <View style={styles.pacingBreakdown}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.pacingMetricLabel}>Discretionary</Text>
+          <Text style={styles.pacingMetricLabel}>Remaining</Text>
           <Text style={[styles.pacingMetricValue, isOver ? { color: palette.danger } : null]}>
             {money(discretionaryRemainingCents)}
           </Text>
         </View>
         <View style={styles.pacingDivider} />
         <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-          <Text style={styles.pacingMetricLabel}>Upcoming Bills</Text>
+          <Text style={styles.pacingMetricLabel}>Bills</Text>
           <Text style={styles.pacingMetricValue}>{money(fixedBillsCents)}</Text>
         </View>
         <View style={styles.pacingDivider} />
         <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-          <Text style={styles.pacingMetricLabel}>Total Budget</Text>
+          <Text style={styles.pacingMetricLabel}>Budget</Text>
           <Text style={styles.pacingMetricValue}>{money(totalPlannedCents)}</Text>
         </View>
       </View>
@@ -2000,7 +1972,7 @@ export function PacingCard({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Safe daily spend ${money(dailyBudgetCents)} per day, tap to view plan`}
+      accessibilityLabel={`Daily spend ${money(dailyBudgetCents)} per day, tap to view plan`}
       style={({ pressed }) => (pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null)}
     >
       {body}

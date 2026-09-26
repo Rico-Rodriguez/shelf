@@ -37,7 +37,7 @@ export default function CashFlowScreen() {
   const rate = income > 0 ? Math.round(((income - spending) / income) * 100) : null;
 
   return (
-    <Screen title="Cash flow" subtitle="Income, spending, and what’s left each month." refresh={<Back />}>
+    <Screen title="Cash Flow" refresh={<Back />}>
       {error ? <Note>{error}</Note> : null}
       <Segment
         value={grain}

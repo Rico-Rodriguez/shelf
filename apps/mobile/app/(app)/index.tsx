@@ -20,7 +20,6 @@ import {
   Button,
   Card,
   colors,
-  EnvelopesGlance,
   Facts,
   Hero,
   LedgerRow,
@@ -174,23 +173,6 @@ export default function HomeScreen() {
             />
           ) : null}
 
-          {/* Glanceable Category Envelopes Preview */}
-          {totalPlannedCents > 0 ? (
-            <EnvelopesGlance
-              onSelectCategory={(categoryId) => {
-                tapPress();
-                router.push({
-                  pathname: "/(app)/activity",
-                  params: { categoryId, start: range.start, end: range.end },
-                });
-              }}
-              onViewAll={() => {
-                tapPress();
-                router.push("/(app)/budget");
-              }}
-            />
-          ) : null}
-
           {/* First run / empty state */}
           {data.accountCount === 0 && data.transactions.length === 0 ? (
             <Card>
@@ -311,25 +293,7 @@ export default function HomeScreen() {
                     }}
                   />
                   <Card>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }}>
-                      <View style={{ gap: 2 }}>
-                        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>Income</Text>
-                        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(data.cashFlow.incomeCents)}</Text>
-                      </View>
-                      <View style={{ gap: 2, alignItems: "center" }}>
-                        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>Spent</Text>
-                        <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(data.cashFlow.spendingCents)}</Text>
-                      </View>
-                      <View style={{ gap: 2, alignItems: "flex-end" }}>
-                        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                          {data.cashFlow.savedCents < 0 ? "Net Deficit" : "Net Saved"}
-                        </Text>
-                        <Text style={{ fontSize: 15, fontWeight: "700", color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive, fontVariant: ["tabular-nums"] }}>
-                          {data.cashFlow.savedCents < 0 ? `-${money(Math.abs(data.cashFlow.savedCents))}` : `+${money(data.cashFlow.savedCents)}`}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+                    <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10 }}>
                       <SpendMix rows={spendRows.map((row) => ({ key: row.id || row.name, cents: row.cents, color: shelfColor(row.color) }))} />
                     </View>
                     {spendRows.map((row, index) => (

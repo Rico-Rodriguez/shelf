@@ -7,7 +7,7 @@ export default function Gate() {
   if (!ready) return <Screen title="Shelf"><Loading label="Opening" /></Screen>;
   if (error) {
     return (
-      <Screen title="Shelf" subtitle="The phone app talks to your Shelf server.">
+      <Screen title="Shelf">
         <Note>{error}</Note>
         <Note>Set EXPO_PUBLIC_API_URL to the server, and EXPO_PUBLIC_GATE_TOKEN when the server expects a gate.</Note>
       </Screen>

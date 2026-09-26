@@ -34,7 +34,7 @@ export default function JoinScreen() {
   }
 
   return (
-    <Screen title="Join" subtitle="Use an invite code and a new Shelf key of at least 12 characters.">
+    <Screen title="Join">
       <Field label="Invite code" value={code} onChangeText={setCode} />
       <Field label="Name" value={name} onChangeText={setName} />
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />

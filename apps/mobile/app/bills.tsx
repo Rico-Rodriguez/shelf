@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
-import { Back, Button, Card, colors, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet, Switch } from "../src/ui";
 
 type Bill = {
   id: string;
@@ -238,11 +238,12 @@ export default function BillsScreen() {
       <Segment value={view} onChange={(next) => setView(next as "list" | "calendar")} options={[{ value: "list", label: "List" }, { value: "calendar", label: "Calendar" }]} />
       {rows ? (
         <Hero label={thisMonth ? "Due this month" : monthLabel(focus.year, focus.month)} cents={outflow} points={points.length > 1 ? points : undefined}>
-          <View style={{ paddingHorizontal: 18, paddingBottom: 16, gap: 4 }}>
-            {status ? <Text style={{ fontSize: 13, color: colors.muted }}>{status}</Text> : null}
-            {monthlyBills > 0 ? <Text style={{ fontSize: 13, color: colors.muted }}>{`Typical ${money(monthlyBills)}`}</Text> : null}
-            {next ? <Text style={{ fontSize: 13, color: colors.muted }}>{`${next.merchantName} ${inDaysPhrase(next.date)}`}</Text> : null}
-          </View>
+          <Facts
+            items={[
+              { kicker: "Typical Monthly", value: money(monthlyBills) },
+              ...(next ? [{ kicker: "Next Due", value: `${next.merchantName} (${inDaysPhrase(next.date)})` }] : []),
+            ]}
+          />
         </Hero>
       ) : null}
 

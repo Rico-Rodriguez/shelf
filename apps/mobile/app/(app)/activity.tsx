@@ -7,7 +7,7 @@ import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
 import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, monthLabel, monthRange, todayISO } from "../../src/format";
-import { tapPress, tapSelect } from "../../src/haptic";
+import { tapCelebration, tapPress, tapSelect } from "../../src/haptic";
 import { Icon, MerchantMark } from "../../src/icons";
 import { ConfirmMark, offerUndo, UndoHost } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
@@ -121,6 +121,7 @@ export default function ActivityScreen() {
   const [addCategory, setAddCategory] = useState("");
   const [addDate, setAddDate] = useState(todayISO());
   const [addMore, setAddMore] = useState(false);
+  const [reviewUndoHistory, setReviewUndoHistory] = useState<{ tx: Charge; undoFn: () => Promise<void> }[]>([]);
   const cleared = useRef(new Set<string>());
 
   useEffect(() => {
@@ -219,7 +220,7 @@ export default function ActivityScreen() {
         }
       }
 
-      offerUndo(appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed", async () => {
+      const undoFn = async () => {
         restoreCleared([tx.id, ...appliedIds]);
         await api(`/api/transactions/${tx.id}`, {
           method: "PATCH",
@@ -234,7 +235,15 @@ export default function ActivityScreen() {
         if (createdRuleId) {
           await api(`/api/rules/${createdRuleId}`, { method: "DELETE" });
         }
-        load();
+        setRows((current) => (current ? [tx, ...current] : [tx]));
+        setUnreviewed((count) => count + 1 + appliedIds.length);
+      };
+
+      setReviewUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
+
+      offerUndo(appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed", async () => {
+        await undoFn();
+        setReviewUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
       });
     } catch {
       load();
@@ -242,6 +251,15 @@ export default function ActivityScreen() {
   }
 
   function handleReviewSkip(tx: Charge) {
+    const undoFn = async () => {
+      setRows((current) => {
+        if (!current) return [tx];
+        const without = current.filter((r) => r.id !== tx.id);
+        return [tx, ...without];
+      });
+    };
+    setReviewUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
+
     setRows((current) => {
       if (!current || current.length < 2) return current;
       const index = current.findIndex((r) => r.id === tx.id);
@@ -252,6 +270,14 @@ export default function ActivityScreen() {
       return next;
     });
   }
+
+  const handleReviewUndo = useCallback(async () => {
+    if (reviewUndoHistory.length === 0) return;
+    const [last, ...rest] = reviewUndoHistory;
+    setReviewUndoHistory(rest);
+    tapCelebration();
+    await last.undoFn();
+  }, [reviewUndoHistory]);
 
   async function hideTx(id: string) {
     await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
@@ -369,10 +395,7 @@ export default function ActivityScreen() {
           />
         }
       >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(insets.bottom + 88, 110) }}
-        >
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 12, 20) }}>
           {unreviewedRows.length > 0 ? (
             <ReviewDeck
               rows={unreviewedRows}
@@ -383,16 +406,38 @@ export default function ActivityScreen() {
               faces={faces}
               onConfirm={handleReviewConfirm}
               onSkip={handleReviewSkip}
+              onUndo={handleReviewUndo}
+              canUndo={reviewUndoHistory.length > 0}
             />
           ) : (
-            <View style={{ alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32, paddingVertical: 40 }}>
-              <ConfirmMark size={64} />
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 }}>
+              <ConfirmMark size={68} />
               <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
                 You’re caught up
               </Text>
               <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
                 Every transaction has been reviewed.
               </Text>
+              {reviewUndoHistory.length > 0 ? (
+                <Pressable
+                  onPress={handleReviewUndo}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 4,
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    borderRadius: 99,
+                    backgroundColor: colors.fill,
+                  }}
+                >
+                  <Icon name="undo" size={16} color={colors.accentInk} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accentInk }}>
+                    Undo last review
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => {
                   tapPress();
@@ -407,27 +452,15 @@ export default function ActivityScreen() {
               </Pressable>
             </View>
           )}
-        </ScrollView>
+        </View>
         <UndoHost />
       </Screen>
     );
   }
 
   const listHeader = (
-    <View style={{ gap: 12, paddingBottom: 8 }}>
+    <View style={{ gap: 10, paddingBottom: 8 }}>
       {error ? <Note>{error}</Note> : null}
-
-      {/* Review banner when unreviewed charges exist */}
-      {unreviewed > 0 && !unreviewedOnly ? (
-        <ReviewBanner
-          label={categorizeLabel(unreviewed)}
-          onPress={() => {
-            tapPress();
-            setFocusMode(true);
-            setUnreviewedOnly(true);
-          }}
-        />
-      ) : null}
 
       {/* Search Bar + Filter Icon with indicator dot */}
       <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
@@ -546,10 +579,31 @@ export default function ActivityScreen() {
             This Month
           </Text>
         </Pressable>
+
+        {unreviewedOnly && unreviewedRows.length > 0 ? (
+          <Pressable
+            onPress={() => {
+              tapPress();
+              setFocusMode(true);
+            }}
+            hitSlop={8}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              paddingHorizontal: 8,
+              paddingVertical: 6,
+              marginLeft: "auto",
+            }}
+          >
+            <Icon name="spark" size={13} color={colors.accentInk} />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: colors.accentInk }}>Focus</Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {/* Active Filter Chips (1:1 with Web) */}
-      {filtered ? (
+      {/* Active Filter Chips (for custom sheet filters) */}
+      {accountName || categoryName || tag ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 }}>
           {accountName ? (
             <Pressable onPress={() => setAccountFilter("")} style={styles.activeChip}>
@@ -564,16 +618,6 @@ export default function ActivityScreen() {
           {tag ? (
             <Pressable onPress={() => setTag("")} style={styles.activeChip}>
               <Text style={styles.activeChipText}>#{tag} ✕</Text>
-            </Pressable>
-          ) : null}
-          {range ? (
-            <Pressable onPress={() => setRange(null)} style={styles.activeChip}>
-              <Text style={styles.activeChipText}>Dates ✕</Text>
-            </Pressable>
-          ) : null}
-          {unreviewedOnly ? (
-            <Pressable onPress={() => setUnreviewedOnly(false)} style={styles.activeChip}>
-              <Text style={styles.activeChipText}>Needs review ✕</Text>
             </Pressable>
           ) : null}
         </View>

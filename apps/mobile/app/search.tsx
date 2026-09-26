@@ -70,7 +70,7 @@ export default function SearchScreen() {
   }
 
   return (
-    <Screen title="Search" subtitle="Pages, merchants, categories" refresh={<Back />}>
+    <Screen title="Search" refresh={<Back />}>
       <SearchField value={q} onChangeText={setQ} placeholder="Search pages, merchants, categories" />
       {busy ? <Loading label="Searching" /> : null}
       <Card>
