@@ -275,7 +275,7 @@ export default function ReviewScreen() {
         </View>
       ) : null}
 
-      <UndoHost />
+      <UndoHost bottomOffset={100} />
     </SafeAreaView>
   );
 }
@@ -390,6 +390,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 8,
+    paddingBottom: 24,
   },
 });

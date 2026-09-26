@@ -54,7 +54,7 @@ export function offerUndo(label: string, undo: () => Promise<void>) {
   pushOffer({ label, undo });
 }
 
-export function UndoHost() {
+export function UndoHost({ bottomOffset }: { bottomOffset?: number } = {}) {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
   const isDark = palette.scheme === "dark";
@@ -95,11 +95,12 @@ export function UndoHost() {
 
   return (
     <Animated.View
+      pointerEvents={offer ? "box-none" : "none"}
       style={{
         position: "absolute",
         left: 20,
         right: 20,
-        bottom: Math.max(insets.bottom + 64, 84),
+        bottom: bottomOffset ?? Math.max(insets.bottom + 84, 98),
         alignItems: "center",
         zIndex: 9998,
         opacity,
@@ -116,26 +117,28 @@ export function UndoHost() {
           paddingVertical: 10,
           borderRadius: 999,
           borderCurve: "continuous",
-          backgroundColor: isDark ? "rgba(30, 36, 46, 0.85)" : "rgba(20, 24, 31, 0.88)",
+          backgroundColor: isDark ? "rgba(30, 36, 46, 0.88)" : "rgba(255, 255, 255, 0.94)",
           borderWidth: 1,
-          borderTopColor: "rgba(255, 255, 255, 0.28)",
-          borderBottomColor: "rgba(0, 0, 0, 0.2)",
-          borderLeftColor: "rgba(255, 255, 255, 0.12)",
-          borderRightColor: "rgba(255, 255, 255, 0.12)",
+          borderTopColor: isDark ? "rgba(255, 255, 255, 0.28)" : "rgba(255, 255, 255, 0.9)",
+          borderBottomColor: isDark ? "rgba(0, 0, 0, 0.25)" : "rgba(0, 0, 0, 0.08)",
+          borderLeftColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.06)",
+          borderRightColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.06)",
           shadowColor: "#000",
-          shadowOpacity: 0.28,
+          shadowOpacity: isDark ? 0.32 : 0.12,
           shadowRadius: 18,
-          shadowOffset: { width: 0, height: 8 },
+          shadowOffset: { width: 0, height: 6 },
           elevation: 8,
           overflow: "hidden",
         }}
       >
         <BlurView
           intensity={65}
-          tint="dark"
+          tint={palette.blurTint}
           style={StyleSheet.absoluteFill}
         />
-        <Text style={{ color: "#ffffff", fontSize: 14, fontWeight: "600", letterSpacing: -0.2 }}>{offer.label}</Text>
+        <Text style={{ color: palette.ink, fontSize: 14, fontWeight: "600", letterSpacing: -0.2 }}>
+          {offer.label}
+        </Text>
         <Pressable
           hitSlop={12}
           onPress={() => {
@@ -145,7 +148,12 @@ export function UndoHost() {
             void run();
           }}
           style={({ pressed }) => [
-            { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, backgroundColor: "rgba(255, 255, 255, 0.15)" },
+            {
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 99,
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.06)",
+            },
             pressed ? { opacity: 0.7 } : null,
           ]}
         >

@@ -395,7 +395,7 @@ export default function ActivityScreen() {
           />
         }
       >
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 12, 20) }}>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }}>
           {unreviewedRows.length > 0 ? (
             <ReviewDeck
               rows={unreviewedRows}
@@ -453,7 +453,7 @@ export default function ActivityScreen() {
             </View>
           )}
         </View>
-        <UndoHost />
+        <UndoHost bottomOffset={Math.max(insets.bottom + 160, 180)} />
       </Screen>
     );
   }

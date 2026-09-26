@@ -121,43 +121,44 @@ function DockButton({
   );
 }
 
-function CardPreview({
+function CardContent({
   tx,
-  byId,
+  currentCategory,
+  face,
+  flow,
+  quick,
+  selectedCategoryId,
+  always = false,
+  onAlwaysToggle,
+  onCategoryPress,
+  onQuickCategorySelect,
+  isInteractive = false,
   palette,
-  reduceTransparency,
   isDark,
+  similar,
 }: {
   tx: Charge;
-  byId: Map<string, { id: string; name: string; color?: string | null }>;
+  currentCategory?: { id?: string; name: string; color?: string | null } | null;
+  face?: { monthCents: number; count: number };
+  flow: { text: string; color: string };
+  quick: { id: string; name: string; color?: string | null }[];
+  selectedCategoryId?: string;
+  always?: boolean;
+  onAlwaysToggle?: () => void;
+  onCategoryPress?: () => void;
+  onQuickCategorySelect?: (id: string) => void;
+  isInteractive?: boolean;
   palette: ReturnType<typeof useTheme>["palette"];
-  reduceTransparency: boolean;
   isDark: boolean;
+  similar?: number | null;
 }) {
   const merchant = tx.merchantName || tx.name;
-  const category = tx.categoryId ? byId.get(tx.categoryId) : tx.category;
-  const flow = flowMoney(tx.amountCents);
 
   return (
-    <View
-      style={[
-        styles.cardSurface,
-        {
-          borderTopColor: palette.specularTop,
-          borderBottomColor: palette.specularBottom,
-          borderLeftColor: palette.specularSides,
-          borderRightColor: palette.specularSides,
-          backgroundColor: reduceTransparency ? (isDark ? "#171a21" : "#ffffff") : palette.glassProminent,
-        },
-      ]}
-    >
-      {!reduceTransparency ? (
-        <BlurView intensity={isDark ? 45 : 75} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
-      ) : null}
-
+    <>
       {/* Header */}
       <View style={styles.merchantRow}>
-        <MerchantMark name={merchant} color={category?.color ?? undefined} />
+        <MerchantMark name={merchant} color={currentCategory?.color ?? undefined} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} style={styles.merchantName}>
             {tx.name}
@@ -171,31 +172,204 @@ function CardPreview({
       </View>
 
       {/* Big Flow Amount */}
-      <Text style={[styles.heroAmount, { color: flow.color }]}>
-        {flow.text}
-      </Text>
+      <View style={styles.heroAmountRow}>
+        <Text style={[styles.heroAmount, { color: flow.color }]}>
+          {flow.text}
+        </Text>
+        {face && face.monthCents > 0 ? (
+          <View style={styles.contextBadge}>
+            <Text style={styles.contextBadgeText}>
+              {money(face.monthCents)} this month
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
-      {/* Category preview */}
-      <View
-        style={[
-          styles.previewCategoryPill,
-          {
-            backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
-            borderColor: palette.line,
-          },
-        ]}
-      >
+      {/* Category selector / preview pill */}
+      {isInteractive ? (
+        <Pressable
+          onPress={onCategoryPress}
+          style={[
+            styles.selectedCategoryPill,
+            {
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
+              borderColor: currentCategory ? getCategoryColor(currentCategory) : palette.line,
+            },
+          ]}
+        >
+          <View style={styles.selectedCategoryLeft}>
+            <View
+              style={[
+                styles.categoryDotLarge,
+                { backgroundColor: currentCategory ? getCategoryColor(currentCategory) : colors.muted },
+              ]}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.categoryPillSub}>Category</Text>
+              <Text numberOfLines={1} style={styles.categoryPillName}>
+                {currentCategory?.name ?? "Choose a category"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.changeBadge}>
+            <Text style={styles.changeBadgeText}>Change</Text>
+            <Icon name="chevron" size={14} color={palette.tertiary} />
+          </View>
+        </Pressable>
+      ) : (
         <View
           style={[
-            styles.categoryDotLarge,
-            { backgroundColor: category ? getCategoryColor(category) : colors.muted },
+            styles.selectedCategoryPill,
+            {
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
+              borderColor: currentCategory ? getCategoryColor(currentCategory) : palette.line,
+            },
           ]}
-        />
-        <Text numberOfLines={1} style={styles.previewCategoryText}>
-          {category?.name ?? "Uncategorized"}
-        </Text>
+        >
+          <View style={styles.selectedCategoryLeft}>
+            <View
+              style={[
+                styles.categoryDotLarge,
+                { backgroundColor: currentCategory ? getCategoryColor(currentCategory) : colors.muted },
+              ]}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.categoryPillSub}>Category</Text>
+              <Text numberOfLines={1} style={styles.categoryPillName}>
+                {currentCategory?.name ?? "Choose a category"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.changeBadge}>
+            <Text style={styles.changeBadgeText}>Change</Text>
+            <Icon name="chevron" size={14} color={palette.tertiary} />
+          </View>
+        </View>
+      )}
+
+      {/* Quick Category Chips */}
+      <View style={styles.chipsSection}>
+        <Text style={styles.sectionHeader}>Quick suggestions</Text>
+        <View style={styles.chipGrid}>
+          {quick.map((category) => {
+            const isSelected = selectedCategoryId === category.id;
+            const catColor = category.color
+              ? getCategoryColor(category)
+              : colors.accent;
+            if (isInteractive) {
+              return (
+                <Pressable
+                  key={category.id}
+                  onPress={() => onQuickCategorySelect?.(category.id)}
+                  style={[
+                    styles.chip,
+                    isSelected && [
+                      styles.chipSelected,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(27, 122, 98, 0.28)"
+                          : colors.accentSoft,
+                        borderColor: catColor,
+                      },
+                    ],
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.chipDot,
+                      { backgroundColor: catColor },
+                    ]}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.chipLabel,
+                      isSelected && styles.chipLabelSelected,
+                    ]}
+                  >
+                    {category.name}
+                  </Text>
+                </Pressable>
+              );
+            }
+            return (
+              <View
+                key={category.id}
+                style={[
+                  styles.chip,
+                  isSelected && [
+                    styles.chipSelected,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(27, 122, 98, 0.28)"
+                        : colors.accentSoft,
+                      borderColor: catColor,
+                    },
+                  ],
+                ]}
+              >
+                <View
+                  style={[
+                    styles.chipDot,
+                    { backgroundColor: catColor },
+                  ]}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.chipLabel,
+                    isSelected && styles.chipLabelSelected,
+                  ]}
+                >
+                  {category.name}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
-    </View>
+
+      {/* Always Categorize Rule Switch */}
+      {isInteractive ? (
+        <Pressable
+          onPress={onAlwaysToggle}
+          style={styles.switchRow}
+        >
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.switchTitle}>
+              Always categorize {merchant}
+            </Text>
+            <Text style={styles.switchSubtitle}>
+              {always && similar != null && similar > 0
+                ? `⚡ Clears ${similar} other purchase${similar === 1 ? "" : "s"}`
+                : `Remember this rule for future activity`}
+            </Text>
+          </View>
+          <Switch on={always} />
+        </Pressable>
+      ) : (
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.switchTitle}>
+              Always categorize {merchant}
+            </Text>
+            <Text style={styles.switchSubtitle}>
+              Remember this rule for future activity
+            </Text>
+          </View>
+          <Switch on={false} />
+        </View>
+      )}
+
+      {/* Swipe hint */}
+      <View style={styles.gestureHintRow}>
+        <Icon name="chevron-left" size={12} color={colors.tertiary} />
+        <Text style={styles.gestureHintText}>
+          Swipe left to skip · right to approve
+        </Text>
+        <Icon name="chevron" size={12} color={colors.tertiary} />
+      </View>
+    </>
   );
 }
 
@@ -485,8 +659,8 @@ export function ReviewDeck({
     };
   });
 
-  // Approve Stamp Animated Style
-  const animatedApproveStampStyle = useAnimatedStyle(() => {
+  // Approve Overlay Animated Style
+  const animatedApproveOverlayStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       translateX.value,
       [15, SWIPE_THRESHOLD * 0.75],
@@ -496,17 +670,17 @@ export function ReviewDeck({
     const scale = interpolate(
       translateX.value,
       [15, SWIPE_THRESHOLD],
-      [0.85, 1.06],
+      [0.92, 1],
       Extrapolation.CLAMP,
     );
     return {
       opacity,
-      transform: [{ scale }, { rotate: "-12deg" }],
+      transform: [{ scale }],
     };
   });
 
-  // Deny Stamp Animated Style
-  const animatedDenyStampStyle = useAnimatedStyle(() => {
+  // Skip Overlay Animated Style
+  const animatedSkipOverlayStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       translateX.value,
       [-15, -SWIPE_THRESHOLD * 0.75],
@@ -516,12 +690,12 @@ export function ReviewDeck({
     const scale = interpolate(
       translateX.value,
       [-15, -SWIPE_THRESHOLD],
-      [0.85, 1.06],
+      [0.92, 1],
       Extrapolation.CLAMP,
     );
     return {
       opacity,
-      transform: [{ scale }, { rotate: "12deg" }],
+      transform: [{ scale }],
     };
   });
 
@@ -601,15 +775,37 @@ export function ReviewDeck({
             style={[
               styles.cardSurface,
               styles.stackedCard,
-              { width: cardWidth },
+              {
+                width: cardWidth,
+                borderTopColor: palette.specularTop,
+                borderBottomColor: palette.specularBottom,
+                borderLeftColor: palette.specularSides,
+                borderRightColor: palette.specularSides,
+                backgroundColor: reduceTransparency
+                  ? isDark
+                    ? "#171a21"
+                    : "#ffffff"
+                  : palette.glassProminent,
+              },
               animatedThirdCardStyle,
             ]}
           >
-            <CardPreview
+            {!reduceTransparency ? (
+              <BlurView
+                intensity={isDark ? 50 : 75}
+                tint={palette.blurTint}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : null}
+            <CardContent
               tx={thirdCard}
-              byId={byId}
+              currentCategory={thirdCard.categoryId ? byId.get(thirdCard.categoryId) : thirdCard.category}
+              face={faces[thirdCard.merchantName || thirdCard.name]}
+              flow={flowMoney(thirdCard.amountCents)}
+              quick={quick}
+              selectedCategoryId={thirdCard.categoryId ?? undefined}
+              isInteractive={false}
               palette={palette}
-              reduceTransparency={reduceTransparency}
               isDark={isDark}
             />
           </Animated.View>
@@ -622,15 +818,37 @@ export function ReviewDeck({
             style={[
               styles.cardSurface,
               styles.stackedCard,
-              { width: cardWidth },
+              {
+                width: cardWidth,
+                borderTopColor: palette.specularTop,
+                borderBottomColor: palette.specularBottom,
+                borderLeftColor: palette.specularSides,
+                borderRightColor: palette.specularSides,
+                backgroundColor: reduceTransparency
+                  ? isDark
+                    ? "#171a21"
+                    : "#ffffff"
+                  : palette.glassProminent,
+              },
               animatedNextCardStyle,
             ]}
           >
-            <CardPreview
+            {!reduceTransparency ? (
+              <BlurView
+                intensity={isDark ? 50 : 75}
+                tint={palette.blurTint}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : null}
+            <CardContent
               tx={nextCard}
-              byId={byId}
+              currentCategory={nextCard.categoryId ? byId.get(nextCard.categoryId) : nextCard.category}
+              face={faces[nextCard.merchantName || nextCard.name]}
+              flow={flowMoney(nextCard.amountCents)}
+              quick={quick}
+              selectedCategoryId={nextCard.categoryId ?? undefined}
+              isInteractive={false}
               palette={palette}
-              reduceTransparency={reduceTransparency}
               isDark={isDark}
             />
           </Animated.View>
@@ -668,177 +886,65 @@ export function ReviewDeck({
             {/* Reactive Glow Highlight */}
             <Animated.View pointerEvents="none" style={[styles.glowBorder, animatedGlowStyle]} />
 
-            {/* Reactive Stamp: APPROVE */}
+            {/* Reactive Overlay: APPROVE */}
             <Animated.View
               pointerEvents="none"
-              style={[styles.stampContainer, styles.approveStamp, animatedApproveStampStyle]}
-            >
-              <View style={styles.approveStampBadge}>
-                <Icon name="check" size={24} color="#10b981" />
-                <Text style={styles.approveStampText}>APPROVE</Text>
-              </View>
-            </Animated.View>
-
-            {/* Reactive Stamp: SKIP */}
-            <Animated.View
-              pointerEvents="none"
-              style={[styles.stampContainer, styles.denyStamp, animatedDenyStampStyle]}
-            >
-              <View style={styles.denyStampBadge}>
-                <Icon name="close" size={24} color="#f43f5e" />
-                <Text style={styles.denyStampText}>SKIP</Text>
-              </View>
-            </Animated.View>
-
-            {/* Merchant Identity & Date */}
-            <View style={styles.merchantRow}>
-              <MerchantMark
-                name={merchant}
-                color={currentCategory?.color ?? undefined}
-              />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={styles.merchantName}>
-                  {current.name}
-                </Text>
-                <Text numberOfLines={1} style={styles.categorySub}>
-                  {dayLabel(current.date)}
-                  {current.account?.name ? ` · ${current.account.name}` : ""}
-                  {current.pending ? " · Pending" : ""}
-                </Text>
-              </View>
-            </View>
-
-            {/* Hero Spend Amount */}
-            <View style={styles.heroAmountRow}>
-              <Text style={[styles.heroAmount, { color: flow.color }]}>
-                {flow.text}
-              </Text>
-              {face && face.monthCents > 0 ? (
-                <View style={styles.contextBadge}>
-                  <Text style={styles.contextBadgeText}>
-                    {money(face.monthCents)} this month
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Category Selector Pill */}
-            <Pressable
-              onPress={() => {
-                tapPress();
-                setPicking(true);
-              }}
               style={[
-                styles.selectedCategoryPill,
-                {
-                  backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
-                  borderColor: currentCategory ? getCategoryColor(currentCategory) : palette.line,
-                },
+                styles.cardOverlay,
+                styles.approveOverlay,
+                animatedApproveOverlayStyle,
               ]}
             >
-              <View style={styles.selectedCategoryLeft}>
-                <View
-                  style={[
-                    styles.categoryDotLarge,
-                    {
-                      backgroundColor: currentCategory
-                        ? getCategoryColor(currentCategory)
-                        : colors.muted,
-                    },
-                  ]}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.categoryPillSub}>Category</Text>
-                  <Text numberOfLines={1} style={styles.categoryPillName}>
-                    {currentCategory?.name ?? "Choose a category"}
-                  </Text>
+              <View style={[styles.overlayPill, styles.approveOverlayPill, isDark && { backgroundColor: "rgba(12, 32, 24, 0.94)" }]}>
+                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(16, 185, 129, 0.22)" : "rgba(16, 185, 129, 0.15)" }]}>
+                  <Icon name="check" size={20} color="#10b981" />
                 </View>
+                <Text style={styles.approveOverlayText}>Approved</Text>
               </View>
-              <View style={styles.changeBadge}>
-                <Text style={styles.changeBadgeText}>Change</Text>
-                <Icon name="chevron" size={14} color={palette.tertiary} />
-              </View>
-            </Pressable>
+            </Animated.View>
 
-            {/* Quick Category Chips */}
-            <View style={styles.chipsSection}>
-              <Text style={styles.sectionHeader}>Quick suggestions</Text>
-              <View style={styles.chipGrid}>
-                {quick.map((category) => {
-                  const isSelected = categoryId === category.id;
-                  const catColor = category.color
-                    ? getCategoryColor(category)
-                    : colors.accent;
-                  return (
-                    <Pressable
-                      key={category.id}
-                      onPress={() => {
-                        tapSelect();
-                        setCategoryId(category.id);
-                      }}
-                      style={[
-                        styles.chip,
-                        isSelected && [
-                          styles.chipSelected,
-                          {
-                            backgroundColor: isDark
-                              ? "rgba(27, 122, 98, 0.28)"
-                              : colors.accentSoft,
-                            borderColor: catColor,
-                          },
-                        ],
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.chipDot,
-                          { backgroundColor: catColor },
-                        ]}
-                      />
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.chipLabel,
-                          isSelected && styles.chipLabelSelected,
-                        ]}
-                      >
-                        {category.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+            {/* Reactive Overlay: SKIP */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.cardOverlay,
+                styles.skipOverlay,
+                animatedSkipOverlayStyle,
+              ]}
+            >
+              <View style={[styles.overlayPill, styles.skipOverlayPill, isDark && { backgroundColor: "rgba(36, 14, 20, 0.94)" }]}>
+                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(244, 63, 94, 0.22)" : "rgba(244, 63, 94, 0.15)" }]}>
+                  <Icon name="close" size={20} color="#f43f5e" />
+                </View>
+                <Text style={styles.skipOverlayText}>Skipped</Text>
               </View>
-            </View>
+            </Animated.View>
 
-            {/* Always Categorize Rule Switch */}
-            <Pressable
-              onPress={() => {
+            <CardContent
+              tx={current}
+              currentCategory={currentCategory}
+              face={face}
+              flow={flow}
+              quick={quick}
+              selectedCategoryId={categoryId}
+              always={always}
+              onAlwaysToggle={() => {
                 tapSelect();
                 setAlways((v) => !v);
               }}
-              style={styles.switchRow}
-            >
-              <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={styles.switchTitle}>
-                  Always categorize {merchant}
-                </Text>
-                <Text style={styles.switchSubtitle}>
-                  {always && similar != null && similar > 0
-                    ? `⚡ Clears ${similar} other purchase${similar === 1 ? "" : "s"}`
-                    : `Remember this rule for future activity`}
-                </Text>
-              </View>
-              <Switch on={always} />
-            </Pressable>
-
-            {/* Swipe hint */}
-            <View style={styles.gestureHintRow}>
-              <Icon name="chevron-left" size={12} color={colors.tertiary} />
-              <Text style={styles.gestureHintText}>
-                Swipe left to skip · right to approve
-              </Text>
-              <Icon name="chevron" size={12} color={colors.tertiary} />
-            </View>
+              onCategoryPress={() => {
+                tapPress();
+                setPicking(true);
+              }}
+              onQuickCategorySelect={(id) => {
+                tapSelect();
+                setCategoryId(id);
+              }}
+              isInteractive={true}
+              palette={palette}
+              isDark={isDark}
+              similar={similar}
+            />
           </Animated.View>
         </GestureDetector>
       </View>
@@ -997,49 +1103,61 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     zIndex: 4,
   },
-  stampContainer: {
-    position: "absolute",
-    top: 20,
-    zIndex: 30,
+  cardOverlay: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 26,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 25,
+    overflow: "hidden",
   },
-  approveStamp: {
-    left: 18,
+  approveOverlay: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
   },
-  denyStamp: {
-    right: 18,
+  skipOverlay: {
+    backgroundColor: "rgba(244, 63, 94, 0.12)",
   },
-  approveStampBadge: {
+  overlayPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: "#10b981",
-    backgroundColor: "rgba(16, 185, 129, 0.18)",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderCurve: "continuous",
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  approveStampText: {
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 1.5,
+  approveOverlayPill: {
+    backgroundColor: "#ffffff",
+    borderColor: "#10b981",
+  },
+  skipOverlayPill: {
+    backgroundColor: "#ffffff",
+    borderColor: "#f43f5e",
+  },
+  overlayIconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  approveOverlayText: {
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: 0.4,
     color: "#10b981",
   },
-  denyStampBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: "#f43f5e",
-    backgroundColor: "rgba(244, 63, 94, 0.18)",
-  },
-  denyStampText: {
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 1.5,
+  skipOverlayText: {
+    fontSize: 17,
+    fontWeight: "800",
+    letterSpacing: 0.4,
     color: "#f43f5e",
   },
   merchantRow: {
@@ -1210,27 +1328,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 14,
     width: "100%",
   },
   dockButton: {
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-  },
-  previewCategoryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  previewCategoryText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.ink,
   },
   emptyContainer: {
     flex: 1,
