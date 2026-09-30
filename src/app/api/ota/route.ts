@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import manifest from "../../../../public/ota/manifest.json";
 
+// The manifest is compiled into this route. A production rebuild is what publishes a new phone bundle.
+
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request) {
