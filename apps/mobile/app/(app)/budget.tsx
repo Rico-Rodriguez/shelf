@@ -350,36 +350,6 @@ export default function BudgetScreen() {
                   </View>
                 </View>
               ) : null}
-
-              {/* 3 Inset Metrics */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingTop: 12,
-                  marginTop: 2,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.line,
-                }}
-              >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    Planned
-                  </Text>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
-                    {money(plannedTotal)}
-                  </Text>
-                </View>
-                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
-                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    Spent
-                  </Text>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
-                    {money(data.expenseSpentCents)}
-                  </Text>
-                </View>
-              </View>
             </Pressable>
 
             {visibleGroups.map((group) => {
