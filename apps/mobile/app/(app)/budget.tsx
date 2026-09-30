@@ -2,7 +2,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { dayLabel, daysLeftInMonth, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
+import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
@@ -204,9 +204,6 @@ export default function BudgetScreen() {
   const hasPlan = plannedTotal > 0;
   const left = plannedTotal - (data?.expenseSpentCents ?? 0);
   const over = hasPlan && left < 0;
-  const isCurrentMonth = cursor.year === now.getFullYear() && cursor.month === now.getMonth() + 1;
-  const daysLeft = isCurrentMonth ? daysLeftInMonth(now) : 0;
-  const dailyLeft = daysLeft > 0 && left > 0 ? Math.round(left / daysLeft) : 0;
 
   return (
     <>
@@ -380,24 +377,6 @@ export default function BudgetScreen() {
                   </Text>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.2, marginTop: 2 }}>
                     {money(data.expenseSpentCents)}
-                  </Text>
-                </View>
-                <View style={{ width: 1, height: 28, backgroundColor: colors.line }} />
-                <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" }}>
-                    {over ? "Over By" : dailyLeft > 0 ? "Daily Pace" : "Remaining"}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "700",
-                      color: over ? colors.danger : colors.ink,
-                      fontVariant: ["tabular-nums"],
-                      letterSpacing: -0.2,
-                      marginTop: 2,
-                    }}
-                  >
-                    {over ? money(Math.abs(left)) : dailyLeft > 0 ? `${money(dailyLeft)}/d` : money(left)}
                   </Text>
                 </View>
               </View>
