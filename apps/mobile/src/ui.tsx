@@ -1860,109 +1860,37 @@ export function EnvelopesGlance({
   );
 }
 
-export function PacingCard({
-  dailyBudgetCents,
-  daysLeft,
+export function SpendCard({
   monthName,
-  totalPlannedCents,
   spentCents,
-  fixedBillsCents,
-  discretionaryRemainingCents,
+  budgetCents,
   onPress,
 }: {
-  dailyBudgetCents: number;
-  daysLeft: number;
   monthName?: string;
-  totalPlannedCents: number;
   spentCents: number;
-  fixedBillsCents: number;
-  discretionaryRemainingCents: number;
+  budgetCents: number;
   onPress?: () => void;
 }) {
   const styles = useStyles();
   const { palette } = useTheme();
-
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const currentDay = Math.min(daysInMonth, Math.max(1, daysInMonth - daysLeft + 1));
-  const elapsedRatio = daysInMonth > 0 ? currentDay / daysInMonth : 0;
-  const spendRatio = totalPlannedCents > 0 ? spentCents / totalPlannedCents : 0;
-
-  const isOver = discretionaryRemainingCents <= 0 || dailyBudgetCents <= 0;
-  const isCaution = !isOver && totalPlannedCents > 0 && spendRatio > elapsedRatio + 0.10;
-  const statusLabel = isOver ? "Over Pace" : isCaution ? "Caution" : "On Track";
-  const statusColor = isOver ? palette.danger : isCaution ? palette.warn : palette.positive;
-  const statusBg = isOver
-    ? palette.scheme === "dark"
-      ? "rgba(255, 107, 74, 0.16)"
-      : "rgba(217, 74, 46, 0.12)"
-    : isCaution
-      ? palette.scheme === "dark"
-        ? "rgba(224, 161, 90, 0.16)"
-        : "rgba(196, 122, 26, 0.12)"
-      : palette.scheme === "dark"
-        ? "rgba(61, 190, 154, 0.16)"
-        : "rgba(27, 122, 98, 0.12)";
+  const leftCents = budgetCents - spentCents;
+  const over = budgetCents > 0 && leftCents < 0;
+  const leftLabel = over
+    ? `${money(Math.abs(leftCents))} over budget`
+    : `${money(Math.max(0, leftCents))} left of ${money(budgetCents)}`;
 
   const body = (
     <View style={styles.pacingCard}>
-      {/* Top Header: Tile Eyebrow + Status Badge */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Icon name="spark" size={14} color={palette.accentInk} />
-          <Text style={styles.pacingEyebrow}>DAILY SPEND</Text>
-        </View>
-        <View style={[styles.pacingBadge, { backgroundColor: statusBg }]}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
-          <Text style={[styles.pacingBadgeText, { color: statusColor }]}>{statusLabel}</Text>
-        </View>
+        <Text style={styles.pacingEyebrow}>Spent</Text>
+        {monthName ? <Text style={styles.pacingEyebrow}>{monthName}</Text> : null}
       </View>
 
-      {/* Primary Value */}
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-        <Text style={[styles.pacingFigure, isOver ? { color: palette.danger } : null]}>
-          {money(Math.max(0, dailyBudgetCents))}
-        </Text>
-        <Text style={styles.pacingFigureUnit}>/ day</Text>
-      </View>
+      <Text style={styles.pacingFigure}>{money(spentCents)}</Text>
 
-      {/* Visual Pacing Track */}
-      {totalPlannedCents > 0 ? (
-        <View style={{ gap: 6, marginTop: 6 }}>
-          <Progress
-            value={spentCents}
-            max={totalPlannedCents}
-            color={isOver ? palette.danger : isCaution ? palette.warn : palette.accent}
-          />
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
-              {`Spent ${money(spentCents)} of ${money(totalPlannedCents)}`}
-            </Text>
-            <Text style={{ fontSize: 12, color: palette.muted, fontVariant: ["tabular-nums"] }}>
-              {`${daysLeft} days left`}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      {/* 3 Inset Metrics */}
-      <View style={styles.pacingBreakdown}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.pacingMetricLabel}>Remaining</Text>
-          <Text style={[styles.pacingMetricValue, isOver ? { color: palette.danger } : null]}>
-            {money(discretionaryRemainingCents)}
-          </Text>
-        </View>
-        <View style={styles.pacingDivider} />
-        <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-          <Text style={styles.pacingMetricLabel}>Bills</Text>
-          <Text style={styles.pacingMetricValue}>{money(fixedBillsCents)}</Text>
-        </View>
-        <View style={styles.pacingDivider} />
-        <View style={{ flex: 1, gap: 2, paddingLeft: 12 }}>
-          <Text style={styles.pacingMetricLabel}>Budget</Text>
-          <Text style={styles.pacingMetricValue}>{money(totalPlannedCents)}</Text>
-        </View>
+      <View style={{ gap: 8 }}>
+        <Progress value={spentCents} max={budgetCents} color={over ? palette.danger : palette.accent} />
+        <Text style={[styles.pacingCaption, over ? { color: palette.danger } : null]}>{leftLabel}</Text>
       </View>
     </View>
   );
@@ -1972,7 +1900,7 @@ export function PacingCard({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Daily spend ${money(dailyBudgetCents)} per day, tap to view plan`}
+      accessibilityLabel={`Spent ${money(spentCents)}. ${leftLabel}. Tap to view the plan.`}
       style={({ pressed }) => (pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null)}
     >
       {body}
@@ -2553,20 +2481,6 @@ function makeStyles(colors: Palette) {
       color: colors.muted,
       textTransform: "uppercase",
     },
-    pacingBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 99,
-      borderCurve: "continuous",
-    },
-    pacingBadgeText: {
-      fontSize: 12,
-      fontWeight: "700",
-      letterSpacing: -0.1,
-    },
     pacingFigure: {
       fontSize: 42,
       fontWeight: "700",
@@ -2574,45 +2488,12 @@ function makeStyles(colors: Palette) {
       color: colors.ink,
       fontVariant: ["tabular-nums"],
     },
-    pacingFigureUnit: {
-      fontSize: 18,
-      fontWeight: "500",
-      color: colors.muted,
-      letterSpacing: -0.3,
-    },
     pacingCaption: {
-      fontSize: 14,
+      fontSize: 15,
       lineHeight: 20,
       color: colors.muted,
-      letterSpacing: -0.1,
-    },
-    pacingBreakdown: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingTop: 12,
-      marginTop: 4,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.line,
-    },
-    pacingMetricLabel: {
-      fontSize: 11,
-      fontWeight: "600",
-      color: colors.tertiary,
-      letterSpacing: -0.1,
-      textTransform: "uppercase",
-    },
-    pacingMetricValue: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.ink,
-      fontVariant: ["tabular-nums"],
       letterSpacing: -0.2,
-      marginTop: 2,
-    },
-    pacingDivider: {
-      width: StyleSheet.hairlineWidth,
-      height: 28,
-      backgroundColor: colors.line,
+      fontVariant: ["tabular-nums"],
     },
     heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
     heroLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },

@@ -3,13 +3,10 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import {
-  categorizeLabel,
   dayLabel,
-  daysLeftInMonth,
   flowMoney,
   inDaysPhrase,
   money,
-  monthLabel,
   monthRange,
   shelfColor,
   shortDate,
@@ -25,8 +22,7 @@ import {
   LedgerRow,
   Loading,
   Note,
-  PacingCard,
-  Progress,
+  SpendCard,
   ReviewBanner,
   Screen,
   Section,
@@ -93,11 +89,9 @@ export default function HomeScreen() {
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
   const currentMonthName = now.toLocaleDateString("en-US", { month: "long" });
-  const daysLeft = daysLeftInMonth(now);
 
   const bills = (data?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
   const upcomingBillsSlice = bills.slice(0, 3);
-  const upcomingBillsTotalCents = bills.reduce((sum, b) => sum + b.amountCents, 0);
 
   const categories = (data?.spending ?? []).filter((row) => row.cents > 0);
   const restCents = categories.slice(4).reduce((sum, row) => sum + row.cents, 0);
@@ -109,14 +103,8 @@ export default function HomeScreen() {
   const latest = data?.transactions.slice(0, 4) ?? [];
   const suggestions = data?.suggestedSubscriptions?.length ?? 0;
 
-  // Context-Aware Financial Pacing calculations
   const totalPlannedCents = data?.budget.plannedCents ?? 0;
   const spentCents = data?.budget.spentCents ?? 0;
-  const totalRemainingCents = totalPlannedCents - spentCents;
-
-  // Discretionary pool = remaining budget minus upcoming fixed commitments
-  const discretionaryRemainingCents = Math.max(0, totalRemainingCents - upcomingBillsTotalCents);
-  const safeDailyCents = daysLeft > 0 ? Math.round(discretionaryRemainingCents / daysLeft) : 0;
 
   return (
     <Screen framed onRefresh={load}>
@@ -125,16 +113,12 @@ export default function HomeScreen() {
 
       {data ? (
         <>
-          {/* Primary Financial Pacing Engine */}
+          {/* This month's spending against the budget */}
           {totalPlannedCents > 0 ? (
-            <PacingCard
-              dailyBudgetCents={safeDailyCents}
-              daysLeft={daysLeft}
+            <SpendCard
               monthName={currentMonthName}
-              totalPlannedCents={totalPlannedCents}
               spentCents={spentCents}
-              fixedBillsCents={upcomingBillsTotalCents}
-              discretionaryRemainingCents={discretionaryRemainingCents}
+              budgetCents={totalPlannedCents}
               onPress={() => {
                 tapPress();
                 router.push("/(app)/budget");
@@ -181,7 +165,7 @@ export default function HomeScreen() {
                   Welcome to Shelf
                 </Text>
                 <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
-                  Connect your bank or load demo data to track daily pacing and organize your budget.
+                  Connect your bank or load demo data to see what you’ve spent and what’s left in the budget.
                 </Text>
                 <Button label="Add an account" onPress={() => router.push("/(app)/accounts")} block />
                 <Button label={busy ? "Loading…" : "Load demo data"} tone="quiet" onPress={() => void sample()} busy={busy} block />
