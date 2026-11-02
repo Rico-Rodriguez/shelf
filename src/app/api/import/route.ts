@@ -6,6 +6,8 @@ import { AuthError, requireWriter } from "@/lib/auth";
 import { todayISO } from "@/lib/dates";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
+import { applyManualAmount } from "@/lib/manual-balance";
+import { snapshotNetWorth } from "@/lib/networth";
 import { applyRulesToNewTx } from "@/lib/rules";
 import { sealedTxWrite } from "@/lib/secrets";
 
@@ -79,8 +81,10 @@ export async function POST(request: Request) {
         dek,
       );
       if (Object.keys(patch).length) await db.update(transactions).set(patch).where(eq(transactions.id, id));
+      await applyManualAmount(body.accountId, amountCents, dek, { snapshot: false });
       created += 1;
     }
+    if (created) await snapshotNetWorth(dek);
     return NextResponse.json({ created });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });

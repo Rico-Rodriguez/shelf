@@ -48,6 +48,15 @@ export function todayISO(): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+export function deviceYearMonth(date = new Date()) {
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
+export function dashboardPath(date = new Date()) {
+  const { year, month } = deviceYearMonth(date);
+  return `/api/dashboard?year=${year}&month=${month}`;
+}
+
 export function dayLabel(iso: string): string {
   const today = todayISO();
   if (iso === today) return "Today";
@@ -110,6 +119,39 @@ export function monthRange(year: number, month: number): { start: string; end: s
 
 export function isLiability(type: string): boolean {
   return type === "credit" || type === "loan";
+}
+
+export type NetWorthAccount = {
+  currentBalanceCents: number;
+  type: string;
+  isHidden?: boolean;
+  includeInNetWorth?: boolean;
+};
+
+/** Same net-worth total Insights uses: skip hidden accounts and accounts left out of net worth. */
+export function netWorthCents(accounts: NetWorthAccount[]): number {
+  let assets = 0;
+  let liabilities = 0;
+  for (const account of accounts) {
+    if (account.isHidden || account.includeInNetWorth === false) continue;
+    if (isLiability(account.type)) liabilities += Math.abs(account.currentBalanceCents);
+    else assets += account.currentBalanceCents;
+  }
+  return assets - liabilities;
+}
+
+/** Pace versus today. Expected spend is the plan times how far the month has gone. */
+export function budgetPace(
+  spentCents: number,
+  plannedCents: number,
+  date = new Date(),
+): { label: "Ahead" | "Behind" | "Over"; tone: "good" | "warn" | "bad" } {
+  const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const day = Math.min(Math.max(date.getDate(), 1), days);
+  const expected = plannedCents * (day / days);
+  if (plannedCents > 0 && spentCents > plannedCents) return { label: "Over", tone: "bad" };
+  if (spentCents > expected) return { label: "Behind", tone: "warn" };
+  return { label: "Ahead", tone: "good" };
 }
 
 export function addDays(iso: string, days: number): string {
@@ -201,16 +243,20 @@ export function goalPace(goal: {
   targetDate: string | null;
   progressCents: number;
   remainingCents: number;
+  createdAt?: string | null;
 }): { label: string; tone: "on" | "behind" | "ahead" | "muted" } {
   if (goal.remainingCents <= 0 && goal.targetCents > 0) return { label: "Complete", tone: "ahead" };
   if (!goal.targetDate || goal.targetCents <= 0) {
     return { label: goal.remainingCents > 0 ? "Open" : "Set a date", tone: "muted" };
   }
   const end = new Date(`${goal.targetDate}T12:00:00`).getTime();
-  const daysLeft = Math.ceil((end - Date.now()) / 86_400_000);
-  if (daysLeft < 0) return { label: "Past the date", tone: "behind" };
-  const ratio = goal.progressCents / goal.targetCents;
-  if (ratio >= 0.9 || daysLeft > 120) return { label: daysLeft <= 45 ? `${daysLeft} days left` : "On track", tone: "on" };
-  if (ratio < 0.35 && daysLeft < 60) return { label: "Behind pace", tone: "behind" };
-  return { label: `${daysLeft} days left`, tone: "on" };
+  if (goal.remainingCents > 0 && end < Date.now()) return { label: "Behind", tone: "behind" };
+  const start = goal.createdAt ? new Date(goal.createdAt).getTime() : end;
+  const span = Math.max(end - start, 1);
+  const elapsed = Math.min(Math.max(Date.now() - start, 0), span);
+  const expected = goal.targetCents * (elapsed / span);
+  const slack = Math.max(goal.targetCents * 0.05, 100);
+  if (goal.progressCents > expected + slack) return { label: "Ahead", tone: "ahead" };
+  if (goal.progressCents < expected - slack) return { label: "Behind", tone: "behind" };
+  return { label: "On track", tone: "on" };
 }

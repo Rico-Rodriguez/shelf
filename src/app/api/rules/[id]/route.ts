@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { rules } from "@/db/schema";
-import { AuthError, requireDek, requireWriter } from "@/lib/auth";
+import { AuthError, requireWriter } from "@/lib/auth";
 import { applyRuleToExisting } from "@/lib/rules";
 import { openRule, sealedRuleWrite } from "@/lib/secrets";
 

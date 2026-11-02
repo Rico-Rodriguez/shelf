@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { addDays, money, monthLabel, monthRange, shelfColor, shortDate, todayISO, versusShort } from "../src/format";
-import { Back, Card, colors, Hero, Loading, MonthNav, Note, Progress, Screen, Section, Segment, SpendMix } from "../src/ui";
+import { Back, Card, colors, Hero, LoadError, Loading, MonthNav, Note, Progress, Screen, Section, Segment, SpendMix } from "../src/ui";
 
 type Report = {
   year: number;
@@ -24,6 +24,7 @@ export default function InsightsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [span, setSpan] = useState<"90" | "365" | "all">("365");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     void api<Report>(`/api/reports?year=${cursor.year}&month=${cursor.month}`)
@@ -32,7 +33,7 @@ export default function InsightsScreen() {
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load insights"));
-  }, [cursor]);
+  }, [cursor, attempt]);
 
   const cutoff = span === "all" ? null : addDays(todayISO(), span === "90" ? -90 : -365);
   const points = (data?.snapshots ?? [])
@@ -57,7 +58,7 @@ export default function InsightsScreen() {
           setCursor({ year, month });
         }}
       />
-      {error ? <Note>{error}</Note> : null}
+      {error ? <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} /> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
         <>

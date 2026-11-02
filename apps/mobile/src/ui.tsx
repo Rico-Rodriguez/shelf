@@ -16,6 +16,7 @@ import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
 import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
 import { api, load, peek } from "./api";
+import * as SecureStore from "expo-secure-store";
 import { celebrate } from "./toast";
 import Svg, { Circle } from "react-native-svg";
 
@@ -121,7 +122,7 @@ export function Screen({
   // Pinned glass header for secondary screens that provide a back/refresh action
   const hasPinnedNav = !framed && Boolean(refresh);
 
-  const topPadding = framed && !title
+  const topPadding = framed
     ? insets.top + 54
     : hasPinnedNav
       ? insets.top + 52
@@ -181,8 +182,8 @@ export function Screen({
             </Text>
           ) : null}
         </View>
-        <View style={{ minWidth: 60, alignItems: "flex-end", justifyContent: "center" }}>
-          {/* Reserve space so title stays centered */}
+        <View style={{ minWidth: 60, alignItems: "flex-end", justifyContent: "center", flexShrink: 1 }}>
+          {action}
         </View>
       </View>
     </View>
@@ -196,7 +197,9 @@ export function Screen({
         <ScrollLockProvider value={setScrollLocked}>
           <View style={{ flex: 1, paddingTop: topPadding }}>
             {!hasPinnedNav && !framed && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
-            {title ? (
+            {hasPinnedNav ? (
+              subtitle ? <Text style={[styles.subtitle, { paddingHorizontal: 16, marginBottom: 8 }]}>{subtitle}</Text> : null
+            ) : title ? (
               <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 }]}>
                 <View style={{ flexShrink: 1, justifyContent: "center" }}>
                   <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
@@ -237,7 +240,9 @@ export function Screen({
           }
         >
           {!hasPinnedNav && !framed && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
-          {title ? (
+          {hasPinnedNav ? (
+            subtitle ? <Text style={[styles.subtitle, { marginBottom: 8 }]}>{subtitle}</Text> : null
+          ) : title ? (
             <View style={styles.header}>
               <View style={{ flexShrink: 1, justifyContent: "center" }}>
                 <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
@@ -463,26 +468,41 @@ export function Field({
   multiline?: boolean;
 }) {
   const styles = useStyles();
+  const { palette } = useTheme();
+  const [shown, setShown] = useState(false);
+  const secret = Boolean(secureTextEntry || shelfKey);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry || shelfKey}
-        placeholder={placeholder}
-        keyboardType={shelfKey ? "default" : keyboardType}
-        multiline={multiline}
-        autoCapitalize="none"
-        autoCorrect={shelfKey ? false : undefined}
-        autoComplete={shelfKey ? "off" : undefined}
-        textContentType={shelfKey ? "none" : undefined}
-        importantForAutofill={shelfKey ? "no" : undefined}
-        spellCheck={shelfKey ? false : undefined}
-        accessibilityLabel={label}
-        style={[styles.input, multiline ? styles.multiline : null]}
-        placeholderTextColor={colors.tertiary}
-      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={secret && !shown}
+          placeholder={placeholder}
+          keyboardType={shelfKey ? "default" : keyboardType}
+          multiline={multiline}
+          autoCapitalize="none"
+          autoCorrect={shelfKey ? false : undefined}
+          autoComplete={shelfKey ? "off" : undefined}
+          textContentType={shelfKey ? "none" : undefined}
+          importantForAutofill={shelfKey ? "no" : undefined}
+          spellCheck={shelfKey ? false : undefined}
+          accessibilityLabel={label}
+          style={[styles.input, { flex: 1 }, multiline ? styles.multiline : null]}
+          placeholderTextColor={colors.tertiary}
+        />
+        {shelfKey ? (
+          <Pressable
+            onPress={() => setShown((open) => !open)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={shown ? "Hide Shelf key" : "Show Shelf key"}
+          >
+            <Text style={{ color: palette.accentInk, fontWeight: "600", fontSize: 15 }}>{shown ? "Hide" : "Show"}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -696,9 +716,18 @@ export function MenuRow({ title, icon, onPress, divided, danger, active }: { tit
   );
 }
 
-export function Note({ children }: { children: string }) {
+export function Note({ children, tone }: { children: string; tone?: "danger" }) {
   const styles = useStyles();
-  return <Text style={styles.note}>{children}</Text>;
+  return <Text style={[styles.note, tone === "danger" ? { color: colors.danger } : null]}>{children}</Text>;
+}
+
+export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <View style={{ gap: 10 }}>
+      <Note tone="danger">{message}</Note>
+      <Button label="Retry" tone="quiet" onPress={onRetry} />
+    </View>
+  );
 }
 
 export function InlineLoading({ count = 2 }: { count?: number }) {
@@ -1908,6 +1937,35 @@ export function SpendCard({
   );
 }
 
+const QUICK_ACCOUNT_KEY = "shelf.quickadd.account";
+
+function amountToCents(raw: string): number {
+  if (!raw || raw === ".") return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100);
+}
+
+function pushDigit(raw: string, digit: string): string {
+  const [whole, frac] = raw.split(".");
+  if (raw.includes(".")) {
+    if ((frac ?? "").length >= 2) return raw;
+    return `${whole}.${frac ?? ""}${digit}`;
+  }
+  if (whole === "0") return digit;
+  if ((whole ?? "").length >= 7) return raw;
+  return `${raw}${digit}`;
+}
+
+function pickQuickCategory(
+  list: { id: string; name: string; color: string; kind: string }[],
+  income: boolean,
+) {
+  const pool = list.filter((c) => (income ? c.kind === "income" : c.kind !== "income"));
+  if (!income) return pool.find((c) => c.id === "cat-uncategorized") ?? pool[0] ?? null;
+  return pool[0] ?? null;
+}
+
 export function QuickLogModal({
   visible,
   onClose,
@@ -1917,16 +1975,16 @@ export function QuickLogModal({
   onClose: () => void;
   onSuccess?: () => void;
 }) {
-  const insets = useSafeAreaInsets();
   const { palette } = useTheme();
-  const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
-  const [cents, setCents] = useState(0);
+  const [amount, setAmount] = useState("");
+  const [pickingAccount, setPickingAccount] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
   const [merchant, setMerchant] = useState("");
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
-  const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color: string; kind: string }[]>([]);
+  const incomeMode = useRef(false);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [accountId, setAccountId] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -1934,47 +1992,61 @@ export function QuickLogModal({
 
   useEffect(() => {
     if (!visible) return;
-    setCents(0);
+    setAmount("");
+    setPickingAccount(false);
     setIsIncome(false);
+    incomeMode.current = false;
     setMerchant("");
     setError(null);
     setBusy(false);
 
-    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories");
-    if (cachedCats?.groups) {
-      const flat = cachedCats.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
+    const applyCats = (flat: { id: string; name: string; color: string; kind: string }[]) => {
       setCategories(flat);
-      if (flat[0]) setSelectedCatId(flat[0].id);
+      setSelectedCatId(pickQuickCategory(flat, incomeMode.current)?.id ?? null);
+    };
+    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null; kind?: string }[] }[] }>("/api/categories");
+    if (cachedCats?.groups) {
+      applyCats(cachedCats.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color), kind: c.kind ?? "expense" })));
     } else {
-      void api<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories")
+      void api<{ groups: { name: string; categories: { id: string; name: string; color?: string | null; kind?: string }[] }[] }>("/api/categories")
         .then((res) => {
-          const flat = res.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
-          setCategories(flat);
-          if (flat[0]) setSelectedCatId(flat[0].id);
+          applyCats(res.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color), kind: c.kind ?? "expense" })));
         })
         .catch(() => undefined);
     }
 
-    const cachedAccts = peek<{ accounts: { id: string; name: string }[] }>("/api/accounts");
-    if (cachedAccts?.accounts?.length) {
-      setAccounts(cachedAccts.accounts);
-      setAccountId(cachedAccts.accounts[0].id);
-    } else {
-      void api<{ accounts: { id: string; name: string }[] }>("/api/accounts")
-        .then((res) => {
-          setAccounts(res.accounts);
-          if (res.accounts[0]) setAccountId(res.accounts[0].id);
-        })
-        .catch(() => undefined);
-    }
+    let cancelled = false;
+    void (async () => {
+      const cachedAccts = peek<{ accounts: { id: string; name: string; isHidden?: boolean }[] }>("/api/accounts");
+      let list = cachedAccts?.accounts ?? [];
+      if (!list.length) {
+        try {
+          const res = await api<{ accounts: { id: string; name: string; isHidden?: boolean }[] }>("/api/accounts");
+          list = res.accounts;
+        } catch {
+          list = [];
+        }
+      }
+      list = list.filter((account) => !account.isHidden);
+      if (cancelled) return;
+      setAccounts(list);
+      const saved = await SecureStore.getItemAsync(QUICK_ACCOUNT_KEY).catch(() => null);
+      const match = list.find((account) => account.id === saved);
+      setAccountId(match?.id ?? list[0]?.id ?? "");
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [visible]);
 
   async function handleSave() {
-    if (cents <= 0) return;
+    const cents = amountToCents(amount);
+    if (cents <= 0 || !accountId) return;
     setBusy(true);
     setError(null);
     try {
-      const chosenCat = categories.find((c) => c.id === selectedCatId);
+      const pool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
+      const chosenCat = pool.find((c) => c.id === selectedCatId) ?? pickQuickCategory(categories, isIncome);
       const label = merchant.trim() || chosenCat?.name || (isIncome ? "Income" : "Expense");
       const signedDollars = (cents / 100) * (isIncome ? -1 : 1);
 
@@ -1984,10 +2056,11 @@ export function QuickLogModal({
           name: label,
           amount: signedDollars,
           date: todayISO(),
-          categoryId: selectedCatId || undefined,
-          accountId: accountId || undefined,
+          categoryId: chosenCat?.id,
+          accountId,
         }),
       });
+      await SecureStore.setItemAsync(QUICK_ACCOUNT_KEY, accountId).catch(() => undefined);
 
       celebrate(isIncome ? "Income logged" : "Expense logged");
       onSuccess?.();
@@ -2001,136 +2074,143 @@ export function QuickLogModal({
 
   if (!visible) return null;
 
-  const quickPillCats = categories.slice(0, 8);
+  const cents = amountToCents(amount);
+  const accountName = accounts.find((account) => account.id === accountId)?.name ?? "";
+  const categoryPool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
+  const preferred = pickQuickCategory(categories, isIncome);
+  const head = categoryPool.slice(0, 8);
+  const quickPillCats = preferred && !head.some((c) => c.id === preferred.id) ? [preferred, ...head].slice(0, 8) : head;
+  const saveLabel = !accountName ? "Choose an account" : cents > 0 ? `Add to ${accountName}` : "Enter an amount";
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
-        <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? "rgba(0,0,0,0.68)" : "rgba(15,23,42,0.36)" }]}
-          onPress={onClose}
-        >
-          {!reduceTransparency ? (
-            <BlurView intensity={isDark ? 25 : 18} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          ) : null}
-        </Pressable>
-
-        <View
-          style={{
-            backgroundColor: reduceTransparency ? palette.card : palette.sheetBg,
-            borderTopLeftRadius: 32,
-            borderTopRightRadius: 32,
-            borderCurve: "continuous",
-            borderTopWidth: 1,
-            borderTopColor: palette.specularTop || "rgba(255,255,255,0.4)",
-            overflow: "hidden",
-            paddingBottom: Math.max(insets.bottom + 12, 28),
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -12 },
-            shadowOpacity: isDark ? 0.6 : 0.16,
-            shadowRadius: 28,
-            elevation: 24,
-          }}
-        >
-          {!reduceTransparency ? (
-            <BlurView intensity={isDark ? 75 : 85} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
-          ) : null}
-
-          <View style={{ width: 36, height: 5, borderRadius: 99, backgroundColor: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)", alignSelf: "center", marginTop: 10, marginBottom: 8 }} />
-
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 10 }}>
-            <Pressable onPress={onClose} hitSlop={12}>
-              <Text style={{ fontSize: 16, color: palette.muted, fontWeight: "500" }}>Cancel</Text>
-            </Pressable>
-
-            <View style={{ flexDirection: "row", backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)", borderRadius: 99, padding: 3 }}>
-              <Pressable
-                onPress={() => {
-                  tapSelect();
-                  setIsIncome(false);
-                }}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 5,
-                  borderRadius: 99,
-                  backgroundColor: !isIncome ? palette.control : "transparent",
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: !isIncome ? palette.controlInk : palette.muted }}>
-                  Expense
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  tapSelect();
-                  setIsIncome(true);
-                }}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 5,
-                  borderRadius: 99,
-                  backgroundColor: isIncome ? palette.positive : "transparent",
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: isIncome ? "#ffffff" : palette.muted }}>
-                  Income
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={{ width: 50 }} />
-          </View>
-
-          <View style={{ alignItems: "center", paddingVertical: 10 }}>
-            <Text
-              style={{
-                fontSize: 48,
-                fontWeight: "700",
-                letterSpacing: -2,
-                color: isIncome ? palette.positive : palette.ink,
-                fontVariant: ["tabular-nums"],
+    <Sheet
+      title={pickingAccount ? "Account" : "Add"}
+      onClose={pickingAccount ? () => setPickingAccount(false) : onClose}
+      height="92%"
+    >
+      {pickingAccount ? (
+        accounts.length ? (
+          accounts.map((account) => (
+            <MenuRow
+              key={account.id}
+              title={account.name}
+              active={account.id === accountId}
+              onPress={() => {
+                setAccountId(account.id);
+                setPickingAccount(false);
               }}
-            >
-              {isIncome && cents > 0 ? "+" : ""}{money(cents)}
-            </Text>
-          </View>
-
-          <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
-            <View
+            />
+          ))
+        ) : (
+          <Note>Add an account first.</Note>
+        )
+      ) : (
+        <>
+          <View style={{ flexDirection: "row", alignSelf: "center", backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)", borderRadius: 99, padding: 3 }}>
+            <Pressable
+              onPress={() => {
+                tapSelect();
+                incomeMode.current = false;
+                setIsIncome(false);
+                setSelectedCatId(pickQuickCategory(categories, false)?.id ?? null);
+              }}
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
-                borderRadius: 14,
-                borderCurve: "continuous",
                 paddingHorizontal: 14,
-                paddingVertical: 9,
-                borderWidth: 1,
-                borderColor: palette.line,
+                paddingVertical: 5,
+                borderRadius: 99,
+                backgroundColor: !isIncome ? palette.control : "transparent",
               }}
             >
-              <Icon name="pencil" size={15} color={palette.tertiary} />
-              <TextInput
-                value={merchant}
-                onChangeText={setMerchant}
-                placeholder="Merchant or description (optional)"
-                placeholderTextColor={palette.tertiary}
-                style={{ flex: 1, fontSize: 15, color: palette.ink, marginLeft: 8, padding: 0 }}
-                autoCapitalize="sentences"
-              />
-              {merchant ? (
-                <Pressable onPress={() => setMerchant("")} hitSlop={8}>
-                  <Icon name="close" size={14} color={palette.tertiary} />
-                </Pressable>
-              ) : null}
-            </View>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: !isIncome ? palette.controlInk : palette.muted }}>
+                Expense
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                tapSelect();
+                incomeMode.current = true;
+                setIsIncome(true);
+                setSelectedCatId(pickQuickCategory(categories, true)?.id ?? null);
+              }}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 5,
+                borderRadius: 99,
+                backgroundColor: isIncome ? palette.positive : "transparent",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: isIncome ? "#ffffff" : palette.muted }}>
+                Income
+              </Text>
+            </Pressable>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 12 }}
+          <Text
+            style={{
+              fontSize: 48,
+              fontWeight: "700",
+              letterSpacing: -2,
+              textAlign: "center",
+              color: isIncome ? palette.positive : palette.ink,
+              fontVariant: ["tabular-nums"],
+            }}
           >
+            {isIncome && cents > 0 ? "+" : ""}{money(cents)}
+          </Text>
+
+          <Pressable
+            onPress={() => setPickingAccount(true)}
+            accessibilityRole="button"
+            accessibilityLabel={accountName ? `Account ${accountName}` : "Choose an account"}
+            style={{
+              minHeight: 48,
+              borderRadius: 14,
+              borderCurve: "continuous",
+              paddingHorizontal: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
+              borderWidth: 1,
+              borderColor: palette.line,
+            }}
+          >
+            <Text style={{ fontSize: 15, color: palette.muted }}>Account</Text>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: palette.ink }} numberOfLines={1}>
+              {accountName || "Choose"}
+            </Text>
+          </Pressable>
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
+              borderRadius: 14,
+              borderCurve: "continuous",
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderWidth: 1,
+              borderColor: palette.line,
+            }}
+          >
+            <Icon name="pencil" size={15} color={palette.tertiary} />
+            <TextInput
+              value={merchant}
+              onChangeText={setMerchant}
+              placeholder="Merchant or description (optional)"
+              placeholderTextColor={palette.tertiary}
+              style={{ flex: 1, fontSize: 15, color: palette.ink, marginLeft: 8, padding: 0 }}
+              autoCapitalize="sentences"
+            />
+            {merchant ? (
+              <Pressable onPress={() => setMerchant("")} hitSlop={8}>
+                <Icon name="close" size={14} color={palette.tertiary} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {quickPillCats.map((cat) => {
               const selected = selectedCatId === cat.id;
               return (
@@ -2154,13 +2234,7 @@ export function QuickLogModal({
                   }}
                 >
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }} />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: selected ? "700" : "500",
-                      color: selected ? palette.ink : palette.muted,
-                    }}
-                  >
+                  <Text style={{ fontSize: 13, fontWeight: selected ? "700" : "500", color: selected ? palette.ink : palette.muted }}>
                     {cat.name}
                   </Text>
                 </Pressable>
@@ -2168,27 +2242,22 @@ export function QuickLogModal({
             })}
           </ScrollView>
 
-          {error ? (
-            <Text style={{ textAlign: "center", color: palette.danger, fontSize: 13, marginBottom: 8, paddingHorizontal: 20 }}>
-              {error}
-            </Text>
-          ) : null}
+          {error ? <Note tone="danger">{error}</Note> : null}
 
-          {/* 1-Tap Quick Amount Presets */}
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, paddingHorizontal: 20, marginBottom: 10 }}>
-            {[500, 1000, 2000, 5000].map((preset) => (
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: 8 }}>
+            {[5, 10, 20, 50].map((preset) => (
               <Pressable
                 key={preset}
                 onPress={() => {
                   tapSelect();
-                  setCents((c) => Math.min(9999999, c + preset));
+                  setAmount(String(preset));
                 }}
                 style={({ pressed }) => [
                   {
                     paddingHorizontal: 13,
                     paddingVertical: 6,
                     borderRadius: 99,
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
+                    backgroundColor: amount === String(preset) ? (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)") : isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
                     borderWidth: 1,
                     borderColor: palette.glassBorderSubtle,
                   },
@@ -2196,65 +2265,53 @@ export function QuickLogModal({
                 ]}
               >
                 <Text style={{ fontSize: 13, fontWeight: "600", color: palette.ink, fontVariant: ["tabular-nums"] }}>
-                  +{money(preset)}
+                  {`$${preset}`}
                 </Text>
               </Pressable>
             ))}
           </View>
 
-          {/* Dedicated Tactile NumberPad */}
           <NumberPad
-            style={{ paddingHorizontal: 20 }}
-            onKey={(digit) => {
-              setCents((c) => {
-                if (c > 9999999) return c;
-                return c * 10 + parseInt(digit, 10);
-              });
-            }}
-            onClear={() => setCents(0)}
-            onBackspace={() => setCents((c) => Math.floor(c / 10))}
+            hasDecimal
+            onKey={(digit) => setAmount((current) => pushDigit(current, digit))}
+            onDecimal={() => setAmount((current) => (current.includes(".") ? current : `${current || "0"}.`))}
+            onClear={() => setAmount("")}
+            onBackspace={() => setAmount((current) => current.slice(0, -1))}
           />
 
-          <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
-            <Pressable
-              onPress={handleSave}
-              disabled={busy || cents <= 0}
-              style={({ pressed }) => [
-                {
-                  height: 52,
-                  borderRadius: 18,
-                  borderCurve: "continuous",
-                  backgroundColor: cents > 0 ? (isIncome ? palette.positive : palette.control) : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: cents > 0 ? (isDark ? 0.35 : 0.15) : 0,
-                  shadowRadius: 10,
-                  elevation: cents > 0 ? 3 : 0,
-                },
-                pressed ? { transform: [{ scale: 0.98 }], opacity: 0.88 } : null,
-              ]}
-            >
-              {busy ? (
-                <ActivityIndicator color={palette.controlInk} />
-              ) : (
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "700",
-                    color: cents > 0 ? palette.controlInk : palette.tertiary,
-                    letterSpacing: -0.3,
-                  }}
-                >
-                  {cents > 0 ? `Save ${isIncome ? "Income" : "Expense"} (${money(cents)})` : "Enter an amount"}
-                </Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
+          <Pressable
+            onPress={handleSave}
+            disabled={busy || cents <= 0 || !accountId}
+            style={({ pressed }) => [
+              {
+                height: 52,
+                borderRadius: 18,
+                borderCurve: "continuous",
+                backgroundColor: cents > 0 && accountId ? (isIncome ? palette.positive : palette.control) : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
+                alignItems: "center",
+                justifyContent: "center",
+              },
+              pressed ? { transform: [{ scale: 0.98 }], opacity: 0.88 } : null,
+            ]}
+          >
+            {busy ? (
+              <ActivityIndicator color={palette.controlInk} />
+            ) : (
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: cents > 0 && accountId ? palette.controlInk : palette.tertiary,
+                  letterSpacing: -0.3,
+                }}
+              >
+                {saveLabel}
+              </Text>
+            )}
+          </Pressable>
+        </>
+      )}
+    </Sheet>
   );
 }
 

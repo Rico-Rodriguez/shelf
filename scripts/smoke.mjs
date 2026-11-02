@@ -1,4 +1,16 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { currentTotp } from "../src/lib/totp.ts";
+
+const secretPath = "data/smoke-totp-secret";
+
+function saveSmokeSecret(secret) {
+  mkdirSync("data", { recursive: true });
+  writeFileSync(secretPath, String(secret));
+}
+
+function smokeTotp() {
+  return currentTotp(readFileSync(secretPath, "utf8").trim());
+}
 
 const base = process.env.SMOKE_URL ?? "http://127.0.0.1:3000";
 const password = process.env.SMOKE_PASSWORD ?? "shelf-smoke-key";
@@ -73,6 +85,7 @@ if (bearer.json?.needsEnroll) {
     console.error("totp setup failed", enroll.text);
     process.exit(1);
   }
+  saveSmokeSecret(enroll.json.secret);
   remember(enroll.res);
   const confirm = await authed("/api/auth/totp/setup", {
     method: "POST",
@@ -85,6 +98,27 @@ if (bearer.json?.needsEnroll) {
   token = confirm.json.token;
   remember(confirm.res);
   console.log("ok enroll");
+}
+
+if (bearer.json?.needsTotp) {
+  let code = "";
+  try {
+    code = smokeTotp();
+  } catch {
+    console.error("totp required but data/smoke-totp-secret is missing");
+    process.exit(1);
+  }
+  const totp = await authed("/api/auth/totp", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  if (!totp.res.ok || !totp.json?.token) {
+    console.error("totp failed", totp.text);
+    process.exit(1);
+  }
+  token = totp.json.token;
+  remember(totp.res);
+  console.log("ok totp");
 }
 
 const open = await req("/api/auth/session", { headers: { authorization: `Bearer ${token}` } });

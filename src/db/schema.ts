@@ -24,6 +24,16 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const recoveryCodes = pgTable("recovery_codes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const settings = pgTable("settings", {
   id: text("id").primaryKey().default("default"),
   budgetMode: text("budget_mode").notNull().default("category"),
@@ -95,6 +105,7 @@ export const accounts = pgTable("accounts", {
   manualKind: text("manual_kind"),
   liabilityJson: text("liability_json"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -122,6 +133,7 @@ export const transactions = pgTable("transactions", {
   pfcPrimary: text("pfc_primary"),
   pfcDetailed: text("pfc_detailed"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("tx_plaid_id_idx").on(t.plaidTransactionId)]);
@@ -142,6 +154,7 @@ export const tags = pgTable("tags", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   color: text("color").notNull().default("#7BA3A0"),
+  isSample: boolean("is_sample").notNull().default(false),
 }, (t) => [uniqueIndex("tags_name_idx").on(t.name)]);
 
 export const transactionTags = pgTable(
@@ -185,6 +198,7 @@ export const budgetMonths = pgTable("budget_months", {
   plannedIncomeCents: integer("planned_income_cents").notNull().default(0),
   flexPoolCents: integer("flex_pool_cents").notNull().default(0),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 }, (t) => [uniqueIndex("budget_months_ym_idx").on(t.year, t.month)]);
 
 export const budgetItems = pgTable("budget_items", {
@@ -198,6 +212,7 @@ export const budgetItems = pgTable("budget_items", {
   plannedCents: integer("planned_cents").notNull().default(0),
   rolloverInCents: integer("rollover_in_cents").notNull().default(0),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 }, (t) => [uniqueIndex("budget_items_month_cat_idx").on(t.budgetMonthId, t.categoryId)]);
 
 export const recurrences = pgTable("recurrences", {
@@ -214,6 +229,7 @@ export const recurrences = pgTable("recurrences", {
   lastPaidDate: text("last_paid_date"),
   kind: text("kind").notNull().default("bill"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 });
 
 export const suppressedMerchants = pgTable("suppressed_merchants", {
@@ -229,6 +245,7 @@ export const goals = pgTable("goals", {
   targetDate: text("target_date"),
   categoryId: text("category_id"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -254,6 +271,7 @@ export const securities = pgTable("securities", {
   closePriceCents: integer("close_price_cents"),
   closePriceAsOf: text("close_price_as_of"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 }, (t) => [uniqueIndex("securities_plaid_idx").on(t.plaidSecurityId)]);
 
 export const holdings = pgTable("holdings", {
@@ -269,6 +287,7 @@ export const holdings = pgTable("holdings", {
   institutionValueCents: integer("institution_value_cents").notNull().default(0),
   institutionPriceCents: integer("institution_price_cents"),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 });
 
 export const accountBalanceSnapshots = pgTable(
@@ -355,6 +374,7 @@ export const netWorthSnapshots = pgTable("net_worth_snapshots", {
   liabilitiesCents: integer("liabilities_cents").notNull(),
   netWorthCents: integer("net_worth_cents").notNull(),
   secretEnc: text("secret_enc"),
+  isSample: boolean("is_sample").notNull().default(false),
 }, (t) => [uniqueIndex("nw_date_idx").on(t.date)]);
 
 export const categoryGroupRelations = relations(categoryGroups, ({ many }) => ({

@@ -7,6 +7,7 @@ import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { applyRulesToNewTx } from "@/lib/rules";
 import { monthRange, todayISO, yearMonth } from "@/lib/dates";
+import { applyManualAmount } from "@/lib/manual-balance";
 import { openAccount, openSplit, openTx, sealedTxWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
@@ -214,6 +215,7 @@ export async function POST(request: Request) {
     if (Object.keys(patch).length) {
       await db.update(transactions).set(patch).where(eq(transactions.id, id));
     }
+    await applyManualAmount(body.accountId, amountCents, dek);
     return NextResponse.json({ id });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });

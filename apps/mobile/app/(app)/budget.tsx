@@ -2,10 +2,10 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
+import { budgetPace, dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, Loading, MonthNav, Note, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, LoadError, Loading, MonthNav, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
 import { Icon } from "../../src/icons";
 
 type BudgetRow = {
@@ -204,6 +204,10 @@ export default function BudgetScreen() {
   const hasPlan = plannedTotal > 0;
   const left = plannedTotal - (data?.expenseSpentCents ?? 0);
   const over = hasPlan && left < 0;
+  const pace = budgetPace(data?.expenseSpentCents ?? 0, plannedTotal);
+  const paceColor = pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.positive;
+  const typedIncomeCents = Math.round(Number(income || 0) * 100);
+  const leftToAssign = typedIncomeCents - plannedTotal;
 
   return (
     <>
@@ -236,7 +240,7 @@ export default function BudgetScreen() {
           </View>
         }
       >
-        {error ? <Note>{error}</Note> : null}
+        {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
         {!data && !error ? <Loading /> : null}
         {data ? (
           <>
@@ -283,13 +287,17 @@ export default function BudgetScreen() {
                       borderRadius: 99,
                       borderCurve: "continuous",
                       backgroundColor:
-                        over
+                        pace.tone === "bad"
                           ? colors.scheme === "dark"
                             ? "rgba(255, 107, 74, 0.16)"
                             : "rgba(217, 74, 46, 0.12)"
-                          : colors.scheme === "dark"
-                            ? "rgba(61, 190, 154, 0.16)"
-                            : "rgba(27, 122, 98, 0.12)",
+                          : pace.tone === "warn"
+                            ? colors.scheme === "dark"
+                              ? "rgba(224, 161, 90, 0.16)"
+                              : "rgba(196, 122, 26, 0.12)"
+                            : colors.scheme === "dark"
+                              ? "rgba(61, 190, 154, 0.16)"
+                              : "rgba(27, 122, 98, 0.12)",
                     }}
                   >
                     <View
@@ -297,7 +305,7 @@ export default function BudgetScreen() {
                         width: 6,
                         height: 6,
                         borderRadius: 3,
-                        backgroundColor: over ? colors.danger : colors.positive,
+                        backgroundColor: paceColor,
                       }}
                     />
                     <Text
@@ -305,10 +313,10 @@ export default function BudgetScreen() {
                         fontSize: 11,
                         fontWeight: "700",
                         letterSpacing: -0.1,
-                        color: over ? colors.danger : colors.positive,
+                        color: paceColor,
                       }}
                     >
-                      {over ? "Over Budget" : "On Track"}
+                      {pace.label}
                     </Text>
                   </View>
                 ) : null}
@@ -331,6 +339,9 @@ export default function BudgetScreen() {
                   {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
                 </Text>
               </View>
+              <Text style={{ fontSize: 13, color: data.leftoverCents < 0 ? colors.danger : colors.muted, fontVariant: ["tabular-nums"] }}>
+                {`Left to assign ${money(data.leftoverCents)}`}
+              </Text>
 
               {/* Visual Progress Bar */}
               {hasPlan ? (
@@ -338,7 +349,7 @@ export default function BudgetScreen() {
                   <Progress
                     value={data.expenseSpentCents}
                     max={plannedTotal}
-                    color={over ? colors.danger : colors.accent}
+                    color={pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.accent}
                   />
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
@@ -487,17 +498,17 @@ export default function BudgetScreen() {
                     paddingHorizontal: 8,
                     paddingVertical: 3,
                     borderRadius: 6,
-                    backgroundColor: data.leftoverCents < 0 ? "rgba(217, 74, 46, 0.12)" : data.leftoverCents === 0 ? "rgba(27, 122, 98, 0.12)" : colors.fill,
+                    backgroundColor: leftToAssign < 0 ? "rgba(217, 74, 46, 0.12)" : leftToAssign === 0 ? "rgba(27, 122, 98, 0.12)" : colors.fill,
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 12,
                       fontWeight: "600",
-                      color: data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.ink,
+                      color: leftToAssign < 0 ? colors.danger : leftToAssign === 0 ? colors.positive : colors.ink,
                     }}
                   >
-                    {data.leftoverCents < 0 ? "Over allocated" : data.leftoverCents === 0 ? "Fully assigned" : "Unassigned buffer"}
+                    {leftToAssign < 0 ? "Over allocated" : leftToAssign === 0 ? "Fully assigned" : "Unassigned buffer"}
                   </Text>
                 </View>
               </View>
@@ -510,7 +521,7 @@ export default function BudgetScreen() {
                   </Text>
                 </View>
                 <View style={{ gap: 2, alignItems: "center" }}>
-                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Category Budgets</Text>
+                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Assigned</Text>
                   <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>
                     {money(plannedTotal)}
                   </Text>
@@ -521,10 +532,10 @@ export default function BudgetScreen() {
                     style={{
                       fontSize: 17,
                       fontWeight: "700",
-                      color: data.leftoverCents < 0 ? colors.danger : data.leftoverCents === 0 ? colors.positive : colors.accentInk,
+                      color: leftToAssign < 0 ? colors.danger : leftToAssign === 0 ? colors.positive : colors.accentInk,
                     }}
                   >
-                    {money(data.leftoverCents)}
+                    {money(leftToAssign)}
                   </Text>
                 </View>
               </View>

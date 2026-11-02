@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import {
   accounts,
   budgetItems,
+  budgetMonths,
   goals,
   goalAccounts,
   holdings,
@@ -18,12 +19,10 @@ import { getOrCreateBudgetMonth } from "./budget";
 import { nid } from "./ids";
 import { addDays, addMonths, todayISO, yearMonth } from "./dates";
 import { snapshotNetWorth } from "./networth";
-import { prepareVault, sealedBudgetItemWrite } from "./secrets";
+import { openBudgetItem, openBudgetMonth, prepareVault, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "./secrets";
 
 export async function seedDemoHouse(dek: Buffer) {
   const db = await getDb();
-  const [cfg] = await db.select().from(settings);
-  if (cfg?.demoLoaded) return { ok: true, already: true };
 
   const checking = nid();
   const savings = nid();
@@ -33,12 +32,12 @@ export async function seedDemoHouse(dek: Buffer) {
   const car = nid();
 
   await db.insert(accounts).values([
-    { id: checking, name: "Everyday checking", type: "depository", subtype: "checking", mask: "2144", currentBalanceCents: 428_550, availableBalanceCents: 412_200, isManual: true, officialName: "Sample checking" },
-    { id: savings, name: "Rainy day savings", type: "depository", subtype: "savings", mask: "8831", currentBalanceCents: 1_250_000, isManual: true },
-    { id: card, name: "Kitchen table card", type: "credit", subtype: "credit card", mask: "4412", currentBalanceCents: 186_440, isManual: true },
-    { id: brokerage, name: "Brokerage", type: "investment", subtype: "brokerage", mask: "1022", currentBalanceCents: 4_812_300, isManual: true },
-    { id: house, name: "The cottage", type: "other", subtype: "property", currentBalanceCents: 42_000_000, isManual: true, manualKind: "property" },
-    { id: car, name: "Blue hatchback", type: "other", subtype: "vehicle", currentBalanceCents: 1_100_000, isManual: true, manualKind: "vehicle" },
+    { id: checking, name: "Everyday checking", type: "depository", subtype: "checking", mask: "2144", currentBalanceCents: 428_550, availableBalanceCents: 412_200, isManual: true, officialName: "Sample checking", isSample: true },
+    { id: savings, name: "Rainy day savings", type: "depository", subtype: "savings", mask: "8831", currentBalanceCents: 1_250_000, isManual: true, isSample: true },
+    { id: card, name: "Kitchen table card", type: "credit", subtype: "credit card", mask: "4412", currentBalanceCents: 186_440, isManual: true, isSample: true },
+    { id: brokerage, name: "Brokerage", type: "investment", subtype: "brokerage", mask: "1022", currentBalanceCents: 4_812_300, isManual: true, isSample: true },
+    { id: house, name: "The cottage", type: "other", subtype: "property", currentBalanceCents: 42_000_000, isManual: true, manualKind: "property", isSample: true },
+    { id: car, name: "Blue hatchback", type: "other", subtype: "vehicle", currentBalanceCents: 1_100_000, isManual: true, manualKind: "vehicle", isSample: true },
   ]);
 
   const { year, month } = yearMonth();
@@ -87,14 +86,15 @@ export async function seedDemoHouse(dek: Buffer) {
       hidden: false,
       isTransfer: s.categoryId === "cat-cc-payment",
       pending: false,
+      isSample: true,
     });
   }
 
   const vacation = nid();
   const debt = nid();
   await db.insert(goals).values([
-    { id: vacation, name: "Cabin week", kind: "save_up", targetCents: 1_800_000, targetDate: addDays(todayISO(), 180) },
-    { id: debt, name: "Clear the card", kind: "pay_down", targetCents: 0 },
+    { id: vacation, name: "Cabin week", kind: "save_up", targetCents: 1_800_000, targetDate: addDays(todayISO(), 180), isSample: true },
+    { id: debt, name: "Clear the card", kind: "pay_down", targetCents: 0, isSample: true },
   ]);
   await db.insert(goalAccounts).values([
     { goalId: vacation, accountId: savings },
@@ -104,22 +104,22 @@ export async function seedDemoHouse(dek: Buffer) {
   const vti = nid();
   const bond = nid();
   await db.insert(securities).values([
-    { id: vti, name: "Total market", ticker: "VTI", type: "etf", closePriceCents: 26500 },
-    { id: bond, name: "Quiet bonds", ticker: "BND", type: "etf", closePriceCents: 7200 },
+    { id: vti, name: "Total market", ticker: "VTI", type: "etf", closePriceCents: 26500, isSample: true },
+    { id: bond, name: "Quiet bonds", ticker: "BND", type: "etf", closePriceCents: 7200, isSample: true },
   ]);
   await db.insert(holdings).values([
-    { id: nid(), accountId: brokerage, securityId: vti, quantity: "142.5", costBasisCents: 3_200_000, institutionValueCents: 3_776_250, institutionPriceCents: 26500 },
-    { id: nid(), accountId: brokerage, securityId: bond, quantity: "144", costBasisCents: 980_000, institutionValueCents: 1_036_800, institutionPriceCents: 7200 },
+    { id: nid(), accountId: brokerage, securityId: vti, quantity: "142.5", costBasisCents: 3_200_000, institutionValueCents: 3_776_250, institutionPriceCents: 26500, isSample: true },
+    { id: nid(), accountId: brokerage, securityId: bond, quantity: "144", costBasisCents: 980_000, institutionValueCents: 1_036_800, institutionPriceCents: 7200, isSample: true },
   ]);
 
   await db.insert(recurrences).values([
-    { id: nid(), merchantName: "Landlord", categoryId: "cat-rent", accountId: checking, amountCents: 185000, cadence: "monthly", nextDate: addDays(todayISO(), 12), isIncome: false, source: "detected", lastPaidDate: addDays(todayISO(), -18) },
-    { id: nid(), merchantName: "Stream", categoryId: "cat-streaming", accountId: card, amountCents: 1599, cadence: "monthly", nextDate: addDays(todayISO(), 8), isIncome: false, source: "detected" },
-    { id: nid(), merchantName: "Paycheck", categoryId: "cat-paycheck", accountId: checking, amountCents: 320000, cadence: "monthly", nextDate: addDays(todayISO(), 14), isIncome: true, source: "detected" },
+    { id: nid(), merchantName: "Landlord", categoryId: "cat-rent", accountId: checking, amountCents: 185000, cadence: "monthly", nextDate: addDays(todayISO(), 12), isIncome: false, source: "detected", lastPaidDate: addDays(todayISO(), -18), isSample: true },
+    { id: nid(), merchantName: "Stream", categoryId: "cat-streaming", accountId: card, amountCents: 1599, cadence: "monthly", nextDate: addDays(todayISO(), 8), isIncome: false, source: "detected", isSample: true },
+    { id: nid(), merchantName: "Paycheck", categoryId: "cat-paycheck", accountId: checking, amountCents: 320000, cadence: "monthly", nextDate: addDays(todayISO(), 14), isIncome: true, source: "detected", isSample: true },
   ]);
 
   const cozy = nid();
-  await db.insert(tags).values({ id: cozy, name: "cozy", color: "#D4847C" });
+  await db.insert(tags).values({ id: cozy, name: "cozy", color: "#D4847C", isSample: true });
   const groceryTx = await db.select().from(transactions);
   const firstGroc = groceryTx.find((t) => t.categoryId === "cat-groceries");
   if (firstGroc) {
@@ -146,10 +146,16 @@ export async function seedDemoHouse(dek: Buffer) {
   for (const item of plannedItems) {
     const planned = plans[item.categoryId];
     if (!planned) continue;
-    await db.update(budgetItems).set(sealedBudgetItemWrite(planned, 0, dek)).where(eq(budgetItems.id, item.id));
+    await db.update(budgetItems).set({ ...sealedBudgetItemWrite(planned, 0, dek), isSample: true }).where(eq(budgetItems.id, item.id));
   }
 
+  await db
+    .update(budgetMonths)
+    .set({ ...sealedBudgetMonthWrite(320_000, dek, openedMonth.flexPoolCents ?? 0), isSample: true })
+    .where(eq(budgetMonths.id, openedMonth.id));
+
   await snapshotNetWorth(dek);
+  await db.update(netWorthSnapshots).set({ isSample: true }).where(eq(netWorthSnapshots.date, todayISO()));
   const prev = addMonths(year, month, -1);
   await db.insert(netWorthSnapshots).values({
     id: nid(),
@@ -157,9 +163,66 @@ export async function seedDemoHouse(dek: Buffer) {
     assetsCents: 48_900_000,
     liabilitiesCents: 210_000,
     netWorthCents: 48_690_000,
+    isSample: true,
   }).onConflictDoNothing();
 
   await db.update(settings).set({ demoLoaded: true, plannedIncomeCents: 320000 }).where(eq(settings.id, "default"));
   await prepareVault(dek);
   return { ok: true, already: false };
+}
+
+/** Delete rows the sample seed marked, and leave anything the person added. */
+export async function clearDemoHouse(dek: Buffer) {
+  const db = await getDb();
+  await db.delete(transactions).where(eq(transactions.isSample, true));
+  await db.delete(recurrences).where(eq(recurrences.isSample, true));
+  await db.delete(goals).where(eq(goals.isSample, true));
+  await db.delete(holdings).where(eq(holdings.isSample, true));
+
+  const held = new Set((await db.select({ id: holdings.securityId }).from(holdings)).map((row) => row.id));
+  const sampleSecs = await db.select({ id: securities.id }).from(securities).where(eq(securities.isSample, true));
+  for (const row of sampleSecs) {
+    if (!held.has(row.id)) await db.delete(securities).where(eq(securities.id, row.id));
+  }
+
+  await db.delete(tags).where(eq(tags.isSample, true));
+  await db.delete(netWorthSnapshots).where(eq(netWorthSnapshots.isSample, true));
+
+  const liveTx = new Set((await db.select({ id: transactions.accountId }).from(transactions)).map((row) => row.id));
+  const liveHold = new Set((await db.select({ id: holdings.accountId }).from(holdings)).map((row) => row.id));
+  const liveBills = new Set(
+    (await db.select({ id: recurrences.accountId }).from(recurrences))
+      .map((row) => row.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const sampleAccounts = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.isSample, true));
+  for (const row of sampleAccounts) {
+    if (liveTx.has(row.id) || liveHold.has(row.id) || liveBills.has(row.id)) continue;
+    await db.delete(accounts).where(eq(accounts.id, row.id));
+  }
+
+  const months = await db.select().from(budgetMonths);
+  const keptIncome = months.some((month) => !month.isSample);
+  for (const month of months) {
+    if (!month.isSample) continue;
+    const opened = openBudgetMonth(month, dek);
+    await db
+      .update(budgetMonths)
+      .set({ ...sealedBudgetMonthWrite(0, dek, opened.flexPoolCents ?? 0), isSample: false })
+      .where(eq(budgetMonths.id, month.id));
+  }
+  const sampleItems = await db.select().from(budgetItems).where(eq(budgetItems.isSample, true));
+  for (const item of sampleItems) {
+    const opened = openBudgetItem(item, dek);
+    await db
+      .update(budgetItems)
+      .set({ ...sealedBudgetItemWrite(0, opened.rolloverInCents, dek), isSample: false })
+      .where(eq(budgetItems.id, item.id));
+  }
+
+  await db
+    .update(settings)
+    .set(keptIncome ? { demoLoaded: false } : { demoLoaded: false, ...sealedSettingsIncome(0, dek) })
+    .where(eq(settings.id, "default"));
+  return { ok: true };
 }

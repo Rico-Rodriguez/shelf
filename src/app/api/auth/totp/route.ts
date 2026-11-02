@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { AuthError, getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { decryptSecret } from "@/lib/crypto";
 import { clearIpFailures, clientIp, ipBlocked, lockMessage, nextLock, noteIpFailure } from "@/lib/throttle";
+import { consumeRecoveryCode } from "@/lib/recovery";
 import { verifyTotp } from "@/lib/totp";
 import { prepareVault } from "@/lib/secrets";
 
@@ -27,7 +28,10 @@ export async function POST(request: Request) {
     const locked = lockMessage(user.lockedUntil);
     if (locked) return NextResponse.json({ error: locked }, { status: 429 });
     const secret = decryptSecret(user.totpSecretEnc, Buffer.from(session.dek, "base64"));
-    if (!body.code || !verifyTotp(secret, body.code)) {
+    const code = body.code?.trim() ?? "";
+    const totpOk = Boolean(code) && verifyTotp(secret, code);
+    const recoveryOk = !totpOk && code ? await consumeRecoveryCode(user.id, code) : false;
+    if (!totpOk && !recoveryOk) {
       noteIpFailure(ip);
       const next = nextLock(user.failedAttempts);
       await db.update(users).set(next).where(eq(users.id, user.id));

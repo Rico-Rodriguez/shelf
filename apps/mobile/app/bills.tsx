@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
-import { annualizedCents, inDaysPhrase, money, monthLabel, monthRange, occurrencesInMonth, todayISO } from "../src/format";
-import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, Loading, MonthNav, Note, Screen, Section, Segment, Sheet, Switch } from "../src/ui";
+import { annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
+import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, Sheet, Switch } from "../src/ui";
 
 type Bill = {
   id: string;
@@ -52,9 +52,7 @@ const emptyForm = (): Form => ({ merchantName: "", amount: "", cadence: "monthly
 
 export default function BillsScreen() {
   const now = new Date();
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [rows, setRows] = useState<Bill[] | null>(null);
-  const [view, setView] = useState<"list" | "calendar">("list");
   const [findOpen, setFindOpen] = useState(false);
   const [finding, setFinding] = useState(false);
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
@@ -88,7 +86,7 @@ export default function BillsScreen() {
       if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
       return a.nextDate.localeCompare(b.nextDate);
     });
-  const focus = view === "calendar" ? cursor : { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const focus = { year: now.getFullYear(), month: now.getMonth() + 1 };
   const projected = useMemo(
     () =>
       bills
@@ -112,13 +110,7 @@ export default function BillsScreen() {
       return { date, cents: run };
     });
   const points = curve.length ? [{ date: range.start, cents: 0 }, ...curve] : [];
-  const delta = outflow - monthlyBills;
-  const status =
-    monthlyBills <= 0 || Math.abs(delta) < 100 ? null : delta > 0 ? `${money(delta)} above typical` : `${money(-delta)} under typical`;
   const next = [...projected].filter((row) => row.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
-  const thisMonth = focus.year === now.getFullYear() && focus.month === now.getMonth() + 1;
-  const days = new Date(cursor.year, cursor.month, 0).getDate();
-  const startPad = new Date(cursor.year, cursor.month - 1, 1).getDay();
 
   async function detect() {
     setFindOpen(true);
@@ -218,7 +210,7 @@ export default function BillsScreen() {
     const bits = [CADENCE_LABEL[row.cadence] ?? row.cadence];
     if ((row.kind ?? "bill") === "subscription") bits.push("Subscription");
     bits.push(row.isActive ? `Due ${inDaysPhrase(row.nextDate)}` : "Paused");
-    if (row.priceDeltaCents) bits.push(row.priceDeltaCents > 0 ? "Up" : "Down");
+    if (row.priceDeltaCents && row.priceDeltaCents > 0) bits.push("Above typical");
     return bits.join(" · ");
   }
 
@@ -226,6 +218,7 @@ export default function BillsScreen() {
     <Screen
       title="Bills"
       refresh={<Back />}
+      onRefresh={load}
       action={
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
           <Button label="Find bills" tone="quiet" onPress={() => void detect()} />
@@ -233,11 +226,10 @@ export default function BillsScreen() {
         </View>
       }
     >
-      {error ? <Note>{error}</Note> : null}
+      {error ? <LoadError message={error} onRetry={load} /> : null}
       {rows === null && !error ? <Loading /> : null}
-      <Segment value={view} onChange={(next) => setView(next as "list" | "calendar")} options={[{ value: "list", label: "List" }, { value: "calendar", label: "Calendar" }]} />
       {rows ? (
-        <Hero label={thisMonth ? "Due this month" : monthLabel(focus.year, focus.month)} cents={outflow} points={points.length > 1 ? points : undefined}>
+        <Hero label="Due this month" cents={outflow} points={points.length > 1 ? points : undefined}>
           <Facts
             items={[
               { kicker: "Typical Monthly", value: money(monthlyBills) },
@@ -247,42 +239,7 @@ export default function BillsScreen() {
         </Hero>
       ) : null}
 
-      {view === "calendar" ? (
-        <Card>
-          <View style={{ padding: 12, gap: 8 }}>
-            <MonthNav year={cursor.year} month={cursor.month} label={monthLabel(cursor.year, cursor.month)} onChange={(year, month) => setCursor({ year, month })} />
-            <View style={{ flexDirection: "row" }}>
-              {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
-                <Text key={`${day}${index}`} style={{ flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", color: colors.muted }}>
-                  {day}
-                </Text>
-              ))}
-            </View>
-            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-              {Array.from({ length: startPad }).map((_, index) => (
-                <View key={`pad-${index}`} style={{ width: "14.28%", minHeight: 52 }} />
-              ))}
-              {Array.from({ length: days }).map((_, index) => {
-                const day = index + 1;
-                const iso = `${cursor.year}-${String(cursor.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                const hits = projected.filter((row) => row.date === iso);
-                return (
-                  <View key={iso} style={{ width: "14.28%", minHeight: 52, backgroundColor: colors.fill, borderRadius: 10, padding: 2, marginBottom: 2 }}>
-                    <Text style={{ fontSize: 11, color: colors.muted }}>{day}</Text>
-                    {hits.slice(0, 2).map((hit) => (
-                      <Pressable key={hit.id + hit.date} onPress={() => openEdit(hit)}>
-                        <Text numberOfLines={1} style={{ fontSize: 10, color: colors.ink }}>
-                          {hit.merchantName}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </Card>
-      ) : bills.length === 0 && rows ? (
+      {bills.length === 0 && rows ? (
         <View style={{ gap: 12, alignItems: "center" }}>
           <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>No bills yet</Text>
           <Button label="Find bills" onPress={() => void detect()} />

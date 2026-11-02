@@ -19,11 +19,29 @@ type SessionContextValue = {
   error: string | null;
   refresh: () => Promise<ShelfState | null>;
   signOut: () => Promise<void>;
+  lock: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 const SESSION_STATE_KEY = "shelf.session.state";
+const LOCK_KEY = "shelf.locked";
+
+async function readLocked() {
+  try {
+    return (await SecureStore.getItemAsync(LOCK_KEY)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function canEnter(parsed: ShelfState) {
+  return Boolean(parsed?.unlocked && !parsed.needsGoogle && !parsed.needsSetup && !parsed.needsEnroll && !parsed.needsTotp);
+}
+
+export async function clearLock() {
+  await SecureStore.deleteItemAsync(LOCK_KEY).catch(() => undefined);
+}
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -33,19 +51,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void (async () => {
       try {
-        const [token, cached] = await Promise.all([
+        const [token, cached, locked] = await Promise.all([
           getToken(),
           SecureStore.getItemAsync(SESSION_STATE_KEY),
+          readLocked(),
         ]);
-        if (token && cached) {
-          const parsed = JSON.parse(cached) as ShelfState;
-          if (parsed && parsed.unlocked && !parsed.needsGoogle && !parsed.needsSetup && !parsed.needsEnroll) {
-            setState(parsed);
-            setReady(true);
-          }
+        if (locked || !token || !cached) return;
+        const parsed = JSON.parse(cached) as ShelfState;
+        if (canEnter(parsed)) {
+          setState(parsed);
+          setReady(true);
         }
       } catch {
-        // Ignore
+        // Ignore a bad cache and wait for the network check.
       }
     })();
   }, []);
@@ -58,10 +76,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setTimeout(() => reject(new Error("Shelf took too long to answer. Check the connection and open the app again.")), 12000);
         }),
       ]);
-      setState(next);
+      const locked = await readLocked();
+      const shown = locked ? { ...next, unlocked: false } : next;
+      setState(shown);
       setError(null);
-      void SecureStore.setItemAsync(SESSION_STATE_KEY, JSON.stringify(next)).catch(() => undefined);
-      return next;
+      void SecureStore.setItemAsync(SESSION_STATE_KEY, JSON.stringify(shown)).catch(() => undefined);
+      return shown;
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setState(null);
@@ -85,11 +105,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // The local token is cleared either way.
     }
     await setToken(null);
-    void SecureStore.deleteItemAsync(SESSION_STATE_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(LOCK_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(SESSION_STATE_KEY).catch(() => undefined);
     await refresh();
   }, [refresh]);
 
-  const value = useMemo(() => ({ ready, state, error, refresh, signOut }), [ready, state, error, refresh, signOut]);
+  const lock = useCallback(async () => {
+    await SecureStore.setItemAsync(LOCK_KEY, "1").catch(() => undefined);
+    setState((current) => {
+      const next = current ? { ...current, unlocked: false } : current;
+      if (next) void SecureStore.setItemAsync(SESSION_STATE_KEY, JSON.stringify(next)).catch(() => undefined);
+      return next;
+    });
+    setError(null);
+  }, []);
+
+  const value = useMemo(
+    () => ({ ready, state, error, refresh, signOut, lock }),
+    [ready, state, error, refresh, signOut, lock],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

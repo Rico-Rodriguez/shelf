@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, budgetItems, categories, notifications, plaidItems, recurrences, transactions } from "@/db/schema";
 import { getOrCreateBudgetMonth, spentByCategory } from "./budget";
@@ -108,18 +108,19 @@ export async function refreshNotifications(dek: Buffer) {
       dedupeKey: `price:${bill.id}:${last.date}`,
     });
   }
-  const cash = (await db.select().from(accounts))
+  const cashRows = (await db.select().from(accounts))
     .map((row) => openAccount(row, dek))
-    .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"))
-    .reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
+    .filter((account) => !account.isHidden && (account.type === "depository" || account.type === "cash"));
+  const cash = cashRows.reduce((sum, account) => sum + (account.availableBalanceCents ?? account.currentBalanceCents), 0);
   const soon = allRecurring
     .filter((row) => row.isActive && !row.isIncome && row.nextDate >= today && row.nextDate <= addDays(today, 14))
     .reduce((sum, row) => sum + row.amountCents, 0);
-  if (cash < 10000 || (soon > 0 && cash < soon)) {
+  const cashLow = cashRows.length > 0 && soon > cash;
+  if (cashLow) {
     notes.push({
       kind: "cash",
       title: "Cash is running low",
-      body: soon > cash ? `${formatMoney(cash)} on hand, ${formatMoney(soon)} in bills over 14 days` : `${formatMoney(cash)} in cash accounts`,
+      body: `${formatMoney(cash)} on hand, ${formatMoney(soon)} in bills over 14 days`,
       href: "/accounts",
       dedupeKey: `cash:${today}`,
     });
@@ -134,6 +135,14 @@ export async function refreshNotifications(dek: Buffer) {
       continue;
     }
     await db.insert(notifications).values({ id: nid(), ...note });
+  }
+
+  if (!cashLow) {
+    await db.delete(notifications).where(and(eq(notifications.kind, "cash"), isNull(notifications.readAt)));
+  } else {
+    await db
+      .delete(notifications)
+      .where(and(eq(notifications.kind, "cash"), isNull(notifications.readAt), ne(notifications.dedupeKey, `cash:${today}`)));
   }
 
   const staleBills = await db

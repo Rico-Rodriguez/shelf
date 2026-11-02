@@ -1,10 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { api } from "../../src/api";
 import { isLiability, money, outflow, payoffMonths, shortDate } from "../../src/format";
 import { connectBank } from "../../src/plaid";
-import { Back, Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
+import { Back, Button, Card, colors, Field, Hero, LoadError, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
 
 type Liability = { apr: number | null; minimumCents: number | null; due: string | null };
 type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
@@ -76,6 +76,13 @@ export default function AccountScreen() {
     router.back();
   }
 
+  function confirmRemove() {
+    Alert.alert("Remove this account?", "Its charges will be deleted too. This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => void remove() },
+    ]);
+  }
+
   async function disconnect() {
     if (!data?.account.plaidItemId) return;
     await api(`/api/plaid/items/${data.account.plaidItemId}`, { method: "DELETE" });
@@ -99,8 +106,8 @@ export default function AccountScreen() {
       subtitle={item && item.status !== "ok" ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}` : item?.institutionName || undefined}
       refresh={<Back />}
     >
-      {error ? <Note>{error}</Note> : null}
-      {!data ? <Loading /> : null}
+      {error ? <LoadError message={error} onRetry={load} /> : null}
+      {!data && !error ? <Loading /> : null}
       {account && data ? (
         <>
           <Hero
@@ -129,7 +136,7 @@ export default function AccountScreen() {
           <Field label="Name" value={name} onChangeText={setName} />
           <Field label="Balance" value={balance} onChangeText={setBalance} keyboardType="decimal-pad" />
           <Button label="Save" onPress={() => void save()} />
-          <Button label="Remove account" tone="danger" onPress={() => void remove()} />
+          <Button label="Remove account" tone="danger" onPress={confirmRemove} />
           {account.plaidItemId ? <Button label="Update bank login" tone="quiet" onPress={() => void connectBank(account.plaidItemId ?? undefined).then(load)} /> : null}
           {data.liability ? (
             <View style={{ gap: 8 }}>
