@@ -4,6 +4,8 @@ import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { advanceDueDate, annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
+import { anchorRect, playFlight, useFlightArrival, type FlightPiece } from "../src/flight";
+import { useReduceMotion } from "../src/theme";
 import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, Sheet, Switch } from "../src/ui";
 
 type Bill = {
@@ -53,6 +55,8 @@ const emptyForm = (): Form => ({ merchantName: "", amount: "", cadence: "monthly
 
 export default function BillsScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
+  const reduceMotion = useReduceMotion();
+  useFlightArrival("after-bills", reduceMotion);
   const now = new Date();
   const openedBill = useRef<string | null>(null);
   const [rows, setRows] = useState<Bill[] | null>(null);
@@ -194,6 +198,35 @@ export default function BillsScreen() {
   function markPaid(row: Bill) {
     const snapshot = rows;
     const nextDate = advanceDueDate(row.nextDate || todayISO(), row.cadence);
+    const amountFrom = anchorRect(`bills.row.${row.id}.amount`);
+    const spent = anchorRect("today.spent");
+    const rowRect = anchorRect(`bills.row.${row.id}`);
+    const pieces: FlightPiece[] = [];
+    if (amountFrom && spent) {
+      pieces.push({
+        key: "spent",
+        text: money(row.amountCents),
+        color: colors.ink,
+        fontSize: 16,
+        fontWeight: "700",
+        from: amountFrom,
+        to: spent,
+        toFontSize: 15,
+      });
+    }
+    if (rowRect) {
+      pieces.push({
+        key: "date",
+        text: inDaysPhrase(nextDate),
+        color: colors.muted,
+        fontSize: 13,
+        fontWeight: "500",
+        from: { ...rowRect, y: Math.max(0, rowRect.y - 20) },
+        to: rowRect,
+        delay: 80,
+      });
+    }
+    if (pieces.length) playFlight({ id: "bill-paid", pieces }, reduceMotion);
     listEpoch.current += 1;
     setRows((current) => (current ?? []).map((item) => (item.id === row.id ? { ...item, nextDate } : item)));
     setEditing(null);
@@ -273,7 +306,7 @@ export default function BillsScreen() {
       {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {rows === null && !error ? <Loading /> : null}
       {rows ? (
-        <Hero label="Due this month" cents={outflow} points={points.length > 1 ? points : undefined}>
+        <Hero label="Due this month" cents={outflow} points={points.length > 1 ? points : undefined} figureAnchor="bills.hero">
           <Facts
             items={[
               { kicker: "Typical Monthly", value: money(monthlyBills) },
@@ -293,7 +326,16 @@ export default function BillsScreen() {
           <Section title="Coming up" />
           <Card>
             {bills.map((row, index) => (
-              <LedgerRow key={row.id} divided={index > 0} name={row.merchantName} meta={detail(row)} amount={money(row.amountCents)} onPress={() => openEdit(row)} />
+              <LedgerRow
+                key={row.id}
+                divided={index > 0}
+                name={row.merchantName}
+                meta={detail(row)}
+                amount={money(row.amountCents)}
+                rowAnchor={`bills.row.${row.id}`}
+                amountAnchor={`bills.row.${row.id}.amount`}
+                onPress={() => openEdit(row)}
+              />
             ))}
           </Card>
         </View>

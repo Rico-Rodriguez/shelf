@@ -5,6 +5,8 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type StyleProp,
+  type TextStyle,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -20,6 +22,7 @@ import { BlurView } from "expo-blur";
 import { api, peek } from "./api";
 import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge";
 import { dayLabel, flowMoney, fundedRemaining, money, saveUpGoalForCategory } from "./format";
+import { anchorRect, playFlight, previewGoalRemaining, useFlightHidden, useMeasuredAnchor, type FlightPiece } from "./flight";
 import { matchesMerchantRule } from "./review-flow";
 import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
@@ -50,6 +53,26 @@ export function rankCategories(pool: string[], frequent: string[] = [], limit = 
 }
 
 
+function ReviewAmount({
+  anchor,
+  text,
+  color,
+  style,
+}: {
+  anchor?: string;
+  text: string;
+  color: string;
+  style: StyleProp<TextStyle>;
+}) {
+  const measure = useMeasuredAnchor(anchor, anchor ? { text, color, fontSize: 34 } : null);
+  const opacity = useFlightHidden(anchor);
+  return (
+    <View {...measure} style={{ opacity }}>
+      <Text style={[style, { color }]}>{text}</Text>
+    </View>
+  );
+}
+
 function CardContent({
   tx,
   currentCategory,
@@ -66,6 +89,7 @@ function CardContent({
   isDark,
   similar,
   goalLine,
+  amountAnchor,
 }: {
   tx: Charge;
   currentCategory?: { id?: string; name: string; color?: string | null } | null;
@@ -82,6 +106,7 @@ function CardContent({
   isDark: boolean;
   similar?: number | null;
   goalLine?: string | null;
+  amountAnchor?: string;
 }) {
   const merchant = tx.merchantName || tx.name;
 
@@ -104,9 +129,7 @@ function CardContent({
 
       {/* Big Flow Amount */}
       <View style={styles.heroAmountRow}>
-        <Text style={[styles.heroAmount, { color: flow.color }]}>
-          {flow.text}
-        </Text>
+        <ReviewAmount anchor={amountAnchor} text={flow.text} color={flow.color} style={styles.heroAmount} />
         {face && face.monthCents > 0 ? (
           <View style={styles.contextBadge}>
             <Text style={styles.contextBadgeText}>
@@ -496,6 +519,58 @@ export function ReviewDeck({
         tapSuccess();
         const matched = saveUpGoalForCategory(goalsRef.current, chosenId || null);
         const counts = Boolean(matched) && !tx.pending && !tx.hidden && tx.amountCents > 0 && tx.goalId !== matched?.id;
+        const from = anchorRect("review.amount");
+        const tint = getCategoryColor(category);
+        const text = flowMoney(tx.amountCents).text;
+        if (from && chosenId) {
+          const pieces: FlightPiece[] = [
+            {
+              key: "plan",
+              text,
+              color: tint,
+              fontSize: 34,
+              fontWeight: "700" as const,
+              from,
+              toAnchor: `plan.bar.${chosenId}`,
+              toFontSize: 8,
+            },
+            {
+              key: "slice",
+              kind: "fill" as const,
+              text,
+              color: tint,
+              fontSize: 8,
+              from,
+              toAnchor: `today.slice.${chosenId}`,
+              delay: 40,
+            },
+          ];
+          if (matched && counts) {
+            previewGoalRemaining(matched.id, matched.remainingCents, tx.amountCents);
+            pieces.push({
+              key: "goal",
+              text: money(tx.amountCents),
+              color: tint,
+              fontSize: 34,
+              fontWeight: "700",
+              from,
+              toAnchor: "money.remaining",
+              toFontSize: 14,
+              delay: 60,
+            });
+            pieces.push({
+              key: "bar",
+              kind: "fill",
+              text: money(tx.amountCents),
+              color: tint,
+              fontSize: 8,
+              from,
+              toAnchor: `goal.bar.${matched.id}`,
+              delay: 60,
+            });
+          }
+          playFlight({ id: "filed", pieces }, reduceRef.current);
+        }
         const goal = matched
           ? { id: matched.id, name: matched.name, remainingCents: fundedRemaining(matched.remainingCents, tx.amountCents, counts) }
           : null;
@@ -836,6 +911,7 @@ export function ReviewDeck({
               flow={flow}
               quick={quick}
               selectedCategoryId={categoryId}
+              amountAnchor="review.amount"
               always={always}
               onAlwaysToggle={() => {
                 tapSelect();

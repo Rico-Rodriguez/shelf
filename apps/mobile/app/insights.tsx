@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { addDays, money, monthLabel, monthRange, shelfColor, shortDate, todayISO, versusShort } from "../src/format";
+import { anchorRect, setCategoryReturn, stageFlight, useFlightHidden, useMeasuredAnchor } from "../src/flight";
+import { useReduceMotion } from "../src/theme";
 import { Back, Card, colors, Hero, LoadError, Loading, MonthNav, Note, Progress, Screen, Section, Segment, SpendMix } from "../src/ui";
 
 type Report = {
@@ -19,6 +21,7 @@ type Report = {
 
 export default function InsightsScreen() {
   const now = new Date();
+  const reduceMotion = useReduceMotion();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [data, setData] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,29 @@ export default function InsightsScreen() {
   const range = data ? monthRange(data.year, data.month) : null;
   const total = (data?.byCategory ?? []).reduce((sum, row) => sum + row.cents, 0) || 1;
   const note = data ? versusShort(data.spendingCents, data.usualSpentCents ?? null) : null;
+
+  function openCategory(id: string, kind: "slice" | "row") {
+    const category = data?.byCategory.find((row) => (row.id || row.name) === id);
+    if (!category?.id || !range) return;
+    const anchor = kind === "slice" ? `insights.slice.${category.id}` : `insights.row.${category.id}`;
+    const from = anchorRect(anchor);
+    if (from) {
+      setCategoryReturn(anchor, from);
+      stageFlight(
+        {
+          id: "category-open",
+          hide: ["activity.category.title", "activity.category.amount"],
+          pieces: [
+            { key: "swatch", kind: "fill", color: shelfColor(category.color), fontSize: 8, from, toAnchor: "activity.category.banner" },
+            { key: "name", text: category.name, color: colors.ink, fontSize: 16, fontWeight: "600", from, toAnchor: "activity.category.title", toFontSize: 22 },
+            { key: "amount", text: money(category.cents), color: colors.ink, fontSize: 16, fontWeight: "700", from, toAnchor: "activity.category.amount", toFontSize: 28 },
+          ],
+        },
+        reduceMotion,
+      );
+    }
+    router.push({ pathname: "/(app)/activity", params: { categoryId: category.id, start: range.start, end: range.end } });
+  }
 
   return (
     <Screen title="Insights" refresh={<Back />}>
@@ -86,27 +112,24 @@ export default function InsightsScreen() {
           />
           <Section title="Spending" trailing={`${money(data.spendingCents)}${note ? ` · ${note}` : ""}`} />
           <Card>
-            <SpendMix rows={data.byCategory.map((category) => ({ key: category.id || category.name, cents: category.cents, color: shelfColor(category.color) }))} />
+            <SpendMix
+              rows={data.byCategory.map((category) => ({ key: category.id || category.name, cents: category.cents, color: shelfColor(category.color) }))}
+              anchorFor={(key) => `insights.slice.${key}`}
+              onSlice={(key) => openCategory(key, "slice")}
+            />
             {data.byCategory.length === 0 ? <Note>Nothing this month.</Note> : null}
             {data.byCategory.map((category, index) => (
-              <Pressable
+              <InsightCategory
                 key={category.id || category.name}
-                onPress={() =>
-                  range
-                    ? router.push({ pathname: "/(app)/activity", params: { categoryId: category.id, start: range.start, end: range.end } })
-                    : undefined
-                }
-                style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
-              >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 16, color: colors.ink }}>{category.name}</Text>
-                    {category.avgCents ? <Text style={{ fontSize: 12, color: colors.muted }}>{`Usual ${money(category.avgCents)}`}</Text> : null}
-                  </View>
-                  <Text style={{ fontWeight: "600", color: colors.ink }}>{money(category.cents)}</Text>
-                </View>
-                <Progress value={category.cents} max={total} color={shelfColor(category.color)} />
-              </Pressable>
+                id={category.id || category.name}
+                name={category.name}
+                cents={category.cents}
+                usual={category.avgCents}
+                color={shelfColor(category.color)}
+                divided={index > 0}
+                max={total}
+                onPress={() => openCategory(category.id || category.name, "row")}
+              />
             ))}
           </Card>
           {(data.byMerchant ?? []).length ? (
@@ -129,5 +152,44 @@ export default function InsightsScreen() {
         </>
       ) : null}
     </Screen>
+  );
+}
+
+function InsightCategory({
+  id,
+  name,
+  cents,
+  usual,
+  color,
+  divided,
+  max,
+  onPress,
+}: {
+  id: string;
+  name: string;
+  cents: number;
+  usual?: number;
+  color: string;
+  divided: boolean;
+  max: number;
+  onPress: () => void;
+}) {
+  const row = useMeasuredAnchor(`insights.row.${id}`, { text: name, color: colors.ink, fontSize: 16 });
+  const opacity = useFlightHidden(`insights.row.${id}`);
+  return (
+    <Pressable
+      {...row}
+      onPress={onPress}
+      style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: divided ? 1 : 0, borderTopColor: colors.line, opacity }}
+    >
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={{ fontSize: 16, color: colors.ink }}>{name}</Text>
+          {usual ? <Text style={{ fontSize: 12, color: colors.muted }}>{`Usual ${money(usual)}`}</Text> : null}
+        </View>
+        <Text style={{ fontWeight: "600", color: colors.ink }}>{money(cents)}</Text>
+      </View>
+      <Progress value={cents} max={max} color={color} />
+    </Pressable>
   );
 }

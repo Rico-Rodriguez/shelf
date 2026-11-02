@@ -10,6 +10,7 @@ import { useShelfType } from "../src/brand";
 import { startReviewOutbox } from "../src/review-outbox";
 import { SessionProvider } from "../src/session";
 import { ThemeProvider, useTheme } from "../src/theme";
+import { FlightHost } from "../src/flight";
 import { ToastHost } from "../src/toast";
 
 function useOverTheAirUpdate() {
@@ -63,6 +64,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <SessionProvider>
             <RootStack />
+            <FlightHost />
             <ToastHost />
           </SessionProvider>
         </ThemeProvider>

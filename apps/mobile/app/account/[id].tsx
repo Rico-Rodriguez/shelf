@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { api, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
-import { accountIdentity, dayLabel, isLiability, money, payoffMonthLabel, payoffMonths, shortDate } from "../../src/format";
+import { accountIdentity, dayLabel, isLiability, money, payoffMonthLabel, payoffMonths, shortDate, signed as signedMoney } from "../../src/format";
+import { anchorRect, playFlight, useFlightArrival } from "../../src/flight";
+import { useReduceMotion } from "../../src/theme";
 import { HoldingRow, type HoldingRowData } from "../../src/holding";
 import { clearAccountOverlay, overlayAccount } from "../../src/live-edits";
 import { connectBank } from "../../src/plaid";
@@ -35,6 +37,8 @@ const TONES = ["#14181f", "#5c6570", "#1b7a62", "#8fb9ad"];
 
 export default function AccountScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const reduceMotion = useReduceMotion();
+  useFlightArrival("account-open", reduceMotion);
   const [data, setData] = useState<Detail | null>(null);
   const [item, setItem] = useState<Item | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -131,8 +135,25 @@ export default function AccountScreen() {
   return (
     <Screen
       title={account?.name ?? "Account"}
+      titleAnchor="account.hero.name"
       subtitle={identity || (item && item.status !== "ok" ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}` : item?.institutionName || undefined)}
-      refresh={<Back />}
+      refresh={<Back onPress={() => {
+        const nameFrom = anchorRect("account.hero.name");
+        const balanceFrom = anchorRect("account.hero.balance");
+        const pieces = [];
+        if (account && nameFrom) {
+          pieces.push({ key: "name", text: account.name, color: colors.ink, fontSize: 17, fontWeight: "600" as const, from: nameFrom, toAnchor: `account.row.${account.id}.name`, toFontSize: 17 });
+        }
+        if (account && balanceFrom) {
+          const text = debt ? signedMoney(signed) : money(signed);
+          pieces.push({ key: "balance", text, color: debt || signed < 0 ? colors.danger : colors.ink, fontSize: 46, fontWeight: "700" as const, from: balanceFrom, toAnchor: `worth.row.${account.id}`, toFontSize: 16 });
+        }
+        if (!pieces.length || reduceMotion) {
+          router.back();
+          return;
+        }
+        playFlight({ id: "account-back", pieces, onDone: () => router.back() }, false);
+      }} />}
     >
       {error ? <LoadError message={error} onRetry={load} /> : null}
       {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
@@ -141,6 +162,7 @@ export default function AccountScreen() {
         <>
           <Hero
             label={scrub ? shortDate(scrub.date) : "Balance"}
+            figureAnchor={scrub ? undefined : "account.hero.balance"}
             cents={scrub?.cents ?? signed}
             tone={debt || signed < 0 ? "bad" : undefined}
             points={points.length > 1 ? points : undefined}

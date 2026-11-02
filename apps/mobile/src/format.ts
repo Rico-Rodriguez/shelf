@@ -249,21 +249,29 @@ export function occurrencesInMonth(anchor: string, cadence: string, year: number
   return hits;
 }
 
+/** Unposted bills whose next date falls in this month, one entry per bill, counted the way Bills projects the month. */
+export function billsCountedInMonth<
+  T extends { amountCents: number; cadence: string; nextDate: string; isIncome?: boolean; isActive?: boolean },
+>(bills: T[], year: number, month: number): (T & { occurrences: number; cents: number })[] {
+  const { start, end } = monthRange(year, month);
+  const counted: (T & { occurrences: number; cents: number })[] = [];
+  for (const bill of bills) {
+    if (bill.isIncome || bill.isActive === false) continue;
+    if (bill.nextDate < start || bill.nextDate > end) continue;
+    const hits = occurrencesInMonth(bill.nextDate, bill.cadence, year, month).filter((date) => date >= bill.nextDate);
+    if (!hits.length) continue;
+    counted.push({ ...bill, occurrences: hits.length, cents: hits.length * bill.amountCents });
+  }
+  return counted;
+}
+
 /** Unposted bills whose next date falls in this month, counted the way Bills projects the month. */
 export function billsStillDueCents(
   bills: { amountCents: number; cadence: string; nextDate: string; isIncome?: boolean; isActive?: boolean }[],
   year: number,
   month: number,
 ): number {
-  const { start, end } = monthRange(year, month);
-  let sum = 0;
-  for (const bill of bills) {
-    if (bill.isIncome || bill.isActive === false) continue;
-    if (bill.nextDate < start || bill.nextDate > end) continue;
-    const hits = occurrencesInMonth(bill.nextDate, bill.cadence, year, month).filter((date) => date >= bill.nextDate);
-    sum += hits.length * bill.amountCents;
-  }
-  return sum;
+  return billsCountedInMonth(bills, year, month).reduce((sum, bill) => sum + bill.cents, 0);
 }
 
 /** Merchant key for rules. Lowercase, strip punctuation, collapse spaces, and drop one trailing " - {place}". Keep this in step with src/lib/plan.ts. */

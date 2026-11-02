@@ -1,5 +1,6 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { holdingMeta, money } from "./format";
+import { useFlightHidden, useMeasuredAnchor } from "./flight";
 import { colors } from "./theme";
 
 export type HoldingRowData = {
@@ -11,10 +12,28 @@ export type HoldingRowData = {
 };
 
 /** One position: the security, the shares and price, and the result against cost. */
-export function HoldingRow({ holding, divided }: { holding: HoldingRowData; divided?: boolean }) {
+export function HoldingRow({
+  holding,
+  divided,
+  valueAnchor,
+  onPressValue,
+}: {
+  holding: HoldingRowData;
+  divided?: boolean;
+  valueAnchor?: string;
+  onPressValue?: () => void;
+}) {
   const meta = holdingMeta(holding);
   const gain = holding.costBasisCents == null ? null : holding.institutionValueCents - holding.costBasisCents;
   const color = gain == null || gain === 0 ? colors.ink : gain > 0 ? colors.positive : colors.danger;
+  const valueText = money(holding.institutionValueCents);
+  const measure = useMeasuredAnchor(valueAnchor, { text: valueText, color, fontSize: 16 });
+  const opacity = useFlightHidden(valueAnchor);
+  const value = (
+    <View {...measure} style={{ opacity }}>
+      <Text style={{ fontWeight: "600", color, fontVariant: ["tabular-nums"] }}>{valueText}</Text>
+    </View>
+  );
   return (
     <View
       style={{
@@ -39,7 +58,13 @@ export function HoldingRow({ holding, divided }: { holding: HoldingRowData; divi
           </Text>
         ) : null}
       </View>
-      <Text style={{ fontWeight: "600", color, fontVariant: ["tabular-nums"] }}>{money(holding.institutionValueCents)}</Text>
+      {onPressValue ? (
+        <Pressable onPress={onPressValue} hitSlop={8}>
+          {value}
+        </Pressable>
+      ) : (
+        value
+      )}
     </View>
   );
 }

@@ -19,6 +19,17 @@ import { api, load, peek } from "./api";
 import * as SecureStore from "expo-secure-store";
 import { celebrate } from "./toast";
 import { dropQuickLog, mergeBudget, mergeDashboard, settleQuickLog, stageQuickLog, type QuickLog } from "./live-edits";
+import {
+  anchorRect,
+  chartOpacity,
+  FlightRun,
+  flightSurface,
+  playFlight,
+  useFlightHidden,
+  useMeasuredAnchor,
+  type FlightPiece,
+  type FlightRect,
+} from "./flight";
 import Svg, { Circle } from "react-native-svg";
 
 export { GroupedBars, SpendChart };
@@ -30,14 +41,15 @@ function useStyles() {
   return useMemo(() => makeStyles(palette), [palette]);
 }
 
-export function Back({ label = "Back" }: { label?: string }) {
+export function Back({ label = "Back", onPress }: { label?: string; onPress?: () => void }) {
   const styles = useStyles();
   const { palette } = useTheme();
   return (
     <Pressable
       onPress={() => {
         tapPress();
-        router.back();
+        if (onPress) onPress();
+        else router.back();
       }}
       hitSlop={12}
       style={styles.backBtn}
@@ -93,6 +105,7 @@ export function Screen({
   framed = false,
   scrollable = true,
   onRefresh,
+  titleAnchor,
 }: {
   title?: string;
   subtitle?: string;
@@ -103,6 +116,7 @@ export function Screen({
   framed?: boolean;
   scrollable?: boolean;
   onRefresh?: () => Promise<unknown> | void;
+  titleAnchor?: string;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -129,6 +143,8 @@ export function Screen({
       Animated.timing(bodyFade, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     }, [framed, reduceMotion, bodyFade]),
   );
+  const titleMeasure = useMeasuredAnchor(titleAnchor, title ? { text: title, color: palette.ink, fontSize: 17 } : null);
+  const titleOpacity = useFlightHidden(titleAnchor);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const setScrollLocked = useCallback((locked: boolean) => {
     setScrollEnabled(!locked);
@@ -187,18 +203,20 @@ export function Screen({
         </View>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}>
           {title ? (
-            <Text
-              numberOfLines={1}
-              style={{
-                fontSize: 17,
-                fontWeight: "600",
-                color: palette.ink,
-                letterSpacing: -0.3,
-                fontFamily: title === "Shelf" ? wordmark : undefined,
-              }}
-            >
-              {title}
-            </Text>
+            <View ref={titleMeasure.ref} onLayout={titleMeasure.onLayout} collapsable={false} style={{ opacity: titleOpacity }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 17,
+                  fontWeight: "600",
+                  color: palette.ink,
+                  letterSpacing: -0.3,
+                  fontFamily: title === "Shelf" ? wordmark : undefined,
+                }}
+              >
+                {title}
+              </Text>
+            </View>
           ) : null}
         </View>
         <View style={{ minWidth: 60, alignItems: "flex-end", justifyContent: "center", flexShrink: 1 }}>
@@ -600,6 +618,8 @@ export function LedgerRow({
   color,
   onPress,
   divided,
+  rowAnchor,
+  amountAnchor,
 }: {
   name: string;
   meta?: string;
@@ -608,10 +628,15 @@ export function LedgerRow({
   color?: string | null;
   onPress?: () => void;
   divided?: boolean;
+  rowAnchor?: string;
+  amountAnchor?: string;
 }) {
   const styles = useStyles();
+  const rowMeasure = useMeasuredAnchor(rowAnchor, { text: name, color: amountColor ?? colors.ink, fontSize: 16 });
+  const amountMeasure = useMeasuredAnchor(amountAnchor, { text: amount, color: amountColor ?? colors.ink, fontSize: 16 });
+  const rowOpacity = useFlightHidden(rowAnchor);
   const body = (
-    <View style={styles.ledger}>
+    <View ref={rowMeasure.ref} onLayout={rowMeasure.onLayout} collapsable={false} style={[styles.ledger, { opacity: rowOpacity }]}>
       {divided ? <View style={[styles.hairline, { left: 64 }]} /> : null}
       <MerchantMark name={name} color={color} />
       <View style={styles.ledgerCopy}>
@@ -624,7 +649,9 @@ export function LedgerRow({
           </Text>
         ) : null}
       </View>
-      <Text style={[styles.amount, amountColor ? { color: amountColor } : null]}>{amount}</Text>
+      <View ref={amountMeasure.ref} onLayout={amountMeasure.onLayout} collapsable={false}>
+        <Text style={[styles.amount, amountColor ? { color: amountColor } : null]}>{amount}</Text>
+      </View>
     </View>
   );
   if (!onPress) return body;
@@ -1037,6 +1064,9 @@ export function Hero({
   subtitle,
   children,
   glass = false,
+  figureAnchor,
+  chartHandoff = false,
+  figureSeed = null,
 }: {
   label: string;
   cents: number;
@@ -1059,6 +1089,9 @@ export function Hero({
   subtitle?: ReactNode;
   children?: ReactNode;
   glass?: boolean;
+  figureAnchor?: string;
+  chartHandoff?: boolean;
+  figureSeed?: string | null;
 }) {
   const styles = useStyles();
   const { palette } = useTheme();
@@ -1078,10 +1111,21 @@ export function Hero({
     tone === "bad" ? { color: colors.danger } : null,
     tone === "good" ? { color: colors.positive } : null,
   ];
+  const figureMeasure = useMeasuredAnchor(figureAnchor, {
+    text: figureText,
+    color: tone === "bad" ? colors.danger : tone === "good" ? colors.positive : colors.ink,
+    fontSize: 46,
+  });
+  const figureOpacity = useFlightHidden(figureAnchor);
   const figure = empty ? (
-    <Text style={figureStyle}>{figureText}</Text>
+    <Text style={figureStyle}>{figureSeed ?? figureText}</Text>
   ) : (
-    <RollingFigure text={figureText} live={live} style={figureStyle} />
+    <RollingFigure text={figureSeed ?? figureText} live={live} style={figureStyle} />
+  );
+  const figureBody = (
+    <View ref={figureMeasure.ref} onLayout={figureMeasure.onLayout} collapsable={false} style={{ alignSelf: "flex-start", opacity: figureOpacity }}>
+      {figure}
+    </View>
   );
 
   return (
@@ -1106,14 +1150,16 @@ export function Hero({
       </View>
       {onPressFigure ? (
         <Pressable onPress={onPressFigure} hitSlop={8}>
-          {figure}
+          {figureBody}
         </Pressable>
       ) : (
-        figure
+        figureBody
       )}
       {subtitle ? <View style={{ marginTop: 4 }}>{subtitle}</View> : null}
       {charting && points ? (
-        <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} />
+        <Animated.View style={{ opacity: chartHandoff ? chartOpacity : 1 }}>
+          <SpendChart points={points} onScrub={onScrub} reference={reference} caption={caption} color={color} />
+        </Animated.View>
       ) : shownShares.length ? (
         <View style={{ marginTop: 16, marginBottom: children || footer ? 0 : 16, gap: 8 }}>
           <View style={[styles.mix, { borderRadius: 99, overflow: "hidden" }]}>
@@ -1141,58 +1187,116 @@ export function Hero({
   );
 }
 
-export function Facts({ items }: { items: { kicker: string; value: string; color?: string; onPress?: () => void }[] }) {
+export function Facts({ items }: { items: { kicker: string; value: string; color?: string; onPress?: () => void; anchor?: string }[] }) {
   const styles = useStyles();
   return (
     <View style={styles.facts}>
-      {items.map((item) => {
-        const body = (
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.kicker}>{item.kicker}</Text>
-            <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
-          </View>
-        );
-        if (!item.onPress) return <View key={item.kicker} style={{ flex: 1 }}>{body}</View>;
-        return (
-          <Pressable
-            key={item.kicker}
-            accessibilityRole="button"
-            accessibilityLabel={`${item.kicker} ${item.value}`}
-            onPress={item.onPress}
-            style={{ flex: 1 }}
-          >
-            {body}
-          </Pressable>
-        );
-      })}
+      {items.map((item) => (
+        <FactItem key={item.kicker} item={item} />
+      ))}
     </View>
   );
 }
 
-export function SpendMix({ rows }: { rows: { key: string; cents: number; color: string }[] }) {
+function FactItem({ item }: { item: { kicker: string; value: string; color?: string; onPress?: () => void; anchor?: string } }) {
   const styles = useStyles();
+  const measure = useMeasuredAnchor(item.anchor, { text: item.value, color: item.color ?? colors.ink, fontSize: 15 });
+  const opacity = useFlightHidden(item.anchor);
+  const body = (
+    <View style={{ flex: 1, gap: 2, opacity }}>
+      <Text style={styles.kicker}>{item.kicker}</Text>
+      <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
+        <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
+      </View>
+    </View>
+  );
+  if (!item.onPress) return <View style={{ flex: 1 }}>{body}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${item.kicker} ${item.value}`}
+      onPress={item.onPress}
+      style={{ flex: 1 }}
+    >
+      {body}
+    </Pressable>
+  );
+}
+
+export function SpendMix({
+  rows,
+  onSlice,
+  anchorFor,
+}: {
+  rows: { key: string; cents: number; color: string }[];
+  onSlice?: (key: string) => void;
+  anchorFor?: (key: string) => string;
+}) {
+  const styles = useStyles();
+  const reduceMotion = useReduceMotion();
   const shown = rows.filter((row) => row.cents > 0);
-  const signature = shown.map((row) => row.cents).join(",");
-  const grow = useRef(new Animated.Value(0)).current;
+  const signature = shown.map((row) => `${row.key}:${row.cents}`).join(",");
+  const widths = useRef(new Map<string, Animated.Value>());
+  const seen = useRef(new Map<string, number>());
+
+  function widthFor(key: string) {
+    const existing = widths.current.get(key);
+    if (existing) return existing;
+    const created = new Animated.Value(0.01);
+    widths.current.set(key, created);
+    return created;
+  }
+
   useEffect(() => {
-    grow.setValue(0);
-    Animated.timing(grow, { toValue: 1, duration: 560, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [grow, signature]);
+    for (const row of shown) {
+      const value = widthFor(row.key);
+      const previous = seen.current.get(row.key);
+      const next = row.cents;
+      if (reduceMotion || previous == null) {
+        if (reduceMotion) value.setValue(next);
+        else Animated.timing(value, { toValue: next, duration: previous == null ? 560 : 420, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+      } else if (previous !== next) {
+        Animated.timing(value, { toValue: next, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+      }
+      seen.current.set(row.key, next);
+    }
+  }, [signature, reduceMotion]);
+
   if (shown.length < 2) return null;
   return (
     <View style={styles.mix}>
       {shown.map((row) => (
-        <Animated.View
-          key={row.key}
-          style={{
-            flexGrow: grow.interpolate({ inputRange: [0, 1], outputRange: [0.01, row.cents] }),
-            flexBasis: 4,
-            backgroundColor: row.color,
-          }}
-        />
+        <MixSlice key={row.key} row={row} width={widthFor(row.key)} onSlice={onSlice} anchor={anchorFor?.(row.key) ?? null} />
       ))}
     </View>
   );
+}
+
+function MixSlice({
+  row,
+  width,
+  onSlice,
+  anchor,
+}: {
+  row: { key: string; cents: number; color: string };
+  width: Animated.Value;
+  onSlice?: (key: string) => void;
+  anchor: string | null;
+}) {
+  const measure = useMeasuredAnchor(anchor);
+  const body = (
+    <Animated.View
+      ref={measure.ref}
+      onLayout={measure.onLayout}
+      collapsable={false}
+      style={{ flexGrow: width, flexBasis: 4, backgroundColor: row.color }}
+    >
+      {onSlice ? (
+        <Pressable onPress={() => onSlice(row.key)} style={{ flex: 1 }} hitSlop={{ top: 12, bottom: 12 }} />
+      ) : null}
+    </Animated.View>
+  );
+  return body;
 }
 
 export function SpringPressable({
@@ -1568,6 +1672,12 @@ export function SheetContainer({
   minHeight = 320,
   height = "80%",
   scrollable = true,
+  origin = null,
+  originAnchor,
+  carry = null,
+  titleAnchor,
+  overlay = null,
+  onOverlayDone,
 }: {
   visible?: boolean;
   onClose: () => void;
@@ -1579,6 +1689,12 @@ export function SheetContainer({
   minHeight?: number | `${number}%`;
   height?: number | `${number}%`;
   scrollable?: boolean;
+  origin?: FlightRect | null;
+  originAnchor?: string;
+  carry?: FlightPiece[] | null;
+  titleAnchor?: string;
+  overlay?: FlightPiece[] | null;
+  onOverlayDone?: () => void;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1588,6 +1704,14 @@ export function SheetContainer({
   const isDark = palette.scheme === "dark";
   const screenHeight = Dimensions.get("window").height;
   const translateY = useRef(new Animated.Value(screenHeight)).current;
+  const grow = useRef(new Animated.Value(1)).current;
+  const sheetRef = useRef<View>(null);
+  const originRef = useRef(origin);
+  originRef.current = origin;
+  const originAnchorRef = useRef(originAnchor);
+  originAnchorRef.current = originAnchor;
+  const [metrics, setMetrics] = useState<{ from: FlightRect; box: FlightRect } | null>(null);
+  const titleMeasure = useMeasuredAnchor(titleAnchor, title ? { text: title, color: palette.ink, fontSize: 20 } : null);
   const [closing, setClosing] = useState(false);
   const isClosing = useRef(false);
   const hasClosedRef = useRef(false);
@@ -1605,11 +1729,19 @@ export function SheetContainer({
       isClosing.current = false;
       hasClosedRef.current = false;
       setClosing(false);
-      translateY.setValue(screenHeight);
       if (reduceMotion) {
         translateY.setValue(0);
+        grow.setValue(1);
         return;
       }
+      if (origin) {
+        translateY.setValue(0);
+        grow.setValue(0);
+        setMetrics(null);
+        return;
+      }
+      translateY.setValue(screenHeight);
+      grow.setValue(1);
       Animated.spring(translateY, {
         toValue: 0,
         damping: 28,
@@ -1618,7 +1750,7 @@ export function SheetContainer({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible, screenHeight, translateY, reduceMotion]);
+  }, [visible, screenHeight, translateY, reduceMotion, origin, grow]);
 
   const dismiss = useCallback((velocity = 0) => {
     if (isClosing.current) return;
@@ -1630,6 +1762,19 @@ export function SheetContainer({
     if (reduceMotion) {
       translateY.setValue(screenHeight);
       handleClose();
+      return;
+    }
+
+    const foldFrom = (originAnchorRef.current && anchorRect(originAnchorRef.current)) || originRef.current;
+    if (foldFrom && metrics) {
+      setMetrics({ ...metrics, from: foldFrom });
+      const fallbackTimer = setTimeout(handleClose, 700);
+      requestAnimationFrame(() => {
+        Animated.timing(grow, { toValue: 0, duration: 340, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
+          clearTimeout(fallbackTimer);
+          handleClose();
+        });
+      });
       return;
     }
 
@@ -1646,7 +1791,7 @@ export function SheetContainer({
       clearTimeout(fallbackTimer);
       handleClose();
     });
-  }, [handleClose, reduceMotion, screenHeight, translateY]);
+  }, [handleClose, reduceMotion, screenHeight, translateY, grow, metrics]);
 
   const panResponder = useMemo(
     () =>
@@ -1711,11 +1856,67 @@ export function SheetContainer({
           <Pressable style={StyleSheet.absoluteFill} onPress={() => dismiss()} />
         </Animated.View>
         <Animated.View
+          ref={sheetRef}
+          onLayout={() => {
+            if (!originRef.current) return;
+            requestAnimationFrame(() => {
+              sheetRef.current?.measureInWindow((x, y, width, height) => {
+                if (!originRef.current || width <= 0 || height <= 0) return;
+                setMetrics({ from: originRef.current, box: { x, y, width, height } });
+                Animated.spring(grow, {
+                  toValue: 1,
+                  damping: 28,
+                  stiffness: 340,
+                  mass: 0.8,
+                  useNativeDriver: true,
+                }).start();
+              });
+            });
+          }}
           style={[
             styles.sheet,
             minHeight ? { minHeight } : null,
             height ? { height } : null,
-            { transform: [{ translateY }] },
+            origin && !metrics && !reduceMotion ? { opacity: 0 } : null,
+            {
+              transform: metrics
+                ? [
+                    {
+                      translateX: grow.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [
+                          metrics.from.x + metrics.from.width / 2 - (metrics.box.x + metrics.box.width / 2),
+                          0,
+                        ],
+                      }),
+                    },
+                    {
+                      translateY: Animated.add(
+                        translateY,
+                        grow.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [
+                            metrics.from.y + metrics.from.height / 2 - (metrics.box.y + metrics.box.height / 2),
+                            0,
+                          ],
+                        }),
+                      ),
+                    },
+                    {
+                      scaleX: grow.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [Math.max(0.08, metrics.from.width / Math.max(metrics.box.width, 1)), 1],
+                      }),
+                    },
+                    {
+                      scaleY: grow.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [Math.max(0.08, metrics.from.height / Math.max(metrics.box.height, 1)), 1],
+                      }),
+                    },
+                  ]
+                : [{ translateY }],
+            },
           ]}
         >
           {!reduceTransparency ? (
@@ -1725,6 +1926,15 @@ export function SheetContainer({
               style={StyleSheet.absoluteFill}
             />
           ) : null}
+          <Animated.View
+            style={{
+              flex: 1,
+              opacity:
+                origin && !reduceMotion
+                  ? grow.interpolate({ inputRange: [0, 0.62, 1], outputRange: [0, 0, 1] })
+                  : 1,
+            }}
+          >
           <View style={{ paddingTop: 8, paddingBottom: 6 }}>
             <View
               {...panResponder.panHandlers}
@@ -1734,7 +1944,7 @@ export function SheetContainer({
             </View>
             {title ? (
               <View style={styles.sheetHead}>
-                <View style={{ flex: 1, gap: 2, marginRight: 12 }}>
+                <View ref={titleMeasure.ref} onLayout={titleMeasure.onLayout} collapsable={false} style={{ flex: 1, gap: 2, marginRight: 12 }}>
                   <Text style={styles.sheetTitle} numberOfLines={1}>
                     {title}
                   </Text>
@@ -1776,7 +1986,18 @@ export function SheetContainer({
               {children}
             </View>
           )}
+          </Animated.View>
         </Animated.View>
+        {carry && carry.length && !reduceMotion ? (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <FlightRun plan={{ id: `sheet-carry-${title ?? "sheet"}`, pieces: carry }} onDone={() => undefined} />
+          </View>
+        ) : null}
+        {overlay && overlay.length && !reduceMotion ? (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <FlightRun plan={{ id: `sheet-overlay-${overlay.map((piece) => piece.key).join("-")}`, pieces: overlay }} onDone={() => onOverlayDone?.()} />
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -1790,6 +2011,12 @@ export function Sheet({
   children,
   height = "80%",
   minHeight = 320,
+  origin = null,
+  originAnchor,
+  carry = null,
+  titleAnchor,
+  overlay = null,
+  onOverlayDone,
 }: {
   title: string;
   subtitle?: string;
@@ -1798,6 +2025,12 @@ export function Sheet({
   children: ReactNode;
   height?: number | `${number}%`;
   minHeight?: number | `${number}%`;
+  origin?: FlightRect | null;
+  originAnchor?: string;
+  carry?: FlightPiece[] | null;
+  titleAnchor?: string;
+  overlay?: FlightPiece[] | null;
+  onOverlayDone?: () => void;
 }) {
   return (
     <SheetContainer
@@ -1808,6 +2041,12 @@ export function Sheet({
       onClose={onClose}
       height={height}
       minHeight={minHeight}
+      origin={origin}
+      originAnchor={originAnchor}
+      carry={carry}
+      titleAnchor={titleAnchor}
+      overlay={overlay}
+      onOverlayDone={onOverlayDone}
     >
       {children}
     </SheetContainer>
@@ -2233,6 +2472,10 @@ export function QuickLogModal({
 }) {
   const { palette } = useTheme();
   const isDark = palette.scheme === "dark";
+  const reduceMotion = useReduceMotion();
+  const padAmount = useMeasuredAnchor("pad.amount");
+  const padMerchant = useMeasuredAnchor("pad.merchant");
+  const padColor = useMeasuredAnchor("pad.color");
 
   const [amount, setAmount] = useState("");
   const [pickingAccount, setPickingAccount] = useState(false);
@@ -2330,6 +2573,62 @@ export function QuickLogModal({
       isIncome,
     };
     stageQuickLog(log);
+    const where = flightSurface();
+    const rowAnchor = where === "activity" ? `activity.tx.${log.tempId}` : `today.tx.${log.tempId}`;
+    const leftAnchor = where === "plan" ? "plan.left" : "today.left";
+    const shownAmount = `${isIncome ? "+" : ""}${money(cents)}`;
+    const amountFrom = anchorRect("pad.amount");
+    const merchantFrom = anchorRect("pad.merchant");
+    const colorFrom = anchorRect("pad.color");
+    const padPieces: FlightPiece[] = [];
+    if (amountFrom) {
+      padPieces.push({
+        key: "amount",
+        text: shownAmount,
+        color: isIncome ? palette.positive : chosenCat?.color || palette.ink,
+        fontSize: 48,
+        fontWeight: "700",
+        from: amountFrom,
+        toAnchor: rowAnchor,
+        toFontSize: 16,
+        toColor: isIncome ? palette.positive : palette.ink,
+      });
+      padPieces.push({
+        key: "cents",
+        text: shownAmount,
+        color: isIncome ? palette.positive : palette.ink,
+        fontSize: 48,
+        fontWeight: "700",
+        from: amountFrom,
+        toAnchor: leftAnchor,
+        toFontSize: where === "plan" ? 38 : 46,
+        delay: 50,
+      });
+    }
+    if (merchantFrom) {
+      padPieces.push({
+        key: "merchant",
+        text: label,
+        color: palette.ink,
+        fontSize: 15,
+        fontWeight: "500",
+        from: merchantFrom,
+        toAnchor: rowAnchor,
+        toFontSize: 16,
+        delay: 30,
+      });
+    }
+    if (colorFrom && chosenCat) {
+      padPieces.push({
+        key: "color",
+        kind: "fill",
+        color: chosenCat.color,
+        fontSize: 8,
+        from: colorFrom,
+        toAnchor: where === "plan" ? `plan.bar.${chosenCat.id}` : `today.slice.${chosenCat.id}`,
+      });
+    }
+    if (padPieces.length) playFlight({ id: "pad", hide: [rowAnchor], pieces: padPieces }, reduceMotion);
     celebrate(isIncome ? "Income logged" : "Expense logged");
     onClose();
     try {
@@ -2442,7 +2741,7 @@ export function QuickLogModal({
             }}
           />
 
-          <View style={{ alignItems: "center" }}>
+          <View ref={padAmount.ref} onLayout={padAmount.onLayout} collapsable={false} style={{ alignItems: "center" }}>
             <RollingFigure
               text={`${isIncome && cents > 0 ? "+" : ""}${money(cents)}`}
               duration={160}
@@ -2542,6 +2841,9 @@ export function QuickLogModal({
           ) : null}
 
           <View
+            ref={padMerchant.ref}
+            onLayout={padMerchant.onLayout}
+            collapsable={false}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -2593,7 +2895,12 @@ export function QuickLogModal({
                     borderColor: selected ? (cat.color || palette.accent) : "transparent",
                   }}
                 >
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }} />
+                  <View
+                    ref={selected ? padColor.ref : undefined}
+                    onLayout={selected ? padColor.onLayout : undefined}
+                    collapsable={false}
+                    style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }}
+                  />
                   <Text style={{ fontSize: 13, fontWeight: selected ? "700" : "500", color: selected ? palette.ink : palette.muted }}>
                     {cat.name}
                   </Text>

@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { budgetPace, dayLabel, flowMoney, money, monthFraction, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
@@ -8,6 +8,7 @@ import { mergeBudget, subscribeLive } from "../../src/live-edits";
 import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, LoadError, Loading, MonthNav, Progress, ProgressRing, RollingFigure, Screen, Section, Sheet } from "../../src/ui";
 import { useReduceMotion } from "../../src/theme";
+import { anchorRect, barsOpacity, playFlight, setCategoryReturn, stageFlight, useFlightArrival, useFlightHidden, useMeasuredAnchor, type FlightPiece, type FlightRect } from "../../src/flight";
 import { Icon } from "../../src/icons";
 
 type BudgetRow = {
@@ -68,6 +69,20 @@ export default function BudgetScreen() {
   const planEpoch = useRef(0);
   const overlay = useRef<Budget | null>(null);
   const reduceMotion = useReduceMotion();
+  const [figureSeed, setFigureSeed] = useState<string | null>(null);
+  const [rowOrigin, setRowOrigin] = useState<FlightRect | null>(null);
+  const [sheetCarry, setSheetCarry] = useState<FlightPiece[] | null>(null);
+  const figureTextRef = useRef("");
+  useFlightArrival("left-to-plan", reduceMotion, (flight) => {
+    const carried = flight.pieces[0]?.text;
+    flight.onDone = () => {
+      if (reduceMotion) return;
+      const real = figureTextRef.current;
+      if (!carried || carried === real) return;
+      setFigureSeed(carried);
+      setTimeout(() => setFigureSeed(null), 32);
+    };
+  });
   const monthSlide = useRef(new Animated.Value(0)).current;
   const monthFade = useRef(new Animated.Value(1)).current;
   const monthDir = useRef(0);
@@ -269,6 +284,50 @@ export default function BudgetScreen() {
   }, [params.categoryId, plan]);
 
   function openRow(row: BudgetRow) {
+    const origin = anchorRect(`plan.row.${row.category.id}`);
+    const figureFrom = anchorRect(`plan.figure.${row.category.id}`);
+    const barFrom = anchorRect(`plan.bar.${row.category.id}`);
+    setRowOrigin(origin);
+    const pacedRow = row.availableCents > 0;
+    const rowOver = pacedRow && row.remainingCents < 0;
+    const figure = pacedRow ? Math.abs(row.remainingCents) : row.spentCents;
+    const carry: FlightPiece[] = [];
+    if (figureFrom) {
+      carry.push({
+        key: "figure",
+        text: money(figure),
+        color: rowOver ? colors.danger : colors.ink,
+        fontSize: 16,
+        fontWeight: "700",
+        from: figureFrom,
+        toAnchor: "plan.sheet.figure",
+        toFontSize: 32,
+      });
+    }
+    if (barFrom) {
+      carry.push({
+        key: "bar",
+        kind: "fill",
+        color: shelfColor(row.group?.color ?? "#8B939E"),
+        fontSize: 8,
+        from: barFrom,
+        toAnchor: "plan.sheet.color",
+      });
+    }
+    if (origin) {
+      carry.push({
+        key: "name",
+        text: row.category.name,
+        color: colors.ink,
+        fontSize: 16,
+        fontWeight: "600",
+        from: origin,
+        toAnchor: "plan.sheet.title",
+        toFontSize: 20,
+      });
+      setCategoryReturn(`plan.bar.${row.category.id}`, barFrom ?? origin);
+    }
+    setSheetCarry(carry);
     setEditing(row);
     setPlanned((row.plannedCents / 100).toFixed(0));
     setCatName(row.category.name);
@@ -316,6 +375,10 @@ export default function BudgetScreen() {
   const paceColor = pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.positive;
   const typedIncomeCents = Math.round(Number(income || 0) * 100);
   const leftToAssign = typedIncomeCents - plannedTotal;
+  const tileText = hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan?.expenseSpentCents ?? 0);
+  figureTextRef.current = tileText;
+  const planLeft = useMeasuredAnchor("plan.left", { text: tileText, color: over ? colors.danger : colors.ink, fontSize: 38 });
+  const planLeftHidden = useFlightHidden("plan.left");
 
   return (
     <>
@@ -432,9 +495,9 @@ export default function BudgetScreen() {
               </View>
 
               {/* Primary Value */}
-              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+              <View ref={planLeft.ref} onLayout={planLeft.onLayout} collapsable={false} style={{ flexDirection: "row", alignItems: "baseline", gap: 6, opacity: planLeftHidden }}>
                 <RollingFigure
-                  text={hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan.expenseSpentCents ?? 0)}
+                  text={figureSeed ?? tileText}
                   style={{
                     fontSize: 38,
                     fontWeight: "700",
@@ -471,6 +534,7 @@ export default function BudgetScreen() {
               ) : null}
             </Pressable>
 
+            <Animated.View style={{ gap: 20, opacity: barsOpacity }}>
             {visibleGroups.map((group) => {
               const available = group.rows.reduce((sum, row) => sum + row.availableCents, 0);
               const spent = group.rows.reduce((sum, row) => sum + row.spentCents, 0);
@@ -508,8 +572,8 @@ export default function BudgetScreen() {
                         const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
 
                         return (
+                          <AnchorBox key={row.category.id} id={`plan.row.${row.category.id}`}>
                           <Pressable
-                            key={row.category.id}
                             onPress={() => openRow(row)}
                             onPressIn={tapPress}
                             style={({ pressed }) => [
@@ -537,18 +601,23 @@ export default function BudgetScreen() {
                                     {rowPace.label}
                                   </Text>
                                 ) : null}
-                                <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
+                                <AnchorBox id={`plan.figure.${row.category.id}`}>
+                                  <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
+                                </AnchorBox>
                               </View>
                             </View>
                             {paced ? (
-                              <Progress
-                                value={row.spentCents}
-                                max={row.availableCents}
-                                color={rowOver ? colors.danger : color}
-                                markerRatio={monthFraction()}
-                              />
+                              <AnchorBox id={`plan.bar.${row.category.id}`}>
+                                <Progress
+                                  value={row.spentCents}
+                                  max={row.availableCents}
+                                  color={rowOver ? colors.danger : color}
+                                  markerRatio={monthFraction()}
+                                />
+                              </AnchorBox>
                             ) : null}
                           </Pressable>
+                          </AnchorBox>
                         );
                       })}
                     </Card>
@@ -556,6 +625,7 @@ export default function BudgetScreen() {
                 </View>
               );
             })}
+            </Animated.View>
 
             <Pressable
               onPress={() => void openAdd()}
@@ -690,8 +760,18 @@ export default function BudgetScreen() {
               subtitle={rowPace?.label}
               subtitleColor={rowPace ? rowPaceColor : undefined}
               height="80%"
-              onClose={() => setEditing(null)}
+              origin={rowOrigin}
+              originAnchor={`plan.row.${editing.category.id}`}
+              carry={sheetCarry}
+              titleAnchor="plan.sheet.title"
+              onClose={() => {
+                setEditing(null);
+                setSheetCarry(null);
+              }}
             >
+              <AnchorBox id="plan.sheet.color">
+                <View style={{ height: 8, borderRadius: 99, backgroundColor: color }} />
+              </AnchorBox>
               {/* Category Performance Card */}
               <Card tone="inset">
                 <View style={{ padding: 16, gap: 12 }}>
@@ -713,9 +793,11 @@ export default function BudgetScreen() {
                           backgroundColor: rowOver ? "rgba(217, 74, 46, 0.12)" : "rgba(27, 122, 98, 0.12)",
                         }}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: "700", color: rowOver ? colors.danger : colors.positive }}>
-                          {rowOver ? `${money(figure)} over` : `${money(figure)} left`}
-                        </Text>
+                        <AnchorBox id="plan.sheet.figure">
+                          <Text style={{ fontSize: 13, fontWeight: "700", color: rowOver ? colors.danger : colors.positive }}>
+                            {rowOver ? `${money(figure)} over` : `${money(figure)} left`}
+                          </Text>
+                        </AnchorBox>
                       </View>
                     ) : null}
                   </View>
@@ -885,5 +967,14 @@ export default function BudgetScreen() {
         </Sheet>
       ) : null}
     </>
+  );
+}
+
+function AnchorBox({ id, children }: { id: string; children: ReactNode }) {
+  const measure = useMeasuredAnchor(id);
+  return (
+    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
+      {children}
+    </View>
   );
 }
