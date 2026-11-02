@@ -110,11 +110,32 @@ jobs:
           build=$(node -p "require('./apps/mobile/app.json').expo.ios.buildNumber")
           named="Shelf-${version}-${build}.ipa"
           cp dist/Shelf.ipa "dist/${named}"
+          # Feather adds altstore.json. Its downloadURL is the stable Shelf.ipa
+          # asset on this same release, same pattern as critter-clash
+          # (altstore.json on the ota release, IPA on ios-v1).
+          min_os=""
+          plist=$(unzip -l dist/Shelf.ipa | awk '{ print $4 }' | grep -m 1 -E '^Payload/[^/]+\.app/Info\.plist$' || true)
+          if [ -n "$plist" ]; then
+            unzip -p dist/Shelf.ipa "$plist" > "$RUNNER_TEMP/Info.plist"
+            min_os=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$RUNNER_TEMP/Info.plist" 2>/dev/null || true)
+            short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$RUNNER_TEMP/Info.plist")
+            built=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$RUNNER_TEMP/Info.plist")
+            bid=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$RUNNER_TEMP/Info.plist")
+            test "$short" = "$version"
+            test "$built" = "$build"
+            test "$bid" = "$(node -p "require('./apps/mobile/app.json').expo.ios.bundleIdentifier")"
+          fi
+          if [ -n "$min_os" ]; then
+            node scripts/altstore-source.mjs --ipa dist/Shelf.ipa --out dist/altstore.json --min-os "$min_os"
+          else
+            node scripts/altstore-source.mjs --ipa dist/Shelf.ipa --out dist/altstore.json
+          fi
+          node scripts/altstore-source.mjs --validate dist/altstore.json
           gh release delete ipa --yes --cleanup-tag || true
-          gh release create ipa "dist/${named}" \
+          gh release create ipa "dist/${named}" dist/Shelf.ipa dist/altstore.json \
             --target "$GITHUB_SHA" \
             --title "Shelf ${version} (${build})" \
-            --notes "Shelf ${version} (${build}). Download ${named}. Do not unzip it, and do not use the Actions artifact zip. The copy inside the app is version ${version}." \
+            --notes "Shelf ${version} (${build}). Download ${named}, or Shelf.ipa. Do not unzip it, and do not use the Actions artifact zip. Feather source: https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/altstore.json" \
             --latest=false
           asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/ipa" --jq ".assets[] | select(.name==\"${named}\") | .id")
           url=$(curl -sI \
@@ -130,4 +151,8 @@ jobs:
             echo "$url"
             echo ""
             echo "After it expires, download [${named}](https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/${named}) while signed in to GitHub. Sideload that file. Do not unzip it, and do not download the Actions artifact named Shelf."
+            echo ""
+            echo "Feather source (same kind of release asset as Critter Clash \`altstore.json\`): https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/altstore.json"
+            echo ""
+            echo "That source downloads https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/Shelf.ipa"
           } >> "$GITHUB_STEP_SUMMARY"
