@@ -8,12 +8,12 @@ import {
   budgetPace,
   dashboardPath,
   dayLabel,
+  expectedPaceCents,
   flowMoney,
-  goalPace,
   inDaysPhrase,
   money,
-  monthFraction,
   monthRange,
+  monthSaved,
   nearestOpenGoal,
   netWorthCents,
   sameMerchant,
@@ -176,7 +176,7 @@ export default function HomeScreen() {
   const spentCents = shownDash?.budget.spentCents ?? 0;
   const leftCents = totalPlannedCents - spentCents;
   const pace = budgetPace(spentCents, totalPlannedCents);
-  const paceCents = Math.round(totalPlannedCents * monthFraction());
+  const paceCents = expectedPaceCents(totalPlannedCents);
   const dueCents = recurrences ? billsStillDueCents(recurrences, now.getFullYear(), now.getMonth() + 1) : null;
   const afterBills = dueCents == null ? null : leftCents - dueCents;
   const pendingCents = shownDash?.pendingCents ?? 0;
@@ -189,8 +189,10 @@ export default function HomeScreen() {
         }),
       )
     : null;
-  const nearestPace = nearest ? goalPace(nearest) : null;
-  const savedCents = shownDash?.cashFlow.savedCents ?? 0;
+  const saved = monthSaved(shownDash?.cashFlow.incomeCents ?? 0, shownDash?.cashFlow.spendingCents ?? 0);
+  const savedCents = (shownDash?.cashFlow.incomeCents ?? 0) - (shownDash?.cashFlow.spendingCents ?? 0);
+  const goalLine =
+    goals == null ? null : goals.length === 0 ? "No goals" : `${money((nearest ?? goals[0]).remainingCents)} left`;
   const gainCents = investments?.gainCents ?? null;
   const marketCents = investments?.totalCents;
 
@@ -382,6 +384,7 @@ export default function HomeScreen() {
               title="Your money"
               subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} left` : undefined}
               icon="wallet"
+              compact
               onPress={() => setMoneyOpen(true)}
             />
           </Card>
@@ -528,74 +531,75 @@ export default function HomeScreen() {
         </>
       ) : null}
       {moneyOpen ? (
-        <Sheet title="Your money" onClose={() => setMoneyOpen(false)}>
-          <MenuRow
-            title="Goals"
-            icon="flag"
-            trailing={
-              nearest && nearestPace ? (
-                <RemainingFigure text={`${money(nearest.remainingCents)} · ${nearestPace.label}`} />
-              ) : undefined
-            }
-            onPress={() => {
-              setMoneyOpen(false);
-              router.push("/goals");
-            }}
-          />
-          <MenuRow
-            title="Cash flow"
-            icon="flow"
-            trailing={
-              shownDash ? (
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "600",
-                    color: savedCents < 0 ? colors.danger : colors.positive,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {money(Math.abs(savedCents))}
-                </Text>
-              ) : undefined
-            }
-            onPress={() => {
-              setMoneyOpen(false);
-              router.push("/cash-flow");
-            }}
-          />
-          <MenuRow
-            title="Investments"
-            icon="chart"
-            trailing={marketCents == null ? undefined : <MarketValue cents={marketCents} gainCents={gainCents ?? null} />}
-            onPress={() => {
-              const from = anchorRect("market.today");
-              const mem = recallAnchor("market.today");
-              if (from && mem) {
-                stageFlight(
-                  {
-                    id: "market-open",
-                    hide: ["market.hero"],
-                    pieces: [
-                      {
-                        key: "market",
-                        text: mem.text,
-                        color: mem.color,
-                        fontSize: mem.fontSize,
-                        fontWeight: "700",
-                        from,
-                        toAnchor: "market.hero",
-                        toFontSize: 46,
-                      },
-                    ],
-                  },
-                  reduceMotion,
-                );
+        <Sheet title="Your money" fit onClose={() => setMoneyOpen(false)}>
+          <Card>
+            <MenuRow
+              title="Goals"
+              icon="flag"
+              trailing={goalLine ? <RemainingFigure text={goalLine} /> : undefined}
+              onPress={() => {
+                setMoneyOpen(false);
+                router.push("/goals");
+              }}
+            />
+            <MenuRow
+              title="Cash flow"
+              icon="flow"
+              divided
+              trailing={
+                shownDash ? (
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "600",
+                      color: saved.tone === "good" ? colors.positive : saved.tone === "bad" ? colors.danger : colors.ink,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {`${saved.signed ? "-" : ""}${money(saved.cents)}`}
+                  </Text>
+                ) : undefined
               }
-              setMoneyOpen(false);
-              router.push("/investments");
-            }}
-          />
+              onPress={() => {
+                setMoneyOpen(false);
+                router.push("/cash-flow");
+              }}
+            />
+            <MenuRow
+              title="Investments"
+              icon="chart"
+              divided
+              trailing={marketCents == null ? undefined : <MarketValue cents={marketCents} gainCents={gainCents ?? null} />}
+              onPress={() => {
+                const from = anchorRect("market.today");
+                const mem = recallAnchor("market.today");
+                if (from && mem) {
+                  stageFlight(
+                    {
+                      id: "market-open",
+                      hide: ["market.hero"],
+                      pieces: [
+                        {
+                          key: "market",
+                          text: mem.text,
+                          color: mem.color,
+                          fontSize: mem.fontSize,
+                          fontWeight: "700",
+                          from,
+                          toAnchor: "market.hero",
+                          toFontSize: 46,
+                        },
+                      ],
+                    },
+                    reduceMotion,
+                  );
+                }
+                setMoneyOpen(false);
+                router.push("/investments");
+              }}
+            />
+          </Card>
         </Sheet>
       ) : null}
     </Screen>
@@ -606,8 +610,8 @@ function RemainingFigure({ text }: { text: string }) {
   const measure = useMeasuredAnchor("money.remaining", { text, color: colors.ink, fontSize: 14 });
   const opacity = useFlightHidden("money.remaining");
   return (
-    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false} style={{ opacity }}>
-      <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{text}</Text>
+    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false} style={{ opacity, flexShrink: 1 }}>
+      <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{text}</Text>
     </View>
   );
 }
@@ -617,7 +621,7 @@ function MarketValue({ cents, gainCents }: { cents: number; gainCents: number | 
   const measure = useMeasuredAnchor("market.today", { text, color: colors.ink, fontSize: 14 });
   return (
     <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
-      <Text style={{ fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
+      <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
         <Text style={{ color: colors.ink }}>{text}</Text>
         {gainCents != null ? (
           <Text style={{ color: gainCents >= 0 ? colors.positive : colors.danger }}>{`  ${money(Math.abs(gainCents))}`}</Text>

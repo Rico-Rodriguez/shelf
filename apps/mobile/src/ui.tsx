@@ -745,6 +745,7 @@ export function MenuRow({
   divided,
   danger,
   active,
+  compact,
   trailing,
 }: {
   title: string;
@@ -754,6 +755,8 @@ export function MenuRow({
   divided?: boolean;
   danger?: boolean;
   active?: boolean;
+  /** Shorter row when the line has no secondary copy. */
+  compact?: boolean;
   trailing?: ReactNode;
 }) {
   const styles = useStyles();
@@ -763,7 +766,7 @@ export function MenuRow({
         tapPress();
         onPress();
       }}
-      style={({ pressed }) => [styles.ledger, pressed ? { backgroundColor: colors.fill } : null]}
+      style={({ pressed }) => [styles.ledger, compact ? styles.ledgerCompact : null, pressed ? { backgroundColor: colors.fill } : null]}
     >
       {divided ? <View style={[styles.hairline, { left: icon ? 62 : 16 }]} /> : null}
       {icon ? (
@@ -1203,20 +1206,29 @@ function FactItem({ item }: { item: { kicker: string; value: string; color?: str
   const measure = useMeasuredAnchor(item.anchor, { text: item.value, color: item.color ?? colors.ink, fontSize: 15 });
   const opacity = useFlightHidden(item.anchor);
   const body = (
-    <View style={{ flex: 1, gap: 2, opacity }}>
-      <Text style={styles.kicker}>{item.kicker}</Text>
+    <View style={{ gap: 2, alignSelf: "stretch", opacity }}>
+      <Text style={styles.kicker} numberOfLines={1}>
+        {item.kicker}
+      </Text>
       <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
-        <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.55}
+          style={[styles.factValue, item.color ? { color: item.color } : null]}
+        >
+          {item.value}
+        </Text>
       </View>
     </View>
   );
-  if (!item.onPress) return <View style={{ flex: 1 }}>{body}</View>;
+  if (!item.onPress) return <View style={{ flex: 1, minWidth: 0 }}>{body}</View>;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${item.kicker} ${item.value}`}
       onPress={item.onPress}
-      style={{ flex: 1 }}
+      style={{ flex: 1, minWidth: 0 }}
     >
       {body}
     </Pressable>
@@ -1678,6 +1690,7 @@ export function SheetContainer({
   titleAnchor,
   overlay = null,
   onOverlayDone,
+  fit = false,
 }: {
   visible?: boolean;
   onClose: () => void;
@@ -1695,6 +1708,8 @@ export function SheetContainer({
   titleAnchor?: string;
   overlay?: FlightPiece[] | null;
   onOverlayDone?: () => void;
+  /** Hug the rows instead of a tall empty panel. */
+  fit?: boolean;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1875,8 +1890,8 @@ export function SheetContainer({
           }}
           style={[
             styles.sheet,
-            minHeight ? { minHeight } : null,
-            height ? { height } : null,
+            fit ? null : minHeight ? { minHeight } : null,
+            fit ? null : height ? { height } : null,
             origin && !metrics && !reduceMotion ? { opacity: 0 } : null,
             {
               transform: metrics
@@ -1972,7 +1987,9 @@ export function SheetContainer({
               </View>
             ) : null}
           </View>
-          {scrollable ? (
+          {fit ? (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}>{children}</View>
+          ) : scrollable ? (
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
@@ -2017,6 +2034,7 @@ export function Sheet({
   titleAnchor,
   overlay = null,
   onOverlayDone,
+  fit = false,
 }: {
   title: string;
   subtitle?: string;
@@ -2031,6 +2049,8 @@ export function Sheet({
   titleAnchor?: string;
   overlay?: FlightPiece[] | null;
   onOverlayDone?: () => void;
+  /** Hug the rows instead of a tall empty panel. */
+  fit?: boolean;
 }) {
   return (
     <SheetContainer
@@ -2047,6 +2067,7 @@ export function Sheet({
       titleAnchor={titleAnchor}
       overlay={overlay}
       onOverlayDone={onOverlayDone}
+      fit={fit}
     >
       {children}
     </SheetContainer>
@@ -3141,6 +3162,10 @@ function makeStyles(colors: Palette) {
       paddingVertical: 11,
       position: "relative",
     },
+    ledgerCompact: {
+      minHeight: 44,
+      paddingVertical: 6,
+    },
     hairline: {
       position: "absolute",
       top: 0,
@@ -3229,13 +3254,13 @@ function makeStyles(colors: Palette) {
     facts: {
       marginHorizontal: -20,
       marginTop: 6,
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
       paddingTop: 14,
       paddingBottom: 16,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.line,
       flexDirection: "row",
-      gap: 12,
+      gap: 8,
     },
     kicker: { fontSize: 12, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" },
     factValue: { fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink, fontVariant: ["tabular-nums"] },

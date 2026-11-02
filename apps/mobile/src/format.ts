@@ -140,25 +140,51 @@ export function netWorthCents(accounts: NetWorthAccount[]): number {
   return assets - liabilities;
 }
 
-/** Pace versus today. Expected spend is the plan times how far the month has gone. */
-export function budgetPace(
-  spentCents: number,
-  plannedCents: number,
-  date = new Date(),
-): { label: "Ahead" | "Behind" | "Over"; tone: "good" | "warn" | "bad" } {
-  const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const day = Math.min(Math.max(date.getDate(), 1), days);
-  const expected = plannedCents * (day / days);
-  if (plannedCents > 0 && spentCents > plannedCents) return { label: "Over", tone: "bad" };
-  if (spentCents > expected) return { label: "Behind", tone: "warn" };
-  return { label: "Ahead", tone: "good" };
-}
-
 /** How far the current month has gone, from the 1st through today. */
 export function monthFraction(date = new Date()): number {
   const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const day = Math.min(Math.max(date.getDate(), 1), days);
   return day / days;
+}
+
+/** Straight-line spend by this day: the plan times how far the month has gone. */
+export function expectedPaceCents(plannedCents: number, date = new Date()): number {
+  if (plannedCents <= 0) return 0;
+  return Math.round(plannedCents * monthFraction(date));
+}
+
+/**
+ * Pace versus today.
+ * Under the straight-line pace is Ahead (room left).
+ * Over that pace but still inside the plan is Behind.
+ * Over the plan is Over.
+ * Spending less than the pace is never Behind.
+ */
+export function budgetPace(
+  spentCents: number,
+  plannedCents: number,
+  date = new Date(),
+): { label: "Ahead" | "Behind" | "Over"; tone: "good" | "warn" | "bad" } {
+  const expected = expectedPaceCents(plannedCents, date);
+  if (plannedCents > 0 && spentCents > plannedCents) return { label: "Over", tone: "bad" };
+  if (spentCents > expected) return { label: "Behind", tone: "warn" };
+  return { label: "Ahead", tone: "good" };
+}
+
+/**
+ * This month's saved is income minus spending.
+ * Green when money was kept. Neutral when there is no income to be ahead of,
+ * so the figure is simply this month's spending. Danger only when spending
+ * passed income that actually came in.
+ */
+export function monthSaved(
+  incomeCents: number,
+  spendingCents: number,
+): { cents: number; signed: boolean; tone: "good" | "neutral" | "bad" } {
+  const saved = incomeCents - spendingCents;
+  if (saved > 0) return { cents: saved, signed: false, tone: "good" };
+  if (incomeCents > 0 && saved < 0) return { cents: Math.abs(saved), signed: true, tone: "bad" };
+  return { cents: Math.abs(saved), signed: false, tone: "neutral" };
 }
 
 /** "Checking · ···4521" — the same line the accounts list prints. */

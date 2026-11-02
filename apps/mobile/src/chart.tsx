@@ -58,14 +58,16 @@ export function SpendChart({
 
   const geometry = useMemo(() => {
     if (series.length < 2 || width <= 0) return null;
-    const values = series.map((point) => point.cents);
-    if (reference) values.push(reference.cents);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const raw = max - min;
-    const pad = raw === 0 ? Math.max(Math.abs(max) * 0.22, 1) : raw * 0.16;
-    const lo = min - pad;
-    const hi = max + pad;
+    // One dollar axis for the spend and the pace mark. Zero stays on the floor.
+    // The top is the higher of the two, with air above it. Fitting the series
+    // on its own pins the line to the pace rule no matter how small the spend is.
+    const seriesMax = series.reduce((max, point) => Math.max(max, point.cents), 0);
+    const seriesMin = series.reduce((min, point) => Math.min(min, point.cents), 0);
+    const pace = Math.max(0, reference?.cents ?? 0);
+    const peak = Math.max(seriesMax, pace, 1);
+    const floor = Math.min(0, seriesMin);
+    const lo = floor;
+    const hi = floor + (peak - floor) * 1.12;
     const span = hi - lo || 1;
     const insetX = 12;
     const insetY = 20;
