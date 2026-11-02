@@ -6,6 +6,7 @@ import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { applyRulesToNewTx } from "@/lib/rules";
+import { sameMerchant } from "@/lib/plan";
 import { monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { applyManualAmount } from "@/lib/manual-balance";
 import { openAccount, openSplit, openTx, sealedTxWrite } from "@/lib/secrets";
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
     const pairFor = url.searchParams.get("pairFor");
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 500);
     const offset = Number(url.searchParams.get("offset") ?? 0);
+    const wantAll = Boolean(q || tag || merchant || reviewed === "false");
 
     const db = await getDb();
     if (url.searchParams.get("countOnly") === "1") {
@@ -76,7 +78,7 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(transactions.date), desc(transactions.createdAt));
-    const stored = q || tag || merchant ? await base : await base.limit(limit).offset(offset);
+    const stored = wantAll ? await base : await base.limit(limit).offset(offset);
     let rows = stored.map((tx) => openTx(tx, dek));
 
     const [acctRows, catRows, groupRows, splitRows, tagRows, txTags] = await Promise.all([
@@ -91,7 +93,7 @@ export async function GET(request: Request) {
     const openedSplits = splitRows.map((row) => openSplit(row, dek));
 
     if (merchant) {
-      rows = rows.filter((tx) => (tx.merchantName || tx.name).toLowerCase() === merchant);
+      rows = rows.filter((tx) => sameMerchant(tx.merchantName || tx.name, merchant));
     }
     if (q) {
       const amount = /^(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)$/.exec(q.trim());
@@ -121,7 +123,7 @@ export async function GET(request: Request) {
         .filter((tag): tag is (typeof tagRows)[number] => Boolean(tag)),
     }));
     const filtered = tag ? tagged.filter((row) => row.tags.some((item) => item.name.toLowerCase() === tag)) : tagged;
-    const page = q || tag || merchant ? filtered.slice(offset, offset + limit) : filtered;
+    const page = filtered;
     const data = page.map(({ tx, tags: txTagRows }) => {
       const category = catRows.find((c) => c.id === tx.categoryId) ?? null;
       const group = category ? groupRows.find((g) => g.id === category.groupId) : null;

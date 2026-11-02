@@ -210,7 +210,7 @@ async function upsertTransaction(tx: Transaction, dek: Buffer) {
     dek,
   );
   if (Object.keys(patch).length) {
-    await db.update(transactions).set({ ...patch, updatedAt: new Date() }).where(eq(transactions.id, id));
+    await db.update(transactions).set({ ...patch, ...(patch.categoryId ? { reviewed: true } : {}), updatedAt: new Date() }).where(eq(transactions.id, id));
   }
 }
 

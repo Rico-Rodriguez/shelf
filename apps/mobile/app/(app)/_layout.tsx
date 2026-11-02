@@ -8,6 +8,7 @@ import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
+import { subscribeOutbox } from "../../src/review-outbox";
 import { useReduceTransparency, useTheme } from "../../src/theme";
 import { colors, QuickLogModal, type QuickLogDraft } from "../../src/ui";
 
@@ -549,11 +550,17 @@ export default function AppTabs() {
     const unsubDash = subscribeCache<{ budget?: { plannedCents?: number } }>(dashboardPath(), (res) => {
       if (res) setHasPlan((res.budget?.plannedCents ?? 0) > 0);
     });
+    const unsubOutbox = subscribeOutbox((reason) => {
+      if (reason !== "hydrated" && reason !== "settled") return;
+      void load("/api/transactions?countOnly=1").catch(() => undefined);
+      void load(dashboardPath()).catch(() => undefined);
+    });
     return () => {
       unsubCount();
       unsubNotes();
       unsubAccts();
       unsubDash();
+      unsubOutbox();
     };
   }, [path]);
 
