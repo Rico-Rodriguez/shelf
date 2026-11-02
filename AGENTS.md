@@ -28,3 +28,12 @@ Whenever making or committing changes to `apps/mobile/**`, `scripts/publish-ota.
 2. The compiled bundle in `public/ota/` MUST be staged and committed alongside the code changes (`git add public/ota`).
 3. When pushed to GitHub, Vercel automatically deploys `public/ota` live to the phone at `https://shelf-xi-hazel.vercel.app/api/ota`.
 4. This costs **0 GitHub Actions minutes** and requires **zero manual steps** from the user. Confirm to the user that the phone app updates seamlessly on its next launch.
+
+## Cursor Cloud specific instructions
+
+- Node 22 is the server runtime (see the root `Dockerfile`). Do not start Postgres or Docker for normal work. With `DATABASE_URL` unset, the API uses embedded PGlite and writes the database under `data/`.
+- Install dependencies with `npm ci` at the repo root. In `apps/mobile`, `npm ci` fails on the checked-in lockfile unless peer conflicts are ignored: `npm ci --legacy-peer-deps` (root `react@19.2.3` vs locked `react-dom@19.3.0`).
+- If `.env` is missing, copy `.env.example` to `.env`. Plaid keys can stay empty. Sample data does not need them.
+- Start the API with `npm run dev` (port 3000, hostname `0.0.0.0`). `GET /api/health` returns `{"ok":true}` after the database opens.
+- `npm run lint` and `npx tsc --noEmit` are the server checks. `npm run smoke` is the end-to-end check against that server: it creates the lock, enrolls TOTP, seeds demo data, and reads the main API routes. Run it only against a local server.
+- The phone app typechecks with `npx tsc --noEmit` inside `apps/mobile`. It is not a browser app (Expo web dependencies are not installed). iOS and Android need a device or simulator, which this environment does not provide.
