@@ -1,21 +1,20 @@
-import { api } from "./api";
 import type { Charge } from "./charge";
-import { merchantMatchKey } from "./format";
+import { sameMerchant } from "./format";
 import { dismissUndo, offerUndo } from "./toast";
+import { cancelJob, enqueueReview, type HeldReview } from "./review-outbox";
 
 export function matchesMerchantRule(tx: { name: string; merchantName: string | null }, merchant: string): boolean {
-  const key = merchantMatchKey(merchant).toLowerCase();
-  if (!key) return false;
-  return `${tx.merchantName ?? ""} ${tx.name}`.toLowerCase().includes(key);
+  const names = [tx.merchantName, tx.name].filter((name): name is string => Boolean(name));
+  return names.some((name) => sameMerchant(name, merchant));
 }
 
-/** Current charge, plus every other visible unreviewed charge the rule would clear. */
+/** Current charge, plus every other visible charge from the same merchant when a rule is on. */
 export function matchingReviewIds(rows: Charge[], tx: Charge, makeRule: boolean): string[] {
   if (!makeRule) return [tx.id];
   const merchant = tx.merchantName || tx.name;
   const ids = [tx.id];
   for (const row of rows) {
-    if (row.id === tx.id || row.reviewed || row.hidden) continue;
+    if (row.id === tx.id || row.hidden) continue;
     if (matchesMerchantRule(row, merchant)) ids.push(row.id);
   }
   return ids;
@@ -59,9 +58,12 @@ export function restoreReviewRows(rows: Charge[], snapshots: Charge[]): Charge[]
 type ReviewRun = {
   tx: Charge;
   categoryId: string | null;
+  categoryName?: string | null;
+  categoryColor?: string | null;
+  goalId?: string | null;
   makeRule: boolean;
   ids: string[];
-  previous: { id: string; categoryId: string | null }[];
+  previous: { id: string; categoryId: string | null; reviewed: boolean }[];
   label: string;
   apply: () => void;
   restore: () => void;
@@ -69,19 +71,35 @@ type ReviewRun = {
   onUndo: (undo: () => Promise<void>) => (() => Promise<void>) | void;
 };
 
-/** Paint the queue, show the undo chip, then talk to the server. A failure puts the same cards back. */
+/** Paint the queue and keep that review locally until the outbox lands it. Undo is the only way back. */
 export function performReview(input: ReviewRun) {
-  const gate = { cancelled: false, ruleId: null as string | null, failed: false };
+  const merchant = input.tx.merchantName || input.tx.name;
+  const affected: HeldReview[] = input.previous.map((row) => ({
+    id: row.id,
+    categoryId: input.categoryId,
+    categoryName: input.categoryName ?? null,
+    categoryColor: input.categoryColor ?? null,
+    keepCategory: false,
+    wasUnreviewed: !row.reviewed,
+  }));
+  const goalId = input.goalId || null;
+  const job = enqueueReview({
+    txId: input.tx.id,
+    categoryId: input.categoryId,
+    makeRule: input.makeRule && Boolean(input.categoryId),
+    merchant,
+    affected,
+    previous: input.previous,
+    body: goalId ? { categoryId: input.categoryId, reviewed: true, goalId } : undefined,
+    revert: goalId ? { categoryId: input.tx.categoryId, reviewed: input.tx.reviewed, goalId: input.tx.goalId } : undefined,
+  });
   input.apply();
 
-  let settle!: Promise<void>;
   const undo = async () => {
-    if (gate.cancelled || gate.failed) return;
-    gate.cancelled = true;
     input.restore();
     dismissUndo();
     try {
-      await settle;
+      await cancelJob(job);
     } catch {
       input.apply();
       input.onFailure(() => performReview(input));
@@ -89,55 +107,6 @@ export function performReview(input: ReviewRun) {
   };
   const handed = input.onUndo(undo) ?? undo;
   offerUndo(input.label, () => handed());
-
-  settle = (async () => {
-    await api(`/api/transactions/${input.tx.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ categoryId: input.categoryId, reviewed: true }),
-    });
-    if (input.makeRule && input.categoryId && !gate.cancelled) {
-      const merchant = input.tx.merchantName || input.tx.name;
-      const res = await api<{ id: string }>("/api/rules", {
-        method: "POST",
-        body: JSON.stringify({
-          name: merchant,
-          matchMerchant: merchantMatchKey(merchant),
-          actionCategoryId: input.categoryId,
-          enabled: true,
-          applyUnreviewed: true,
-        }),
-      });
-      gate.ruleId = res.id;
-    }
-    if (gate.cancelled) await revertReview(input, gate.ruleId);
-  })().catch((err: unknown) => {
-    if (gate.cancelled) {
-      void revertReview(input, gate.ruleId).catch(() => undefined);
-      throw err;
-    }
-    gate.failed = true;
-    dismissUndo();
-    input.restore();
-    input.onFailure(() => performReview(input));
-    throw err;
-  });
-
-  void settle.catch(() => undefined);
-}
-
-async function revertReview(input: ReviewRun, ruleId: string | null) {
-  await api(`/api/transactions/${input.tx.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ categoryId: input.tx.categoryId, reviewed: false }),
-  });
-  const others = input.previous.filter((row) => row.id !== input.tx.id);
-  if (others.length) {
-    await api("/api/transactions/review-all", {
-      method: "POST",
-      body: JSON.stringify({ restore: others }),
-    });
-  }
-  if (ruleId) await api(`/api/rules/${ruleId}`, { method: "DELETE" }).catch(() => undefined);
 }
 
 type UndoableRun = {

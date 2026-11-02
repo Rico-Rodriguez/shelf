@@ -1,4 +1,5 @@
 import { cachePaths, peek, retainWrites, writeCache } from "./api";
+import { heldUnreviewedCount } from "./review-outbox";
 
 type CountBody = { unreviewed: number };
 type DashLike = {
@@ -182,15 +183,25 @@ export function clearAccountOverlay(id: string, snapshot?: { accounts: { id: str
 
 retainWrites((path, data) => {
   if (!data || typeof data !== "object") return data;
-  if (path === "/api/transactions?countOnly=1" && unreviewedPin != null) {
+  if (path === "/api/transactions?countOnly=1") {
     const body = data as CountBody;
-    if (body.unreviewed === unreviewedPin && !localWrite) unreviewedPin = null;
-    else if (body.unreviewed !== unreviewedPin) return { ...body, unreviewed: unreviewedPin };
+    if (unreviewedPin != null) {
+      if (body.unreviewed === unreviewedPin && heldUnreviewedCount() === 0 && !localWrite) unreviewedPin = null;
+      else if (body.unreviewed !== unreviewedPin) return { ...body, unreviewed: unreviewedPin };
+    }
+    if (unreviewedPin == null) {
+      const unreviewed = Math.max(0, body.unreviewed - heldUnreviewedCount());
+      if (unreviewed !== body.unreviewed) return { ...body, unreviewed };
+    }
   }
-  if (path.startsWith("/api/dashboard") && unreviewedPin != null && "unreviewed" in data) {
+  if (path.startsWith("/api/dashboard") && "unreviewed" in data) {
     const dash = data as DashLike;
-    if (dash.unreviewed && dash.unreviewed.count !== unreviewedPin) {
+    if (unreviewedPin != null && dash.unreviewed && dash.unreviewed.count !== unreviewedPin) {
       return { ...dash, unreviewed: { count: unreviewedPin } };
+    }
+    if (unreviewedPin == null && dash.unreviewed) {
+      const count = Math.max(0, dash.unreviewed.count - heldUnreviewedCount());
+      if (count !== dash.unreviewed.count) return { ...dash, unreviewed: { count } };
     }
   }
   if (path === "/api/accounts" && accountOverlays.size && "accounts" in data) {

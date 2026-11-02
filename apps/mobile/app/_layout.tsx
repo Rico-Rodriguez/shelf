@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useShelfType } from "../src/brand";
+import { startReviewOutbox } from "../src/review-outbox";
 import { SessionProvider } from "../src/session";
 import { ThemeProvider, useTheme } from "../src/theme";
 import { ToastHost } from "../src/toast";
@@ -53,6 +54,9 @@ function RootStack() {
 export default function RootLayout() {
   useShelfType();
   useOverTheAirUpdate();
+  useEffect(() => {
+    void startReviewOutbox();
+  }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

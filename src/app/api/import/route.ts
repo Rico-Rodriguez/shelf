@@ -80,7 +80,9 @@ export async function POST(request: Request) {
         { name, merchantName: name, amountCents, accountId: body.accountId, categoryId: category?.id },
         dek,
       );
-      if (Object.keys(patch).length) await db.update(transactions).set(patch).where(eq(transactions.id, id));
+      if (Object.keys(patch).length) {
+        await db.update(transactions).set({ ...patch, ...(patch.categoryId ? { reviewed: true } : {}), updatedAt: new Date() }).where(eq(transactions.id, id));
+      }
       await applyManualAmount(body.accountId, amountCents, dek, { snapshot: false });
       created += 1;
     }

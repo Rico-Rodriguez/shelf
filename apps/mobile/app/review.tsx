@@ -5,12 +5,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/api";
 import { Charge, ChargeGroup } from "../src/charge";
 import { ReviewDeck } from "../src/decide";
+import { money } from "../src/format";
 import { tapCelebration, tapPress } from "../src/haptic";
 import { Icon } from "../src/icons";
 import { pinUnreviewed } from "../src/live-edits";
 import { matchingReviewIds, performReview, restoreReviewRows } from "../src/review-flow";
+import { applyHeld, heldReviews, outboxStalled, retryAllReviews, subscribeOutbox } from "../src/review-outbox";
 import { ConfirmMark, UndoHost } from "../src/toast";
-import { colors, LoadError, Loading } from "../src/ui";
+import { Button, colors, LoadError, Loading, Note } from "../src/ui";
 
 type TxPayload = {
   transactions: Charge[];
@@ -34,7 +36,8 @@ export default function ReviewScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
   const [undoHistory, setUndoHistory] = useState<UndoAction[]>([]);
-  const patches = useRef(new Map<string, { reviewed: boolean; categoryId: string | null; category: Charge["category"] }>());
+  const [outboxTick, setOutboxTick] = useState(0);
+  const patches = useRef(new Map<string, { reviewed: boolean; categoryId: string | null; category: Charge["category"]; goalId?: string | null }>());
   const epoch = useRef(0);
 
   const load = useCallback(() => {
@@ -50,9 +53,15 @@ export default function ReviewScreen() {
           const row = tx.transactions.find((item) => item.id === id);
           if (!returned.has(id) || row?.reviewed) patches.current.delete(id);
         }
-        setRows(tx.transactions.filter((row) => !row.reviewed && !patches.current.get(row.id)?.reviewed));
-        const pending = [...patches.current.values()].filter((patch) => patch.reviewed).length;
-        const nextCount = Math.max(0, tx.unreviewed - pending);
+        setRows(
+          applyHeld(tx.transactions).filter((row) => !row.reviewed && !patches.current.get(row.id)?.reviewed),
+        );
+        const heldIds = new Set(heldReviews().filter((row) => row.wasUnreviewed).map((row) => row.id));
+        let extra = 0;
+        for (const [id, patch] of patches.current) {
+          if (patch.reviewed && !heldIds.has(id)) extra += 1;
+        }
+        const nextCount = Math.max(0, tx.unreviewed - heldIds.size - extra);
         setUnreviewed(nextCount);
         pinUnreviewed(nextCount);
         setFaces(tx.faces ?? {});
@@ -67,6 +76,21 @@ export default function ReviewScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(
+    () =>
+      subscribeOutbox((reason) => {
+        setOutboxTick((value) => value + 1);
+        if (reason === "hydrated") {
+          setRows((current) => {
+            if (!current) return current;
+            return applyHeld(current).filter((row) => !row.reviewed && !patches.current.get(row.id)?.reviewed);
+          });
+        }
+        if (reason === "hydrated" || reason === "settled") void load();
+      }),
+    [load],
+  );
 
   const unreviewedRows = useMemo(() => (rows ?? []).filter((tx) => !tx.reviewed), [rows]);
   const categories = useMemo(() => groups.flatMap((group) => group.categories), [groups]);
@@ -85,11 +109,16 @@ export default function ReviewScreen() {
     });
   }
 
-  function paint(ids: string[], categoryId: string | null, snapshots: Charge[]) {
+  function paint(ids: string[], categoryId: string | null, snapshots: Charge[], goalId?: string | null) {
     const face = categoryFace(categoryId);
     const chosen = new Set(ids);
     for (const id of ids) {
-      patches.current.set(id, { reviewed: true, categoryId, category: face });
+      patches.current.set(id, {
+        reviewed: true,
+        categoryId,
+        category: face,
+        ...(goalId && id === snapshots[0]?.id ? { goalId } : {}),
+      });
     }
     setRows((current) => (current ?? []).filter((row) => !chosen.has(row.id)));
     shiftCount(-snapshots.filter((row) => !row.reviewed).length);
@@ -101,28 +130,37 @@ export default function ReviewScreen() {
     shiftCount(snapshots.filter((row) => !row.reviewed).length);
   }
 
-  function handleConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
+  function handleConfirm(
+    tx: Charge,
+    nextCategoryId: string | null,
+    makeRule: boolean,
+    goal: { id: string; name: string; remainingCents: number } | null = null,
+  ) {
     const source = rows ?? [];
     const rule = makeRule && Boolean(nextCategoryId);
     const ids = matchingReviewIds(source, tx, rule);
     const snapshots = source.filter((row) => ids.includes(row.id));
+    const primaryFirst = [tx, ...snapshots.filter((row) => row.id !== tx.id)];
     setActionError(null);
     epoch.current += 1;
     performReview({
       tx,
       categoryId: nextCategoryId,
+      goalId: goal?.id ?? null,
+      categoryName: categoryFace(nextCategoryId)?.name ?? null,
+      categoryColor: categoryFace(nextCategoryId)?.color ?? null,
       makeRule: rule,
       ids,
-      previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId })),
-      label: ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
-      apply: () => paint(ids, nextCategoryId, snapshots),
+      previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId, reviewed: row.reviewed })),
+      label: goal ? `${goal.name} · ${money(goal.remainingCents)} left` : ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
+      apply: () => paint(ids, nextCategoryId, primaryFirst, goal?.id ?? null),
       restore: () => {
         epoch.current += 1;
         unpaint(ids, snapshots);
       },
       onFailure: (retry) => {
         setUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
-        setActionError({ message: "Could not save that category.", retry });
+        setActionError({ message: "Could not undo that review.", retry });
       },
       onUndo: (undo) => {
         const undoFn = async () => {
@@ -209,6 +247,12 @@ export default function ReviewScreen() {
 
       {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
       {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
+      {outboxTick >= 0 && outboxStalled() ? (
+        <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: 12 }}>
+          <Note>Couldn’t save those reviews. They stay reviewed on this phone.</Note>
+          <Button label="Retry all" tone="quiet" onPress={retryAllReviews} />
+        </View>
+      ) : null}
 
       {/* Loading state */}
       {rows === null && !error ? (

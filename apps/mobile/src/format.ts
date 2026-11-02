@@ -154,6 +154,21 @@ export function budgetPace(
   return { label: "Ahead", tone: "good" };
 }
 
+/** How far the current month has gone, from the 1st through today. */
+export function monthFraction(date = new Date()): number {
+  const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const day = Math.min(Math.max(date.getDate(), 1), days);
+  return day / days;
+}
+
+/** "Checking · ···4521" — the same line the accounts list prints. */
+export function accountIdentity(account: { subtype?: string | null; type?: string | null; mask?: string | null }): string {
+  const kind = account.subtype || account.type || "";
+  const label = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "";
+  const mask = account.mask ? `···${account.mask}` : "";
+  return [label, mask].filter(Boolean).join(" · ");
+}
+
 export function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T12:00:00`);
   date.setDate(date.getDate() + days);
@@ -234,16 +249,43 @@ export function occurrencesInMonth(anchor: string, cadence: string, year: number
   return hits;
 }
 
+/** Unposted bills whose next date falls in this month, counted the way Bills projects the month. */
+export function billsStillDueCents(
+  bills: { amountCents: number; cadence: string; nextDate: string; isIncome?: boolean; isActive?: boolean }[],
+  year: number,
+  month: number,
+): number {
+  const { start, end } = monthRange(year, month);
+  let sum = 0;
+  for (const bill of bills) {
+    if (bill.isIncome || bill.isActive === false) continue;
+    if (bill.nextDate < start || bill.nextDate > end) continue;
+    const hits = occurrencesInMonth(bill.nextDate, bill.cadence, year, month).filter((date) => date >= bill.nextDate);
+    sum += hits.length * bill.amountCents;
+  }
+  return sum;
+}
+
+/** Merchant key for rules. Lowercase, strip punctuation, collapse spaces, and drop one trailing " - {place}". Keep this in step with src/lib/plan.ts. */
 export function merchantMatchKey(name: string): string {
-  const cleaned = name
+  const withoutPlace = name.replace(/\s+-\s+[^-]+$/, "").trim();
+  return withoutPlace
     .toLowerCase()
-    .replace(/[#*]+\s*[a-z0-9]+/g, " ")
-    .replace(/\b\d{3,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (cleaned.length >= 3) return cleaned;
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Same payee when the keys match, or they share a word-boundary prefix of at least two words. A single word does not glue longer names together. */
+export function sameMerchant(a: string, b: string): boolean {
+  const left = merchantMatchKey(a).split(" ").filter(Boolean);
+  const right = merchantMatchKey(b).split(" ").filter(Boolean);
+  if (!left.length || !right.length) return false;
+  let shared = 0;
+  const limit = Math.min(left.length, right.length);
+  while (shared < limit && left[shared] === right[shared]) shared += 1;
+  if (shared === left.length && shared === right.length) return true;
+  return shared >= 2;
 }
 
 export function payoffMonths(balanceCents: number, aprPercent: number, paymentCents: number): number | null {
@@ -255,6 +297,57 @@ export function payoffMonths(balanceCents: number, aprPercent: number, paymentCe
   const months = -Math.log(1 - (rate * balance) / paymentCents) / Math.log(1 + rate);
   if (!Number.isFinite(months) || months <= 0) return null;
   return Math.ceil(months);
+}
+
+/** Calendar month a loan reaches zero if every minimum is paid, starting from today. */
+export function payoffMonthLabel(months: number, today = new Date()): string {
+  const date = new Date(today.getFullYear(), today.getMonth() + months, 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+/** "VTI · 12.4 shares · $248.10" from fields a holding already stores. */
+export function holdingMeta(holding: {
+  quantity?: string | null;
+  institutionPriceCents?: number | null;
+  security?: { ticker?: string | null } | null;
+}): string {
+  const parts: string[] = [];
+  if (holding.security?.ticker) parts.push(holding.security.ticker);
+  if (holding.quantity) {
+    const count = Number(holding.quantity);
+    const shown = Number.isFinite(count)
+      ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(count)
+      : holding.quantity;
+    const word = Number.isFinite(count) && count === 1 ? "share" : "shares";
+    parts.push(`${shown} ${word}`);
+  }
+  if (holding.institutionPriceCents != null) parts.push(money(holding.institutionPriceCents));
+  return parts.join(" · ");
+}
+
+export function nearestOpenGoal<T extends { name: string; remainingCents: number; targetDate: string | null }>(goals: T[]): T | null {
+  const open = goals.filter((goal) => goal.remainingCents > 0);
+  if (!open.length) return null;
+  return [...open].sort((a, b) => {
+    if (a.targetDate && b.targetDate) return a.targetDate.localeCompare(b.targetDate);
+    if (a.targetDate) return -1;
+    if (b.targetDate) return 1;
+    return a.name.localeCompare(b.name);
+  })[0];
+}
+
+/** Save-up goal that shares this category and still has something left. Soonest date wins. */
+export function saveUpGoalForCategory<
+  T extends { name: string; kind: string; categoryId: string | null; remainingCents: number; targetDate: string | null },
+>(goals: T[], categoryId: string | null): T | null {
+  if (!categoryId) return null;
+  return nearestOpenGoal(goals.filter((goal) => goal.kind === "save_up" && goal.categoryId === categoryId));
+}
+
+/** Remaining after this charge is tagged, using the goals payload's remainingCents. Pending charges do not count yet. */
+export function fundedRemaining(remainingCents: number, amountCents: number, counts: boolean): number {
+  if (!counts || amountCents <= 0) return remainingCents;
+  return Math.max(0, remainingCents - amountCents);
 }
 
 export function versusShort(spentCents: number, usualCents: number | null): string | null {

@@ -17,8 +17,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
+import { api, peek } from "./api";
 import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge";
-import { dayLabel, flowMoney, money } from "./format";
+import { dayLabel, flowMoney, fundedRemaining, money, saveUpGoalForCategory } from "./format";
 import { matchesMerchantRule } from "./review-flow";
 import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
@@ -64,6 +65,7 @@ function CardContent({
   palette,
   isDark,
   similar,
+  goalLine,
 }: {
   tx: Charge;
   currentCategory?: { id?: string; name: string; color?: string | null } | null;
@@ -79,6 +81,7 @@ function CardContent({
   palette: ReturnType<typeof useTheme>["palette"];
   isDark: boolean;
   similar?: number | null;
+  goalLine?: string | null;
 }) {
   const merchant = tx.merchantName || tx.name;
 
@@ -174,6 +177,10 @@ function CardContent({
           </View>
         </View>
       )}
+
+      {goalLine ? (
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.muted, paddingHorizontal: 2 }}>{goalLine}</Text>
+      ) : null}
 
       {/* Quick Category Chips */}
       <View style={styles.chipsSection}>
@@ -323,7 +330,12 @@ export function ReviewDeck({
   groups: ChargeGroup[];
   frequentCategoryIds?: string[];
   faces?: Record<string, { monthCents: number; count: number }>;
-  onConfirm: (tx: Charge, categoryId: string | null, always: boolean) => void | Promise<void>;
+  onConfirm: (
+    tx: Charge,
+    categoryId: string | null,
+    always: boolean,
+    goal: { id: string; name: string; remainingCents: number } | null,
+  ) => void | Promise<void>;
   onSkip: (tx: Charge) => void;
   onUndo?: () => void;
   canUndo?: boolean;
@@ -333,6 +345,9 @@ export function ReviewDeck({
 
   const current = rows[0];
 
+  const [goals, setGoals] = useState<
+    { id: string; name: string; kind: string; categoryId: string | null; remainingCents: number; targetDate: string | null }[]
+  >(() => peek<{ goals: { id: string; name: string; kind: string; categoryId: string | null; remainingCents: number; targetDate: string | null }[] }>("/api/goals")?.goals ?? []);
   const [categoryId, setCategoryId] = useState(current?.categoryId ?? "");
   const [always, setAlways] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -346,6 +361,8 @@ export function ReviewDeck({
 
   const currentRef = useRef(current);
   currentRef.current = current;
+  const goalsRef = useRef(goals);
+  goalsRef.current = goals;
   const currentId = current?.id ?? null;
   const taken = useRef<string | null>(null);
   const categoryRef = useRef(categoryId);
@@ -419,6 +436,12 @@ export function ReviewDeck({
   }, [rows, current, always, merchantKey]);
   const nextCard = upcoming[0];
 
+  useEffect(() => {
+    void api<{ goals: { id: string; name: string; kind: string; categoryId: string | null; remainingCents: number; targetDate: string | null }[] }>("/api/goals")
+      .then((res) => setGoals(res.goals))
+      .catch(() => undefined);
+  }, []);
+
   // Reset top card position and inputs when active card changes
   useEffect(() => {
     holdRise.value = 0;
@@ -471,7 +494,12 @@ export function ReviewDeck({
       }
       if (dir === "approve") {
         tapSuccess();
-        void onConfirm(tx, chosenId || null, rule);
+        const matched = saveUpGoalForCategory(goalsRef.current, chosenId || null);
+        const counts = Boolean(matched) && !tx.pending && !tx.hidden && tx.amountCents > 0 && tx.goalId !== matched?.id;
+        const goal = matched
+          ? { id: matched.id, name: matched.name, remainingCents: fundedRemaining(matched.remainingCents, tx.amountCents, counts) }
+          : null;
+        void onConfirm(tx, chosenId || null, rule, goal);
       } else {
         tapPress();
         onSkip(tx);
@@ -665,6 +693,8 @@ export function ReviewDeck({
   }
 
   const currentCategory = categoryId ? byId.get(categoryId) : current.category;
+  const matchedGoal = saveUpGoalForCategory(goals, categoryId || null);
+  const goalLine = matchedGoal ? `Count toward ${matchedGoal.name}` : null;
   const flow = flowMoney(current.amountCents);
 
   return (
@@ -823,6 +853,7 @@ export function ReviewDeck({
               palette={palette}
               isDark={isDark}
               similar={similar}
+              goalLine={goalLine}
             />
           </Animated.View>
         </GestureDetector>
@@ -858,6 +889,7 @@ export function ReviewDeck({
               palette={palette}
               isDark={isDark}
               similar={departing.always ? similar : 0}
+              goalLine={saveUpGoalForCategory(goals, departing.categoryId || null) ? `Count toward ${saveUpGoalForCategory(goals, departing.categoryId || null)?.name}` : null}
             />
           </Animated.View>
         ) : null}

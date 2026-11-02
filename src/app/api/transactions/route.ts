@@ -6,6 +6,7 @@ import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
 import { applyRulesToNewTx } from "@/lib/rules";
+import { sameMerchant } from "@/lib/plan";
 import { monthRange, todayISO, yearMonth } from "@/lib/dates";
 import { applyManualAmount } from "@/lib/manual-balance";
 import { openAccount, openSplit, openTx, sealedTxWrite } from "@/lib/secrets";
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
     const pairFor = url.searchParams.get("pairFor");
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 200), 500);
     const offset = Number(url.searchParams.get("offset") ?? 0);
+    const wantAll = Boolean(q || tag || merchant || reviewed === "false");
 
     const db = await getDb();
     if (url.searchParams.get("countOnly") === "1") {
@@ -76,7 +78,7 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(transactions.date), desc(transactions.createdAt));
-    const stored = q || tag || merchant ? await base : await base.limit(limit).offset(offset);
+    const stored = wantAll ? await base : await base.limit(limit).offset(offset);
     let rows = stored.map((tx) => openTx(tx, dek));
 
     const [acctRows, catRows, groupRows, splitRows, tagRows, txTags] = await Promise.all([
@@ -91,7 +93,7 @@ export async function GET(request: Request) {
     const openedSplits = splitRows.map((row) => openSplit(row, dek));
 
     if (merchant) {
-      rows = rows.filter((tx) => (tx.merchantName || tx.name).toLowerCase() === merchant);
+      rows = rows.filter((tx) => sameMerchant(tx.merchantName || tx.name, merchant));
     }
     if (q) {
       const amount = /^(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)$/.exec(q.trim());
@@ -121,7 +123,7 @@ export async function GET(request: Request) {
         .filter((tag): tag is (typeof tagRows)[number] => Boolean(tag)),
     }));
     const filtered = tag ? tagged.filter((row) => row.tags.some((item) => item.name.toLowerCase() === tag)) : tagged;
-    const page = q || tag || merchant ? filtered.slice(offset, offset + limit) : filtered;
+    const page = filtered;
     const data = page.map(({ tx, tags: txTagRows }) => {
       const category = catRows.find((c) => c.id === tx.categoryId) ?? null;
       const group = category ? groupRows.find((g) => g.id === category.groupId) : null;
@@ -139,32 +141,31 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
 
-    let faces: Record<string, { monthCents: number; count: number }> | undefined;
-    let frequentCategoryIds: string[] | undefined;
-    if (reviewed === "false") {
-      const now = yearMonth();
-      const range = monthRange(now.year, now.month);
-      const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
-      const names = new Set(data.map((tx) => tx.merchantName || tx.name));
-      const totals: Record<string, { monthCents: number; count: number }> = {};
-      const categoryCounts = new Map<string, number>();
-      for (const tx of history) {
-        if (tx.hidden || tx.isTransfer) continue;
-        if (tx.reviewed && tx.categoryId) categoryCounts.set(tx.categoryId, (categoryCounts.get(tx.categoryId) ?? 0) + 1);
-        if (tx.pending || tx.amountCents <= 0 || tx.date < range.start || tx.date > range.end) continue;
-        const name = tx.merchantName || tx.name;
-        if (!names.has(name)) continue;
-        const face = totals[name] ?? { monthCents: 0, count: 0 };
-        face.monthCents += tx.amountCents;
-        face.count += 1;
-        totals[name] = face;
-      }
-      faces = totals;
-      frequentCategoryIds = [...categoryCounts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([id]) => id);
+    const now = yearMonth();
+    const range = monthRange(now.year, now.month);
+    const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
+    const names = new Set(data.map((tx) => tx.merchantName || tx.name));
+    const totals: Record<string, { monthCents: number; count: number }> = {};
+    const categoryCounts = new Map<string, number>();
+    for (const tx of history) {
+      if (tx.hidden || tx.isTransfer) continue;
+      if (reviewed === "false" && tx.reviewed && tx.categoryId) categoryCounts.set(tx.categoryId, (categoryCounts.get(tx.categoryId) ?? 0) + 1);
+      if (tx.pending || tx.amountCents <= 0 || tx.date < range.start || tx.date > range.end) continue;
+      const name = tx.merchantName || tx.name;
+      if (!names.has(name)) continue;
+      const face = totals[name] ?? { monthCents: 0, count: 0 };
+      face.monthCents += tx.amountCents;
+      face.count += 1;
+      totals[name] = face;
     }
+    const faces = totals;
+    const frequentCategoryIds =
+      reviewed === "false"
+        ? [...categoryCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([id]) => id)
+        : undefined;
 
     return NextResponse.json({ transactions: data, unreviewed: Number(n), faces, frequentCategoryIds });
   } catch (err) {

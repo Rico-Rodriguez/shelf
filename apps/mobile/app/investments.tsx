@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
 import { api } from "../src/api";
 import { money, shelfColor } from "../src/format";
+import { HoldingRow, type HoldingRowData } from "../src/holding";
 import { Back, Card, colors, Facts, Hero, LoadError, Loading, Note, Screen, Section, SpendMix } from "../src/ui";
 
-type Holding = {
-  institutionValueCents: number;
+type Holding = HoldingRowData & {
   security: { name?: string; ticker?: string; type?: string } | null;
   account: { name?: string } | null;
 };
@@ -84,13 +83,7 @@ export default function InvestmentsScreen() {
             <SpendMix rows={shares.map((share) => ({ key: share.label, cents: share.cents, color: shelfColor(share.color) }))} />
             {rows.length === 0 ? <Note>No holdings yet.</Note> : null}
             {rows.map((row, index) => (
-              <View key={index} style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                <View style={{ flex: 1 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 16, color: colors.ink }}>{row.security?.name || row.security?.ticker || "Holding"}</Text>
-                  {row.account?.name ? <Text style={{ fontSize: 12, color: colors.muted }}>{row.account.name}</Text> : null}
-                </View>
-                <Text style={{ fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(row.institutionValueCents)}</Text>
-              </View>
+              <HoldingRow key={index} holding={row} divided={index > 0} />
             ))}
           </Card>
         </>

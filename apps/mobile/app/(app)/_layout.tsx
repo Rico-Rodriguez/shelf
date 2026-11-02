@@ -8,6 +8,7 @@ import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
+import { subscribeOutbox } from "../../src/review-outbox";
 import { useReduceMotion, useReduceTransparency, useTheme } from "../../src/theme";
 import { colors, QuickLogModal, RollingFigure, type QuickLogDraft } from "../../src/ui";
 
@@ -541,6 +542,8 @@ export default function AppTabs() {
         `/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`,
         "/api/transactions?countOnly=1",
         "/api/notifications",
+        "/api/goals",
+        "/api/investments",
       ].map((path) => load(path).catch(() => undefined)),
     );
     const gate = Promise.race([firstPaint, new Promise((resolve) => setTimeout(resolve, 4000))]);
@@ -601,11 +604,17 @@ export default function AppTabs() {
     const unsubDash = subscribeCache<{ budget?: { plannedCents?: number } }>(dashboardPath(), (res) => {
       if (res) setHasPlan((res.budget?.plannedCents ?? 0) > 0);
     });
+    const unsubOutbox = subscribeOutbox((reason) => {
+      if (reason !== "hydrated" && reason !== "settled") return;
+      void load("/api/transactions?countOnly=1").catch(() => undefined);
+      void load(dashboardPath()).catch(() => undefined);
+    });
     return () => {
       unsubCount();
       unsubNotes();
       unsubAccts();
       unsubDash();
+      unsubOutbox();
     };
   }, [path]);
 

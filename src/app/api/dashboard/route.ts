@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { accounts, budgetItems, categories, categoryGroups, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
-import { getOrCreateBudgetMonth, incomeInMonth, spendByDay, spentByCategory } from "@/lib/budget";
+import { getOrCreateBudgetMonth, incomeInMonth, pendingOutflow, spendByDay, spentByCategory } from "@/lib/budget";
 import { requestedMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
@@ -75,6 +75,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       cashFlow: { incomeCents: income, spendingCents: spentTotal, savedCents: income - spentTotal },
+      pendingCents: await pendingOutflow(now.year, now.month, dek),
       spendSeries: await spendByDay(now.year, now.month, dek),
       spending,
       suggestedSubscriptions,
@@ -97,7 +98,8 @@ export async function GET(request: Request) {
           amountCents: tx.amountCents,
           date: tx.date,
           pending: tx.pending,
-          category: category ? { name: category.name, color: shelfColor(group?.color) } : null,
+          categoryId: tx.categoryId,
+          category: category ? { id: category.id, name: category.name, color: shelfColor(group?.color) } : null,
           accountName: account?.name ?? null,
         };
       }),

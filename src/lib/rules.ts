@@ -1,7 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import { rules, tags, transactionSplits, transactionTags, transactions } from "@/db/schema";
 import { nid } from "./ids";
+import { sameMerchant } from "./plan";
 import { openRule, openTx, sealedSplitWrite, sealTxPatch } from "./secrets";
 
 export type AppliedReview = { id: string; categoryId: string | null };
@@ -29,8 +30,8 @@ export function ruleMatches(
 ): boolean {
   if (!rule.enabled) return false;
   if (rule.matchMerchant) {
-    const hay = `${tx.merchantName ?? ""} ${tx.name}`.toLowerCase();
-    if (!hay.includes(rule.matchMerchant.toLowerCase())) return false;
+    const names = [tx.merchantName, tx.name].filter((name): name is string => Boolean(name));
+    if (!names.some((name) => sameMerchant(rule.matchMerchant!, name))) return false;
   }
   if (rule.matchDescription) {
     const hay = `${tx.originalDescription ?? ""} ${tx.name}`.toLowerCase();
@@ -123,13 +124,13 @@ async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow, dek:
   }
 }
 
+/** Apply a merchant rule to every matching charge, on screen or not, reviewed or still open. */
 export async function applyRuleToUnreviewed(db: AppDb, rule: RuleRow, dek: Buffer) {
   const openedRule = openRule(rule, dek);
-  if (!openedRule.actionCategoryId) return { applied: 0, ids: [] as string[], previous: [] as AppliedReview[] };
-  const txs = await db
-    .select()
-    .from(transactions)
-    .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
+  if (!openedRule.actionCategoryId && !openedRule.actionRename && !openedRule.actionHide) {
+    return { applied: 0, ids: [] as string[], previous: [] as AppliedReview[] };
+  }
+  const txs = await db.select().from(transactions);
   const previous: AppliedReview[] = [];
   for (const tx of txs) {
     const opened = openTx(tx, dek);
