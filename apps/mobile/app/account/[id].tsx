@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
-import { api } from "../../src/api";
+import { api, peek } from "../../src/api";
 import { isLiability, money, outflow, payoffMonths, shortDate } from "../../src/format";
+import { clearAccountOverlay, overlayAccount } from "../../src/live-edits";
 import { connectBank } from "../../src/plaid";
 import { Back, Button, Card, colors, Field, Hero, LoadError, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
 
@@ -37,6 +38,7 @@ export default function AccountScreen() {
   const [balance, setBalance] = useState("");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
 
   function load() {
     if (!id) return;
@@ -66,9 +68,18 @@ export default function AccountScreen() {
     load();
   }
 
-  async function toggle(body: Record<string, boolean>) {
-    await api(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-    load();
+  function toggle(body: Record<string, boolean>) {
+    if (!data || !id) return;
+    const previous = data;
+    const cached = peek<{ accounts: { id: string }[] }>("/api/accounts");
+    setData({ ...data, account: { ...data.account, ...body } });
+    overlayAccount(id, body);
+    setActionError(null);
+    void api(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }).catch(() => {
+      setData(previous);
+      clearAccountOverlay(id, cached);
+      setActionError({ message: "Could not update that account.", retry: () => toggle(body) });
+    });
   }
 
   async function remove() {
@@ -107,6 +118,7 @@ export default function AccountScreen() {
       refresh={<Back />}
     >
       {error ? <LoadError message={error} onRetry={load} /> : null}
+      {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {!data && !error ? <Loading /> : null}
       {account && data ? (
         <>
@@ -125,8 +137,8 @@ export default function AccountScreen() {
           </Hero>
           {item && item.status !== "ok" ? <Button label="Reconnect" onPress={() => void connectBank(item.id).then(load)} /> : null}
           <Card>
-            <ToggleRow label="Include in net worth" on={account.includeInNetWorth} onPress={() => void toggle({ includeInNetWorth: !account.includeInNetWorth })} />
-            <ToggleRow label="Hidden" on={account.isHidden} divided onPress={() => void toggle({ isHidden: !account.isHidden })} />
+            <ToggleRow label="Include in net worth" on={account.includeInNetWorth} onPress={() => toggle({ includeInNetWorth: !account.includeInNetWorth })} />
+            <ToggleRow label="Hidden" on={account.isHidden} divided onPress={() => toggle({ isHidden: !account.isHidden })} />
             {account.plaidItemId ? (
               <Pressable onPress={() => void disconnect()} style={row}>
                 <Text style={{ fontSize: 16, color: colors.danger }}>Disconnect bank</Text>

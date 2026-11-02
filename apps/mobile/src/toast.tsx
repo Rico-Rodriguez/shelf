@@ -49,9 +49,14 @@ export function ConfirmMark({ size = 48 }: { size?: number }) {
 
 type Offer = { label: string; undo: () => Promise<void> };
 let pushOffer: (offer: Offer) => void = () => undefined;
+let dismissOffer: () => void = () => undefined;
 
 export function offerUndo(label: string, undo: () => Promise<void>) {
   pushOffer({ label, undo });
+}
+
+export function dismissUndo() {
+  dismissOffer();
 }
 
 export function UndoHost({ bottomOffset }: { bottomOffset?: number } = {}) {
@@ -75,8 +80,10 @@ export function UndoHost({ bottomOffset }: { bottomOffset?: number } = {}) {
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 420, damping: 24 }),
       ]).start();
     };
+    dismissOffer = () => setOffer(null);
     return () => {
       pushOffer = () => undefined;
+      dismissOffer = () => undefined;
     };
   }, [opacity, translateY, scale]);
 

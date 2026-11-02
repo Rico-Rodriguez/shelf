@@ -152,11 +152,32 @@ function notifyCache(path: string, data: unknown) {
   }
 }
 
+type Retainer = (path: string, data: unknown) => unknown;
+const retainers = new Set<Retainer>();
+
+/** Reapply a local overlay to every cache write until the server copy agrees. */
+export function retainWrites(retain: Retainer): () => void {
+  retainers.add(retain);
+  return () => {
+    retainers.delete(retain);
+  };
+}
+
+export function cachePaths(): string[] {
+  return [...memory.keys()];
+}
+
+function commitCache(path: string, data: unknown) {
+  let next = data;
+  for (const retain of retainers) next = retain(path, next);
+  memory.set(path, next);
+  notifyCache(path, next);
+  void persistItem(path, next);
+}
+
 /** Directly write to in-memory cache and notify all active listeners immediately. */
 export function writeCache<T>(path: string, data: T): void {
-  memory.set(path, data);
-  notifyCache(path, data);
-  void persistItem(path, data);
+  commitCache(path, data);
 }
 
 /** Optimistically update cached data and notify UI immediately. */
@@ -173,11 +194,9 @@ export function load<T>(path: string): Promise<T> {
   if (pending) return pending as Promise<T>;
   const req = api<T>(path)
     .then((data) => {
-      memory.set(path, data);
       flight.delete(path);
-      notifyCache(path, data);
-      void persistItem(path, data);
-      return data;
+      commitCache(path, data);
+      return memory.get(path) as T;
     })
     .catch((err: unknown) => {
       flight.delete(path);

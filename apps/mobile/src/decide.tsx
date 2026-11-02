@@ -17,9 +17,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
-import { api } from "./api";
 import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge";
-import { dayLabel, flowMoney, merchantMatchKey, money } from "./format";
+import { dayLabel, flowMoney, money } from "./format";
+import { matchesMerchantRule } from "./review-flow";
 import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { useReduceTransparency, useTheme } from "./theme";
@@ -267,11 +267,15 @@ function CardContent({
             <Text style={styles.switchTitle}>
               Always categorize {merchant}
             </Text>
-            <Text style={styles.switchSubtitle}>
-              {always && similar != null && similar > 0
-                ? `⚡ Clears ${similar} other purchase${similar === 1 ? "" : "s"}`
-                : `Remember this rule for future activity`}
-            </Text>
+            {always ? (
+              <View style={styles.ruleChip}>
+                <Text style={styles.ruleChipText}>
+                  {similar && similar > 0 ? `Clears ${similar} other` : "Just this one"}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.switchSubtitle}>Remember this rule for future activity</Text>
+            )}
           </View>
           <Switch on={always} />
         </Pressable>
@@ -319,28 +323,36 @@ export function ReviewDeck({
   groups: ChargeGroup[];
   frequentCategoryIds?: string[];
   faces?: Record<string, { monthCents: number; count: number }>;
-  onConfirm: (tx: Charge, categoryId: string | null, always: boolean) => Promise<void>;
+  onConfirm: (tx: Charge, categoryId: string | null, always: boolean) => void | Promise<void>;
   onSkip: (tx: Charge) => void;
   onUndo?: () => void;
   canUndo?: boolean;
 }) {
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
   const cardWidth = Math.min(windowWidth - 32, 420);
 
   const current = rows[0];
-  const nextCard = rows[1];
-  const thirdCard = rows[2];
 
   const [categoryId, setCategoryId] = useState(current?.categoryId ?? "");
   const [always, setAlways] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [isDismissing, setIsDismissing] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [similar, setSimilar] = useState<number | null>(null);
+  const [departing, setDeparting] = useState<{
+    tx: Charge;
+    dir: "approve" | "skip";
+    category: { id?: string; name: string; color?: string | null } | null;
+    categoryId: string;
+    always: boolean;
+  } | null>(null);
 
   const currentRef = useRef(current);
   currentRef.current = current;
   const currentId = current?.id ?? null;
+  const taken = useRef<string | null>(null);
+  const categoryRef = useRef(categoryId);
+  const alwaysRef = useRef(always);
+  categoryRef.current = categoryId;
+  alwaysRef.current = always;
+  const departX = useSharedValue(0);
 
   // Gesture and physics shared values
   const translateX = useSharedValue(0);
@@ -377,6 +389,20 @@ export function ReviewDeck({
   const done = total > 0 ? Math.max(0, total - remaining) : 0;
   const progress = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
 
+  const merchantKey = current ? current.merchantName || current.name : "";
+  const similar = useMemo(() => {
+    if (!current) return 0;
+    return rows.filter((row) => row.id !== current.id && !row.reviewed && !row.hidden && matchesMerchantRule(row, merchantKey)).length;
+  }, [rows, current, merchantKey]);
+  const upcoming = useMemo(() => {
+    if (!current) return [];
+    const rest = rows.filter((row) => row.id !== current.id);
+    if (!always) return rest;
+    return rest.filter((row) => !matchesMerchantRule(row, merchantKey));
+  }, [rows, current, always, merchantKey]);
+  const nextCard = upcoming[0];
+  const thirdCard = upcoming[1];
+
   // Reset top card position and inputs when active card changes
   useEffect(() => {
     translateX.value = 0;
@@ -384,93 +410,58 @@ export function ReviewDeck({
     cardScale.value = 1;
     hasTriggeredRightHaptic.value = false;
     hasTriggeredLeftHaptic.value = false;
-    setIsDismissing(false);
     setCategoryId(current?.categoryId ?? "");
     setAlways(false);
-    setSimilar(null);
-    setBusy(false);
+    setPicking(false);
+    if (taken.current && taken.current !== currentId) taken.current = null;
   }, [currentId]);
-
-  // Preview similar matches for rule creation
-  useEffect(() => {
-    if (!always || !current) {
-      setSimilar(null);
-      return;
-    }
-    let active = true;
-    setSimilar(null);
-    void api<{ count: number }>("/api/rules/preview", {
-      method: "POST",
-      body: JSON.stringify({
-        matchMerchant: merchantMatchKey(merchant),
-        unreviewedOnly: true,
-        excludeId: current.id,
-      }),
-    })
-      .then((res) => {
-        if (active) setSimilar(res.count);
-      })
-      .catch(() => {
-        if (active) setSimilar(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [always, merchant, current]);
 
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
-  // Callbacks for dismissal
-  const finalizeApprove = useCallback(() => {
-    const tx = currentRef.current;
-    if (!tx) return;
-    tapSuccess();
-    setBusy(true);
-    void onConfirm(tx, categoryId || null, always && Boolean(categoryId)).finally(() => {
-      setBusy(false);
-    });
-  }, [categoryId, always, onConfirm]);
+  const clearDeparting = useCallback(() => setDeparting(null), []);
 
-  const finalizeDeny = useCallback(() => {
-    const tx = currentRef.current;
-    if (!tx) return;
-    tapPress();
-    onSkip(tx);
-  }, [onSkip]);
+  const commit = useCallback(
+    (dir: "approve" | "skip") => {
+      const tx = currentRef.current;
+      if (!tx || taken.current === tx.id) return;
+      taken.current = tx.id;
+      const chosenId = categoryRef.current;
+      const rule = alwaysRef.current && Boolean(chosenId);
+      const category = chosenId ? byId.get(chosenId) ?? tx.category : tx.category;
+      departX.value = translateX.value;
+      translateX.value = 0;
+      translateY.value = 0;
+      cardScale.value = 1;
+      setDeparting({ tx, dir, category: category ?? null, categoryId: chosenId, always: rule });
+      departX.value = withSpring(dir === "approve" ? windowWidth * 1.5 : -windowWidth * 1.5, SPRING_DISMISS, (finished) => {
+        if (finished) runOnJS(clearDeparting)();
+      });
+      if (dir === "approve") {
+        tapSuccess();
+        void onConfirm(tx, chosenId || null, rule);
+      } else {
+        tapPress();
+        onSkip(tx);
+      }
+    },
+    [byId, windowWidth, onConfirm, onSkip, departX, translateX, translateY, cardScale, clearDeparting],
+  );
 
-  // Programmatic Button Actions
-  const handleButtonApprove = useCallback(() => {
-    if (isDismissing || busy || !current) return;
-    setIsDismissing(true);
-    tapSuccess();
-    translateX.value = withSpring(windowWidth * 1.5, SPRING_DISMISS, () => {
-      runOnJS(finalizeApprove)();
-    });
-  }, [isDismissing, busy, current, windowWidth, finalizeApprove, translateX]);
-
-  const handleButtonDeny = useCallback(() => {
-    if (isDismissing || busy || !current) return;
-    setIsDismissing(true);
-    tapPress();
-    translateX.value = withSpring(-windowWidth * 1.5, SPRING_DISMISS, () => {
-      runOnJS(finalizeDeny)();
-    });
-  }, [isDismissing, busy, current, windowWidth, finalizeDeny, translateX]);
+  const handleButtonApprove = useCallback(() => commit("approve"), [commit]);
+  const handleButtonDeny = useCallback(() => commit("skip"), [commit]);
 
   // Swipe gesture configuration
   const panGesture = useMemo(() => {
     return Gesture.Pan()
       .activeOffsetX([-10, 10])
       .onStart(() => {
-        if (isDismissing || busy) return;
         hasTriggeredRightHaptic.value = false;
         hasTriggeredLeftHaptic.value = false;
         cardScale.value = withSpring(1.02, { damping: 15, stiffness: 280 });
       })
       .onUpdate((event) => {
-        if (isDismissing || busy) return;
         translateX.value = event.translationX;
         translateY.value = event.translationY * 0.45;
 
@@ -491,7 +482,6 @@ export function ReviewDeck({
         }
       })
       .onEnd((event) => {
-        if (isDismissing || busy) return;
         cardScale.value = withSpring(1);
 
         const shouldApprove =
@@ -499,41 +489,34 @@ export function ReviewDeck({
         const shouldDeny =
           translateX.value < -SWIPE_THRESHOLD || event.velocityX < -SWIPE_VELOCITY;
 
-        if (shouldApprove) {
-          runOnJS(setIsDismissing)(true);
-          translateX.value = withSpring(
-            windowWidth * 1.5,
-            { velocity: event.velocityX, ...SPRING_DISMISS },
-            () => {
-              runOnJS(finalizeApprove)();
-            },
-          );
-        } else if (shouldDeny) {
-          runOnJS(setIsDismissing)(true);
-          translateX.value = withSpring(
-            -windowWidth * 1.5,
-            { velocity: event.velocityX, ...SPRING_DISMISS },
-            () => {
-              runOnJS(finalizeDeny)();
-            },
-          );
-        } else {
+        if (shouldApprove) runOnJS(commit)("approve");
+        else if (shouldDeny) runOnJS(commit)("skip");
+        else {
           translateX.value = withSpring(0, SPRING_SNAP);
           translateY.value = withSpring(0, SPRING_SNAP);
         }
       });
   }, [
-    isDismissing,
-    busy,
-    windowWidth,
-    finalizeApprove,
-    finalizeDeny,
+    commit,
     translateX,
     translateY,
     cardScale,
     hasTriggeredRightHaptic,
     hasTriggeredLeftHaptic,
   ]);
+
+  const animatedDepartStyle = useAnimatedStyle(() => {
+    const rotate = interpolate(
+      departX.value,
+      [-windowWidth * 0.75, 0, windowWidth * 0.75],
+      [-16, 0, 16],
+      Extrapolation.CLAMP,
+    );
+    return {
+      transform: [{ translateX: departX.value }, { rotate: `${rotate}deg` }],
+      zIndex: 30,
+    };
+  });
 
   // Top Card Animated Style
   const animatedTopCardStyle = useAnimatedStyle(() => {
@@ -858,7 +841,7 @@ export function ReviewDeck({
               always={always}
               onAlwaysToggle={() => {
                 tapSelect();
-                setAlways((v) => !v);
+                setAlways((value) => !value);
               }}
               onCategoryPress={() => {
                 tapPress();
@@ -875,6 +858,39 @@ export function ReviewDeck({
             />
           </Animated.View>
         </GestureDetector>
+        {departing ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.cardSurface,
+              styles.topCard,
+              {
+                position: "absolute",
+                width: cardWidth,
+                borderTopColor: palette.specularTop,
+                borderBottomColor: palette.specularBottom,
+                borderLeftColor: palette.specularSides,
+                borderRightColor: palette.specularSides,
+                backgroundColor: reduceTransparency ? (isDark ? "#171a21" : "#ffffff") : palette.glassProminent,
+              },
+              animatedDepartStyle,
+            ]}
+          >
+            <CardContent
+              tx={departing.tx}
+              currentCategory={departing.category}
+              face={faces[departing.tx.merchantName || departing.tx.name]}
+              flow={flowMoney(departing.tx.amountCents)}
+              quick={quick}
+              selectedCategoryId={departing.categoryId}
+              always={departing.always}
+              isInteractive={false}
+              palette={palette}
+              isDark={isDark}
+              similar={departing.always ? similar : 0}
+            />
+          </Animated.View>
+        ) : null}
       </View>
 
       {/* Cohesive Liquid-Glass Action Dock */}
@@ -907,7 +923,7 @@ export function ReviewDeck({
         <View style={styles.dockUtilityGroup}>
           <Pressable
             accessibilityLabel="Undo last review"
-            disabled={!canUndo || busy || isDismissing}
+            disabled={!canUndo}
             onPress={() => {
               if (onUndo) onUndo();
             }}
@@ -918,7 +934,7 @@ export function ReviewDeck({
                 backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
                 borderColor: palette.line,
               },
-              (!canUndo || busy || isDismissing) && { opacity: 0.3 },
+              !canUndo && { opacity: 0.3 },
               pressed && canUndo ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
             ]}
           >
@@ -927,7 +943,6 @@ export function ReviewDeck({
 
           <Pressable
             accessibilityLabel="Choose category"
-            disabled={busy || isDismissing}
             onPress={() => {
               tapPress();
               setPicking(true);
@@ -939,7 +954,6 @@ export function ReviewDeck({
                 backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
                 borderColor: palette.line,
               },
-              (busy || isDismissing) && { opacity: 0.35 },
               pressed ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
             ]}
           >
@@ -955,7 +969,6 @@ export function ReviewDeck({
           {/* Skip Action */}
           <Pressable
             accessibilityLabel="Skip transaction"
-            disabled={busy || isDismissing}
             onPress={handleButtonDeny}
             style={({ pressed }) => [
               styles.dockPillBtn,
@@ -964,7 +977,6 @@ export function ReviewDeck({
                 backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
                 borderColor: palette.line,
               },
-              (busy || isDismissing) && { opacity: 0.35 },
               pressed ? { transform: [{ scale: 0.96 }], opacity: 0.75 } : null,
             ]}
           >
@@ -975,7 +987,6 @@ export function ReviewDeck({
           {/* Approve Action */}
           <Pressable
             accessibilityLabel="Approve transaction"
-            disabled={busy || isDismissing}
             onPress={handleButtonApprove}
             style={({ pressed }) => [
               styles.dockPillBtn,
@@ -984,7 +995,6 @@ export function ReviewDeck({
                 backgroundColor: palette.accent,
                 borderColor: palette.specularTop,
               },
-              (busy || isDismissing) && { opacity: 0.35 },
               pressed ? { transform: [{ scale: 0.96 }], opacity: 0.88 } : null,
             ]}
           >
@@ -1292,6 +1302,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.muted,
     marginTop: 2,
+  },
+  ruleChip: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 99,
+    backgroundColor: colors.accentSoft,
+  },
+  ruleChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.accentInk,
   },
   gestureHintRow: {
     flexDirection: "row",

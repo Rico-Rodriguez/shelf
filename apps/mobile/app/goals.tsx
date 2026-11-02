@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../src/api";
+import { api, peek } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
-import { goalPace, mediumDate, money } from "../src/format";
+import { goalPace, mediumDate, money, monthlyNeedCents } from "../src/format";
 import { celebrate } from "../src/toast";
 import { Back, Button, Card, colors, Field, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
@@ -17,7 +17,7 @@ type Goal = {
   remainingCents: number;
   createdAt?: string | null;
   monthlyCents?: number | null;
-  accounts: { id: string; name: string }[];
+  accounts: { id: string; name: string; currentBalanceCents?: number }[];
 };
 
 type Form = {
@@ -33,7 +33,7 @@ const empty: Form = { name: "", kind: "save_up", target: "", targetDate: "", acc
 
 export default function GoalsScreen() {
   const [goals, setGoals] = useState<Goal[] | null>(null);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currentBalanceCents?: number }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<ChargeGroup[]>([]);
   const [pickingCategory, setPickingCategory] = useState(false);
@@ -41,9 +41,10 @@ export default function GoalsScreen() {
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
 
   function load() {
-    void api<{ goals: Goal[]; accounts: { id: string; name: string }[] }>("/api/goals")
+    void api<{ goals: Goal[]; accounts: { id: string; name: string; currentBalanceCents?: number }[] }>("/api/goals")
       .then((res) => {
         setGoals(res.goals);
         setAccounts(res.accounts);
@@ -86,7 +87,48 @@ export default function GoalsScreen() {
     }));
   }
 
-  async function save() {
+  function save() {
+    const snapshot = goals;
+    const existing = editing && editing !== "new" ? editing : undefined;
+    const targetCents = Math.round(Number(form.target || 0) * 100);
+    const cached = peek<{ accounts: { id: string; name: string; currentBalanceCents?: number }[] }>("/api/accounts");
+    const linked = form.accountIds.map((id) => {
+      const known = accounts.find((account) => account.id === id) ?? cached?.accounts.find((account) => account.id === id);
+      return { id, name: known?.name ?? "Account", currentBalanceCents: known?.currentBalanceCents ?? 0 };
+    });
+    let progressCents = existing?.progressCents ?? 0;
+    let remainingCents = Math.max(0, targetCents - progressCents);
+    if (form.kind === "pay_down") {
+      if (!linked.length) {
+        progressCents = 0;
+        remainingCents = targetCents;
+      } else {
+        const owed = linked.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
+        progressCents = targetCents > 0 ? Math.max(0, targetCents - owed) : progressCents;
+        remainingCents = owed;
+      }
+    }
+    const id = existing?.id ?? `tmp-${Date.now()}`;
+    const nextGoal: Goal = {
+      id,
+      name: form.name,
+      kind: form.kind,
+      targetCents,
+      targetDate: form.targetDate || null,
+      categoryId: form.categoryId || null,
+      progressCents,
+      remainingCents,
+      createdAt: existing?.createdAt,
+      monthlyCents: monthlyNeedCents(remainingCents, form.targetDate || null),
+      accounts: linked,
+    };
+    setGoals((current) => {
+      const list = current ?? [];
+      return existing ? list.map((goal) => (goal.id === id ? nextGoal : goal)) : [nextGoal, ...list];
+    });
+    setEditing(null);
+    setActionError(null);
+    celebrate("Saved");
     const body = {
       name: form.name,
       kind: form.kind,
@@ -95,14 +137,24 @@ export default function GoalsScreen() {
       accountIds: form.accountIds,
       categoryId: form.categoryId || null,
     };
-    if (editing && editing !== "new") {
-      await api("/api/goals", { method: "PATCH", body: JSON.stringify({ id: editing.id, ...body }) });
-    } else {
-      await api("/api/goals", { method: "POST", body: JSON.stringify(body) });
-    }
-    setEditing(null);
-    celebrate("Saved");
-    load();
+    const request = existing
+      ? api("/api/goals", { method: "PATCH", body: JSON.stringify({ id: existing.id, ...body }) })
+      : api<{ id: string }>("/api/goals", { method: "POST", body: JSON.stringify(body) }).then((created) => {
+          setGoals((current) => (current ?? []).map((goal) => (goal.id === id ? { ...goal, id: created.id } : goal)));
+        });
+    void request
+      .then(() => load())
+      .catch(() => {
+      setGoals(snapshot);
+      setActionError({
+        message: "Could not save that goal.",
+        retry: () => {
+          setForm(form);
+          setEditing(existing ?? "new");
+          save();
+        },
+      });
+    });
   }
 
   async function remove(goal: Goal) {
@@ -114,6 +166,7 @@ export default function GoalsScreen() {
   return (
     <Screen title="Goals" refresh={<Back />} onRefresh={load} action={<Button label="Add" onPress={openNew} />}>
       {error ? <LoadError message={error} onRetry={load} /> : null}
+      {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {goals === null && !error ? <Loading /> : null}
       {goals && goals.length === 0 ? <Note>No goals yet.</Note> : null}
       {goals && goals.length ? (
@@ -224,7 +277,7 @@ export default function GoalsScreen() {
             </View>
             <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>Change ›</Text>
           </Pressable>
-          <Button label="Save" onPress={() => void save()} />
+          <Button label="Save" onPress={save} />
           {editing !== "new" ? (
             <Button
               label={confirmDelete ? "Delete this goal?" : "Delete"}

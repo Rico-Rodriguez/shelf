@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { load as read, peek } from "../../src/api";
+import { load as read, peek, subscribeCache } from "../../src/api";
 import {
   dashboardPath,
   dayLabel,
@@ -16,6 +16,7 @@ import {
   type NetWorthAccount,
 } from "../../src/format";
 import { tapPress } from "../../src/haptic";
+import { mergeDashboard, subscribeLive } from "../../src/live-edits";
 import {
   Button,
   Card,
@@ -86,39 +87,48 @@ export default function HomeScreen() {
     }, [load]),
   );
 
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => subscribeLive(() => setLiveTick((value) => value + 1)), []);
+  useEffect(() => {
+    return subscribeCache<Dash>(dashPath, (next) => {
+      if (next) setData(next);
+    });
+  }, [dashPath]);
+  const shownDash = useMemo(() => (data ? mergeDashboard(data) : null), [data, liveTick]);
+
   const today = todayISO();
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
 
-  const bills = (data?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
+  const bills = (shownDash?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
   const upcomingBillsSlice = bills.slice(0, 3);
 
-  const categories = (data?.spending ?? []).filter((row) => row.cents > 0);
+  const categories = (shownDash?.spending ?? []).filter((row) => row.cents > 0);
   const restCents = categories.slice(4).reduce((sum, row) => sum + row.cents, 0);
   const spendRows =
     restCents > 0
       ? [...categories.slice(0, 4), { id: "rest", name: "Other categories", cents: restCents, color: "#8B939E" }]
       : categories.slice(0, 5);
 
-  const latest = data?.transactions.slice(0, 4) ?? [];
-  const suggestions = data?.suggestedSubscriptions?.length ?? 0;
+  const latest = shownDash?.transactions.slice(0, 4) ?? [];
+  const suggestions = shownDash?.suggestedSubscriptions?.length ?? 0;
 
-  const totalPlannedCents = data?.budget.plannedCents ?? 0;
-  const spentCents = data?.budget.spentCents ?? 0;
+  const totalPlannedCents = shownDash?.budget.plannedCents ?? 0;
+  const spentCents = shownDash?.budget.spentCents ?? 0;
 
   return (
     <Screen framed onRefresh={load}>
       {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
-      {!data && !error ? <Loading /> : null}
+      {!shownDash && !error ? <Loading /> : null}
 
-      {data ? (
+      {shownDash ? (
         <>
           {totalPlannedCents > 0 ? (
             <Hero
               label="Left to spend"
               cents={totalPlannedCents - spentCents}
               tone={totalPlannedCents - spentCents < 0 ? "bad" : undefined}
-              points={data.spendSeries}
+              points={shownDash.spendSeries}
               onPressFigure={() => {
                 tapPress();
                 router.push("/(app)/budget");
@@ -136,16 +146,16 @@ export default function HomeScreen() {
               label="Net worth"
               cents={worth ?? 0}
               tone={(worth ?? 0) < 0 ? "bad" : undefined}
-              points={data.spendSeries}
+              points={shownDash.spendSeries}
             >
               <Facts
                 items={[
-                  { kicker: "Income", value: money(data.cashFlow.incomeCents) },
-                  { kicker: "Spent", value: money(data.cashFlow.spendingCents) },
+                  { kicker: "Income", value: money(shownDash.cashFlow.incomeCents) },
+                  { kicker: "Spent", value: money(shownDash.cashFlow.spendingCents) },
                   {
-                    kicker: data.cashFlow.savedCents < 0 ? "Net deficit" : "Net saved",
-                    value: money(Math.abs(data.cashFlow.savedCents)),
-                    color: data.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
+                    kicker: shownDash.cashFlow.savedCents < 0 ? "Net deficit" : "Net saved",
+                    value: money(Math.abs(shownDash.cashFlow.savedCents)),
+                    color: shownDash.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
                   },
                 ]}
               />
@@ -164,9 +174,9 @@ export default function HomeScreen() {
           </Card>
 
           {/* Quick Review Prompt when Unreviewed Charges Exist */}
-          {data.unreviewed.count > 0 ? (
+          {shownDash.unreviewed.count > 0 ? (
             <ReviewBanner
-              count={data.unreviewed.count}
+              count={shownDash.unreviewed.count}
               onPress={() => {
                 tapPress();
                 router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
@@ -175,7 +185,7 @@ export default function HomeScreen() {
           ) : null}
 
           {/* First run / empty state */}
-          {data.accountCount === 0 && data.transactions.length === 0 ? (
+          {shownDash.accountCount === 0 && shownDash.transactions.length === 0 ? (
             <Card>
               <View style={{ gap: 14, alignItems: "center", padding: 24 }}>
                 <Text style={{ fontSize: 18, fontWeight: "700", color: colors.ink }}>
@@ -285,7 +295,7 @@ export default function HomeScreen() {
                 <View style={{ gap: 8 }}>
                   <Section
                     title="Where It Went"
-                    trailing={money(data.cashFlow.spendingCents)}
+                    trailing={money(shownDash.cashFlow.spendingCents)}
                     action="Insights"
                     onAction={() => {
                       tapPress();

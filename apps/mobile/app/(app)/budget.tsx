@@ -1,9 +1,10 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { api, load as read, peek } from "../../src/api";
+import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { budgetPace, dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
+import { mergeBudget, subscribeLive } from "../../src/live-edits";
 import { celebrate } from "../../src/toast";
 import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, LoadError, Loading, MonthNav, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
 import { Icon } from "../../src/icons";
@@ -31,6 +32,14 @@ type Budget = {
 
 type MonthTx = { id: string; name: string; merchantName: string | null; amountCents: number; date: string; categoryId: string | null };
 
+function budgetAgrees(server: Budget, local: Budget) {
+  if (server.plannedIncomeCents !== local.plannedIncomeCents) return false;
+  return local.rows.every((row) => {
+    const other = server.rows.find((item) => item.category.id === row.category.id);
+    return Boolean(other && other.plannedCents === row.plannedCents && other.category.name === row.category.name);
+  });
+}
+
 export default function BudgetScreen() {
   const now = new Date();
   const opening = peek<Budget>(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
@@ -50,16 +59,41 @@ export default function BudgetScreen() {
   const [moving, setMoving] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
+  const [liveTick, setLiveTick] = useState(0);
+  const [overlayTick, setOverlayTick] = useState(0);
+  const planEpoch = useRef(0);
+  const overlay = useRef<Budget | null>(null);
+
+  const budgetPath = `/api/budget?year=${cursor.year}&month=${cursor.month}`;
 
   const load = useCallback(() => {
-    return read<Budget>(`/api/budget?year=${cursor.year}&month=${cursor.month}`)
+    const started = planEpoch.current;
+    return read<Budget>(budgetPath)
       .then((next) => {
+        if (started !== planEpoch.current) return;
         setData(next);
-        setIncome((Number(next.plannedIncomeCents) / 100).toFixed(0));
+        if (!overlay.current) setIncome((Number(next.plannedIncomeCents) / 100).toFixed(0));
+        if (overlay.current && budgetAgrees(next, overlay.current)) {
+          overlay.current = null;
+          setOverlayTick((value) => value + 1);
+        }
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load the plan"));
-  }, [cursor]);
+  }, [budgetPath]);
+
+  useEffect(() => subscribeLive(() => setLiveTick((value) => value + 1)), []);
+  useEffect(() => {
+    return subscribeCache<Budget>(budgetPath, (next) => {
+      if (!next) return;
+      setData(next);
+      if (overlay.current && budgetAgrees(next, overlay.current)) {
+        overlay.current = null;
+        setOverlayTick((value) => value + 1);
+      }
+    });
+  }, [budgetPath]);
 
   useFocusEffect(
     useCallback(() => {
@@ -67,10 +101,15 @@ export default function BudgetScreen() {
     }, [load]),
   );
 
+  const plan = useMemo(() => {
+    const base = overlay.current ?? data;
+    return base ? mergeBudget(base) : null;
+  }, [data, liveTick, overlayTick]);
+
   const groups = useMemo(() => {
-    if (!data) return [];
+    if (!plan) return [];
     const map = new Map<string, { id: string; name: string; color: string; sortOrder: number; rows: BudgetRow[] }>();
-    for (const row of data.rows) {
+    for (const row of plan.rows) {
       const id = row.group?.id ?? "other";
       const bucket = map.get(id) ?? {
         id,
@@ -83,7 +122,7 @@ export default function BudgetScreen() {
       map.set(id, bucket);
     }
     return [...map.values()].sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [data]);
+  }, [plan]);
 
   const quiet = (row: BudgetRow) => row.spentCents <= 0 && row.availableCents <= 0 && (row.rolloverInCents ?? 0) <= 0;
   const hiddenCount = groups.reduce((sum, group) => sum + group.rows.filter(quiet).length, 0);
@@ -91,58 +130,87 @@ export default function BudgetScreen() {
     ? groups
     : groups.map((group) => ({ ...group, rows: group.rows.filter((row) => !quiet(row)) })).filter((group) => group.rows.length > 0);
 
-  async function saveIncome() {
+  function saveIncome() {
     if (!data) return;
-    await api("/api/budget", {
+    const snapshot = data;
+    const plannedIncomeCents = Math.round(Number(income || 0) * 100);
+    const next = { ...data, plannedIncomeCents, leftoverCents: plannedIncomeCents - data.expensePlannedCents };
+    planEpoch.current += 1;
+    overlay.current = next;
+    setOverlayTick((value) => value + 1);
+    setData(next);
+    setPlanOpen(false);
+    setActionError(null);
+    const retry = () => saveIncome();
+    void api("/api/budget", {
       method: "PUT",
-      body: JSON.stringify({ year: data.year, month: data.month, plannedIncomeCents: Math.round(Number(income) * 100) }),
-    });
-    load();
+      body: JSON.stringify({ year: data.year, month: data.month, plannedIncomeCents }),
+    })
+      .then(() => load())
+      .catch(() => {
+        planEpoch.current += 1;
+        overlay.current = null;
+        setData(snapshot);
+        setIncome((snapshot.plannedIncomeCents / 100).toFixed(0));
+        setOverlayTick((value) => value + 1);
+        setPlanOpen(true);
+        setActionError({ message: "Could not save that income.", retry });
+      });
   }
 
-  async function saveCategory() {
+  function saveCategory() {
     if (!data || !editing) return;
+    const snapshot = data;
     const nextPlanned = Math.round(Number(planned || 0) * 100);
     const catId = editing.category.id;
     const nextName = catName.trim() || editing.category.name;
-
-    // Optimistic update for instant UI feedback
-    setData((current) => {
-      if (!current) return current;
-      const nextRows = current.rows.map((r) =>
-        r.category.id === catId
-          ? {
-              ...r,
-              plannedCents: nextPlanned,
-              remainingCents: nextPlanned - r.spentCents,
-              category: { ...r.category, name: nextName },
-            }
-          : r
-      );
-      const newExpensePlanned = nextRows.reduce((sum, r) => sum + r.plannedCents, 0);
-      return { ...current, rows: nextRows, expensePlannedCents: newExpensePlanned };
+    const nextRows = data.rows.map((row) => {
+      if (row.category.id !== catId) return row;
+      const availableCents = nextPlanned + (row.rolloverInCents ?? 0);
+      return {
+        ...row,
+        plannedCents: nextPlanned,
+        availableCents,
+        remainingCents: availableCents - row.spentCents,
+        category: { ...row.category, name: nextName },
+      };
     });
+    const expensePlannedCents = nextRows.reduce((sum, row) => sum + row.availableCents, 0);
+    const next = { ...data, rows: nextRows, expensePlannedCents, leftoverCents: data.plannedIncomeCents - expensePlannedCents };
+    planEpoch.current += 1;
+    overlay.current = next;
+    setOverlayTick((value) => value + 1);
+    setData(next);
     setEditing(null);
+    setActionError(null);
     celebrate("Saved");
-
-    try {
-      const jobs: Promise<unknown>[] = [];
-      if (nextPlanned !== editing.plannedCents) {
-        jobs.push(
-          api("/api/budget", {
-            method: "PUT",
-            body: JSON.stringify({ year: data.year, month: data.month, items: [{ categoryId: catId, plannedCents: nextPlanned }] }),
-          }),
-        );
-      }
-      if (catName.trim() && catName.trim() !== editing.category.name) {
-        jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: catId, name: catName.trim() }) }));
-      }
-      await Promise.all(jobs);
-      load();
-    } catch {
-      load();
+    const jobs: Promise<unknown>[] = [];
+    if (nextPlanned !== editing.plannedCents) {
+      jobs.push(
+        api("/api/budget", {
+          method: "PUT",
+          body: JSON.stringify({ year: data.year, month: data.month, items: [{ categoryId: catId, plannedCents: nextPlanned }] }),
+        }),
+      );
     }
+    if (catName.trim() && catName.trim() !== editing.category.name) {
+      jobs.push(api("/api/categories", { method: "PATCH", body: JSON.stringify({ id: catId, name: catName.trim() }) }));
+    }
+    const retry = () => {
+      setPlanned((nextPlanned / 100).toFixed(0));
+      setCatName(nextName);
+      setEditing(editing);
+      saveCategory();
+    };
+    void Promise.all(jobs)
+      .then(() => load())
+      .catch(() => {
+        planEpoch.current += 1;
+        overlay.current = null;
+        setData(snapshot);
+        setOverlayTick((value) => value + 1);
+        setActionError({ message: "Could not save that amount.", retry });
+      });
   }
 
   async function reassign(tx: MonthTx, nextId: string) {
@@ -200,11 +268,11 @@ export default function BudgetScreen() {
     setAdding({ groupId: res.groups[0]?.id ?? "", name: "" });
   }
 
-  const plannedTotal = data?.expensePlannedCents ?? 0;
+  const plannedTotal = plan?.expensePlannedCents ?? 0;
   const hasPlan = plannedTotal > 0;
-  const left = plannedTotal - (data?.expenseSpentCents ?? 0);
+  const left = plannedTotal - (plan?.expenseSpentCents ?? 0);
   const over = hasPlan && left < 0;
-  const pace = budgetPace(data?.expenseSpentCents ?? 0, plannedTotal);
+  const pace = budgetPace(plan?.expenseSpentCents ?? 0, plannedTotal);
   const paceColor = pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.positive;
   const typedIncomeCents = Math.round(Number(income || 0) * 100);
   const leftToAssign = typedIncomeCents - plannedTotal;
@@ -241,8 +309,9 @@ export default function BudgetScreen() {
         }
       >
         {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
-        {!data && !error ? <Loading /> : null}
-        {data ? (
+        {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
+        {!plan && !error ? <Loading /> : null}
+        {plan ? (
           <>
             {/* iOS Health Style Monthly Budget Tile */}
             <Pressable
@@ -333,30 +402,30 @@ export default function BudgetScreen() {
                     fontVariant: ["tabular-nums"],
                   }}
                 >
-                  {hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(data.expenseSpentCents ?? 0)}
+                  {hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan.expenseSpentCents ?? 0)}
                 </Text>
                 <Text style={{ fontSize: 16, fontWeight: "500", color: colors.muted }}>
                   {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
                 </Text>
               </View>
-              <Text style={{ fontSize: 13, color: data.leftoverCents < 0 ? colors.danger : colors.muted, fontVariant: ["tabular-nums"] }}>
-                {`Left to assign ${money(data.leftoverCents)}`}
+              <Text style={{ fontSize: 13, color: plan.leftoverCents < 0 ? colors.danger : colors.muted, fontVariant: ["tabular-nums"] }}>
+                {`Left to assign ${money(plan.leftoverCents)}`}
               </Text>
 
               {/* Visual Progress Bar */}
               {hasPlan ? (
                 <View style={{ gap: 6 }}>
                   <Progress
-                    value={data.expenseSpentCents}
+                    value={plan.expenseSpentCents}
                     max={plannedTotal}
                     color={pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.accent}
                   />
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`Spent ${money(data.expenseSpentCents)} of ${money(plannedTotal)}`}
+                      {`Spent ${money(plan.expenseSpentCents)} of ${money(plannedTotal)}`}
                     </Text>
                     <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`${Math.round((data.expenseSpentCents / (plannedTotal || 1)) * 100)}% spent`}
+                      {`${Math.round((plan.expenseSpentCents / (plannedTotal || 1)) * 100)}% spent`}
                     </Text>
                   </View>
                 </View>
@@ -555,7 +624,7 @@ export default function BudgetScreen() {
               <Button
                 label="Save income target"
                 block
-                onPress={() => void saveIncome().then(() => setPlanOpen(false))}
+                onPress={saveIncome}
               />
             </View>
           </Card>
