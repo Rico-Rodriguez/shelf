@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { api, peek } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money, monthlyNeedCents } from "../src/format";
+import { goalPreview, useFlightClock, useFlightHidden, useMeasuredAnchor } from "../src/flight";
 import { celebrate } from "../src/toast";
 import { Back, Button, Card, colors, Field, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
@@ -32,6 +33,7 @@ type Form = {
 const empty: Form = { name: "", kind: "save_up", target: "", targetDate: "", accountIds: [], categoryId: "" };
 
 export default function GoalsScreen() {
+  useFlightClock();
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [accounts, setAccounts] = useState<{ id: string; name: string; currentBalanceCents?: number }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
@@ -172,15 +174,20 @@ export default function GoalsScreen() {
       {goals && goals.length ? (
         <Card>
           {goals.map((goal, index) => {
-            const done = goal.remainingCents <= 0 && goal.targetCents > 0;
-            const pace = goalPace(goal);
+            const preview = goalPreview();
+            const remainingCents = preview?.id === goal.id ? Math.min(goal.remainingCents, Math.max(0, preview.remainingCents - preview.addedCents)) : goal.remainingCents;
+            const progressCents = goal.progressCents + Math.max(0, goal.remainingCents - remainingCents);
+            const shown = { ...goal, remainingCents, progressCents };
+            const done = shown.remainingCents <= 0 && shown.targetCents > 0;
+            const pace = goalPace(shown);
             const when = [
               pace.label,
-              goal.targetDate ? `By ${mediumDate(goal.targetDate)}` : "",
-              goal.accounts.map((account) => account.name).join(", "),
+              shown.targetDate ? `By ${mediumDate(shown.targetDate)}` : "",
+              shown.accounts.map((account) => account.name).join(", "),
             ]
               .filter(Boolean)
               .join(" · ");
+            const remainingText = done ? `${money(shown.targetCents)} ${shown.kind === "pay_down" ? "paid" : "saved"}` : `${money(shown.remainingCents)} left`;
             return (
               <Pressable
                 key={goal.id}
@@ -188,14 +195,13 @@ export default function GoalsScreen() {
                 style={{ paddingHorizontal: 16, paddingVertical: 14, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
               >
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                  <Text style={{ flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink }}>{goal.name}</Text>
-                  <Text style={{ fontWeight: "600", color: colors.ink }}>
-                    {done ? `${money(goal.targetCents)} ${goal.kind === "pay_down" ? "paid" : "saved"}` : `${money(goal.remainingCents)} left`}
-                  </Text>
+                  <Text style={{ flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink }}>{shown.name}</Text>
+                  <GoalRemaining id={goal.id} text={remainingText} />
                 </View>
-                <Progress
-                  value={goal.kind === "pay_down" ? goal.progressCents : goal.progressCents}
-                  max={goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1}
+                <GoalBar
+                  id={goal.id}
+                  value={shown.progressCents}
+                  max={shown.kind === "pay_down" ? shown.progressCents + shown.remainingCents || 1 : shown.targetCents || 1}
                   color={pace.tone === "behind" ? colors.danger : pace.tone === "muted" ? colors.tertiary : colors.positive}
                 />
                 {when || goal.monthlyCents ? (
@@ -205,7 +211,7 @@ export default function GoalsScreen() {
                   </View>
                 ) : (
                   <Text style={{ fontSize: 13, color: colors.muted }}>
-                    {money(goal.progressCents)} of {money(goal.targetCents)}
+                    {money(shown.progressCents)} of {money(goal.targetCents)}
                   </Text>
                 )}
               </Pressable>
@@ -327,5 +333,24 @@ export default function GoalsScreen() {
         </Sheet>
       ) : null}
     </Screen>
+  );
+}
+
+function GoalRemaining({ id, text }: { id: string; text: string }) {
+  const measure = useMeasuredAnchor(`goal.remaining.${id}`, { text, color: colors.ink, fontSize: 16 });
+  const opacity = useFlightHidden(`goal.remaining.${id}`);
+  return (
+    <View {...measure} style={{ opacity }}>
+      <Text style={{ fontWeight: "600", color: colors.ink }}>{text}</Text>
+    </View>
+  );
+}
+
+function GoalBar({ id, value, max, color }: { id: string; value: number; max: number; color: string }) {
+  const measure = useMeasuredAnchor(`goal.bar.${id}`);
+  return (
+    <View {...measure}>
+      <Progress value={value} max={max} color={color} />
+    </View>
   );
 }

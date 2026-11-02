@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { accountIdentity, isLiability, money, netWorthCents, signed } from "../../src/format";
+import { anchorRect, playFlight, stageFlight, useFlightArrival, useMeasuredAnchor } from "../../src/flight";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
+import { useReduceMotion } from "../../src/theme";
 import { Back, Button, Card, colors, Field, GlassButton, Hero, LoadError, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
 
 type Account = {
@@ -29,6 +31,7 @@ function accountLine(account: Account) {
 type AccountsPayload = { accounts: Account[]; items?: Item[]; plaidConfigured: boolean };
 
 export default function AccountsScreen() {
+  const reduceMotion = useReduceMotion();
   const cached = peek<AccountsPayload>("/api/accounts");
   const [accounts, setAccounts] = useState<Account[] | null>(cached ? cached.accounts : null);
   const [showHidden, setShowHidden] = useState(false);
@@ -74,6 +77,32 @@ export default function AccountsScreen() {
   const counted = all.filter((account) => !account.isHidden && account.includeInNetWorth !== false);
   const assetTotal = counted.filter((account) => !isLiability(account.type)).reduce((sum, account) => sum + account.currentBalanceCents, 0);
   const debtTotal = counted.filter((account) => isLiability(account.type)).reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
+
+  useFlightArrival("worth-open", reduceMotion, (plan) => {
+    plan.onDone = () => {
+      const hero = anchorRect("worth.hero");
+      if (!hero) return;
+      const pieces = counted
+        .filter((account) => account.includeInNetWorth !== false)
+        .map((account, index) => {
+          const liability = isLiability(account.type);
+          const cents = liability ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents;
+          return {
+            key: account.id,
+            text: liability ? signed(cents) : money(cents),
+            color: liability ? colors.danger : colors.ink,
+            fontSize: 46,
+            fontWeight: "700" as const,
+            from: hero,
+            toAnchor: `worth.row.${account.id}`,
+            toFontSize: 16,
+            delay: index * 28,
+          };
+        });
+      if (!pieces.length) return;
+      playFlight({ id: "worth-split", hide: pieces.map((piece) => piece.toAnchor), pieces }, reduceMotion);
+    };
+  });
 
   const institutions = useMemo(() => {
     const map = new Map<string, { key: string; name: string; rows: Account[] }>();
@@ -129,11 +158,57 @@ export default function AccountsScreen() {
     }
   }
 
+  function gatherWorth() {
+    const pill = anchorRect("worth.pill");
+    if (!pill || reduceMotion) {
+      router.back();
+      return;
+    }
+    const pieces = counted
+      .filter((account) => account.includeInNetWorth !== false)
+      .flatMap((account) => {
+        const from = anchorRect(`worth.row.${account.id}`);
+        if (!from) return [];
+        const liability = isLiability(account.type);
+        const cents = liability ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents;
+        return [
+          {
+            key: account.id,
+            text: liability ? signed(cents) : money(cents),
+            color: liability ? colors.danger : colors.ink,
+            fontSize: 16,
+            fontWeight: "700" as const,
+            from,
+            to: pill,
+            toFontSize: 13,
+          },
+        ];
+      });
+    const hero = anchorRect("worth.hero");
+    if (hero) {
+      pieces.unshift({
+        key: "hero",
+        text: money(worth),
+        color: worth < 0 ? colors.danger : colors.ink,
+        fontSize: 46,
+        fontWeight: "700",
+        from: hero,
+        to: pill,
+        toFontSize: 13,
+      });
+    }
+    if (!pieces.length) {
+      router.back();
+      return;
+    }
+    playFlight({ id: "worth-back", pieces, onDone: () => router.back() }, false);
+  }
+
   return (
     <Screen
       title="Accounts"
       framed={!router.canGoBack()}
-      refresh={router.canGoBack() ? <Back label="Today" /> : undefined}
+      refresh={router.canGoBack() ? <Back label="Today" onPress={() => gatherWorth()} /> : undefined}
       onRefresh={load}
       action={
         <GlassButton
@@ -151,6 +226,7 @@ export default function AccountsScreen() {
           label="Net worth"
           cents={worth}
           tone={worth < 0 ? "bad" : undefined}
+          figureAnchor="worth.hero"
           shares={[
             { label: "Assets", cents: assetTotal, color: colors.accent },
             { label: "Debts", cents: debtTotal, color: colors.danger },
@@ -202,19 +278,51 @@ export default function AccountsScreen() {
                 return (
                   <Pressable
                     key={account.id}
-                    onPress={() => router.push(`/account/${account.id}`)}
+                    onPress={() => {
+                      const nameFrom = anchorRect(`account.row.${account.id}.name`);
+                      const balanceFrom = anchorRect(`worth.row.${account.id}`);
+                      const pieces = [];
+                      if (nameFrom) {
+                        pieces.push({
+                          key: "name",
+                          text: account.name,
+                          color: colors.ink,
+                          fontSize: 17,
+                          fontWeight: "600" as const,
+                          from: nameFrom,
+                          toAnchor: "account.hero.name",
+                          toFontSize: 17,
+                        });
+                      }
+                      if (balanceFrom) {
+                        pieces.push({
+                          key: "balance",
+                          text: liability ? signed(cents) : money(cents),
+                          color: liability ? colors.danger : colors.ink,
+                          fontSize: 16,
+                          fontWeight: "700" as const,
+                          from: balanceFrom,
+                          toAnchor: "account.hero.balance",
+                          toFontSize: 46,
+                        });
+                      }
+                      if (pieces.length) {
+                        stageFlight({ id: "account-open", hide: ["account.hero.name", "account.hero.balance"], pieces }, reduceMotion);
+                      }
+                      router.push(`/account/${account.id}`);
+                    }}
                     onPressIn={tapPress}
                     style={({ pressed }) => [{ minHeight: 64, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }, pressed ? { backgroundColor: colors.fill } : null]}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "500", color: colors.ink }}>{account.name}</Text>
+                      <AccountName id={account.id} name={account.name} />
                       {line || account.includeInNetWorth === false || account.isHidden ? (
                         <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted }}>
                           {[line, account.includeInNetWorth === false ? "Not in net worth" : "", account.isHidden ? "Hidden" : ""].filter(Boolean).join(" · ")}
                         </Text>
                       ) : null}
                     </View>
-                    <Text style={{ fontSize: 16, fontWeight: "600", color: liability ? colors.danger : colors.ink }}>{liability ? signed(cents) : money(cents)}</Text>
+                    <AccountBalance id={account.id} text={liability ? signed(cents) : money(cents)} color={liability ? colors.danger : colors.ink} />
                   </Pressable>
                 );
               })}
@@ -253,5 +361,23 @@ export default function AccountsScreen() {
         </Sheet>
       ) : null}
     </Screen>
+  );
+}
+
+function AccountName({ id, name }: { id: string; name: string }) {
+  const measure = useMeasuredAnchor(`account.row.${id}.name`, { text: name, color: colors.ink, fontSize: 17 });
+  return (
+    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
+      <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "500", color: colors.ink }}>{name}</Text>
+    </View>
+  );
+}
+
+function AccountBalance({ id, text, color }: { id: string; text: string; color: string }) {
+  const measure = useMeasuredAnchor(`worth.row.${id}`, { text, color, fontSize: 16 });
+  return (
+    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
+      <Text style={{ fontSize: 16, fontWeight: "600", color }}>{text}</Text>
+    </View>
   );
 }

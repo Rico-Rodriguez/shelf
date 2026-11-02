@@ -7,7 +7,20 @@ import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
-import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
+import { dashboardPath, money, netWorthCents, sameMerchant, type NetWorthAccount } from "../../src/format";
+import {
+  anchorRect,
+  emitShelfRefresh,
+  launchLeftToPlan,
+  launchPlanToToday,
+  peekCategoryReturn,
+  playFlight,
+  recallAnchor,
+  setFlightSurface,
+  stageFlight,
+  takeCategoryReturn,
+  useMeasuredAnchor,
+} from "../../src/flight";
 import { subscribeOutbox } from "../../src/review-outbox";
 import { useReduceMotion, useReduceTransparency, useTheme } from "../../src/theme";
 import { colors, QuickLogModal, RollingFigure, type QuickLogDraft } from "../../src/ui";
@@ -32,6 +45,13 @@ function MobileBar({
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
+  const syncMeasure = useMeasuredAnchor(syncLabel === "Syncing" ? "sync.chip" : null, {
+    text: syncLabel,
+    color: palette.muted,
+    fontSize: 10,
+  });
+  const worthMeasure = useMeasuredAnchor(netWorth === null ? null : "worth.pill", netWorth === null ? null : { text: money(netWorth), color: palette.ink, fontSize: 13 });
+  const reduceMotion = useReduceMotion();
 
   return (
     <View
@@ -80,6 +100,9 @@ function MobileBar({
           </Text>
           {syncLabel === "Syncing" || syncLabel === "Sync failed" ? (
             <View
+              ref={syncMeasure.ref}
+              onLayout={syncMeasure.onLayout}
+              collapsable={false}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -131,6 +154,29 @@ function MobileBar({
               accessibilityLabel={`Net worth ${money(netWorth)}, view accounts`}
               onPress={() => {
                 tapPress();
+                const from = anchorRect("worth.pill");
+                const remembered = recallAnchor("worth.pill");
+                if (from && remembered) {
+                  stageFlight(
+                    {
+                      id: "worth-open",
+                      hide: ["worth.hero"],
+                      pieces: [
+                        {
+                          key: "worth",
+                          text: remembered.text,
+                          color: remembered.color,
+                          fontSize: remembered.fontSize,
+                          fontWeight: "700",
+                          from,
+                          toAnchor: "worth.hero",
+                          toFontSize: 46,
+                        },
+                      ],
+                    },
+                    reduceMotion,
+                  );
+                }
                 router.push("/(app)/accounts");
               }}
               style={({ pressed }) => [
@@ -151,6 +197,7 @@ function MobileBar({
               hitSlop={6}
             >
               <Icon name="wallet" size={13} color={palette.accentInk} filled />
+              <View ref={worthMeasure.ref} onLayout={worthMeasure.onLayout} collapsable={false}>
               <RollingFigure
                 text={money(netWorth)}
                 duration={360}
@@ -162,6 +209,7 @@ function MobileBar({
                   letterSpacing: -0.2,
                 }}
               />
+              </View>
             </Pressable>
           ) : null}
 
@@ -510,6 +558,10 @@ const badge = {
 
 export default function AppTabs() {
   const path = usePathname();
+  const reduceMotion = useReduceMotion();
+  const reduceRef = useRef(reduceMotion);
+  reduceRef.current = reduceMotion;
+  const seenSync = useRef<Map<string, boolean>>(new Map());
   const [reviewCount, setReviewCount] = useState(0);
   const [unread, setUnread] = useState(0);
   const [syncLabel, setSyncLabel] = useState("");
@@ -523,9 +575,71 @@ export default function AppTabs() {
     let alive = true;
     const tick = (pendingOnly: boolean) => {
       setSyncLabel("Syncing");
+      const before = peek<{ transactions?: { id: string; name: string; merchantName?: string | null; amountCents: number; pending?: boolean }[] }>(dashboardPath());
+      const known = new Map(seenSync.current);
+      for (const tx of before?.transactions ?? []) {
+        if (!known.has(tx.id)) known.set(tx.id, Boolean(tx.pending));
+      }
+      const chip = anchorRect("sync.chip");
+      const pendingFrom = anchorRect("today.pending");
+      const bills = peek<{ recurrences?: { merchantName: string; isIncome?: boolean; isActive?: boolean }[] }>("/api/recurring")?.recurrences ?? [];
       void api("/api/plaid/sync", { method: "POST", body: JSON.stringify({ pendingOnly }) })
-        .then(() => {
-          if (alive) setSyncLabel("Up to date");
+        .then(async () => {
+          if (!alive) return;
+          const now = new Date();
+          await Promise.all([
+            load(dashboardPath()).catch(() => undefined),
+            load("/api/transactions?").catch(() => undefined),
+            load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined),
+          ]);
+          if (!alive) return;
+          emitShelfRefresh();
+          const after = peek<{ transactions?: { id: string; name: string; merchantName?: string | null; amountCents: number; pending?: boolean }[] }>(dashboardPath());
+          const rows = after?.transactions ?? [];
+          const hadBaseline = known.size > 0;
+          const arrivals = hadBaseline ? rows.filter((tx) => !known.has(tx.id)) : [];
+          const posted = hadBaseline ? rows.filter((tx) => known.get(tx.id) === true && tx.pending === false) : [];
+          const nextKnown = new Map(known);
+          for (const tx of rows) nextKnown.set(tx.id, Boolean(tx.pending));
+          seenSync.current = nextKnown;
+          const fromChip = chip ?? { x: 24, y: 52, width: 78, height: 18 };
+          const pieces = [];
+          let delay = 0;
+          for (const tx of arrivals) {
+            const label = tx.merchantName || tx.name;
+            const bill = bills.some((row) => row.isIncome !== true && row.isActive !== false && sameMerchant(row.merchantName, label));
+            if (bill) continue;
+            pieces.push({
+              key: tx.id,
+              text: label,
+              meta: money(Math.abs(tx.amountCents)),
+              color: tx.pending ? colors.tertiary : colors.ink,
+              fontSize: 13,
+              fontWeight: "600" as const,
+              from: fromChip,
+              toAnchor: `today.tx.${tx.id}`,
+              toFontSize: 16,
+              delay,
+            });
+            delay += 50;
+          }
+          for (const tx of posted) {
+            pieces.push({
+              key: `post-${tx.id}`,
+              text: money(Math.abs(tx.amountCents)),
+              color: colors.tertiary,
+              toColor: colors.ink,
+              fontSize: 15,
+              fontWeight: "700" as const,
+              from: pendingFrom ?? anchorRect(`today.tx.${tx.id}.amount`) ?? fromChip,
+              toAnchor: "today.left",
+              toFontSize: 46,
+              delay,
+            });
+            delay += 40;
+          }
+          setSyncLabel("Up to date");
+          if (pieces.length) playFlight({ id: "sync", hide: arrivals.map((tx) => `today.tx.${tx.id}`), pieces }, reduceRef.current);
         })
         .catch((err: unknown) => {
           if (!alive) return;
@@ -633,6 +747,12 @@ export default function AppTabs() {
   const onActivity = path.includes("activity");
   const onAccounts = path.includes("account");
   const onToday = !onBudget && !onActivity && !onAccounts;
+  useEffect(() => {
+    if (onToday) setFlightSurface("today");
+    else if (onBudget) setFlightSurface("plan");
+    else if (onActivity) setFlightSurface("activity");
+    else setFlightSurface("other");
+  }, [onToday, onBudget, onActivity]);
   const showBar = onToday || onBudget || onActivity;
   const showWorth = onBudget || onActivity || (onToday && hasPlan);
 
@@ -644,6 +764,31 @@ export default function AppTabs() {
             state={props.state}
             reviewCount={reviewCount}
             onPress={(route, focused) => {
+              if (!focused && route.name === "budget") launchLeftToPlan(reduceMotion);
+              if (!focused && route.name === "index") launchPlanToToday(reduceMotion);
+              if (!focused && path.includes("activity")) {
+                const back = peekCategoryReturn();
+                const from = anchorRect("activity.category.banner");
+                if (back && from) {
+                  playFlight(
+                    {
+                      id: "category-back",
+                      pieces: [
+                        {
+                          key: "gather",
+                          kind: "fill",
+                          color: colors.accent,
+                          fontSize: 12,
+                          from,
+                          to: anchorRect(back.anchor) ?? back.rect,
+                        },
+                      ],
+                    },
+                    reduceMotion,
+                  );
+                  takeCategoryReturn();
+                }
+              }
               const event = props.navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
               if (!focused && !event.defaultPrevented) props.navigation.navigate(route.name);
             }}

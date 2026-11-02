@@ -1,10 +1,12 @@
 import { router } from "expo-router";
-import { useMemo, useState, useEffect } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { api } from "./api";
-import { dayLabel, merchantMatchKey, shelfColor } from "./format";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { api, peek } from "./api";
+import { dayLabel, flowMoney, isLiability, merchantMatchKey, money, shelfColor, signed } from "./format";
+import { anchorRect, useFlightHidden, useMeasuredAnchor, type FlightPiece, type FlightRect } from "./flight";
 import { tapPress, tapSelect } from "./haptic";
 import { Icon } from "./icons";
+import { useReduceMotion } from "./theme";
 import { Button, Card, colors, Field, FlowAmount, Note, Section, SearchField, Sheet, Switch } from "./ui";
 
 export type ChargeGroup = {
@@ -34,7 +36,8 @@ export type Charge = {
   splits: { categoryId: string | null; amountCents: number }[];
 };
 
-type Pair = { id: string; name: string; date: string; account: string | null };
+type Pair = { id: string; name: string; date: string; amountCents?: number; account: string | null };
+type ShelfAccount = { id: string; name: string; type: string; currentBalanceCents: number };
 type Goal = { id: string; name: string };
 type SplitDraft = { categoryId: string; amount: string };
 
@@ -72,6 +75,10 @@ export function ChargeSheet({
   onOptimistic,
   onRevert,
   onHold,
+  origin = null,
+  originAnchor,
+  carry = null,
+  titleAnchor,
 }: {
   tx: Charge;
   groups: ChargeGroup[];
@@ -88,6 +95,10 @@ export function ChargeSheet({
     merchant: string;
     rename?: string;
   }) => void;
+  origin?: FlightRect | null;
+  originAnchor?: string;
+  carry?: FlightPiece[] | null;
+  titleAnchor?: string;
 }) {
   const [name, setName] = useState(tx.name);
   const [categoryId, setCategoryId] = useState(tx.categoryId);
@@ -104,6 +115,10 @@ export function ChargeSheet({
   const [always, setAlways] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [pairs, setPairs] = useState<Pair[]>([]);
+  const [shelfAccounts, setShelfAccounts] = useState<ShelfAccount[]>(() => peek<{ accounts: ShelfAccount[] }>("/api/accounts")?.accounts ?? []);
+  const [crossPieces, setCrossPieces] = useState<FlightPiece[] | null>(null);
+  const [crossed, setCrossed] = useState(false);
+  const [crossToken, setCrossToken] = useState(0);
   const [picking, setPicking] = useState<number | "goal" | "pair" | null>(null);
   const [pickingCategory, setPickingCategory] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -117,6 +132,9 @@ export function ChargeSheet({
       .catch(() => undefined);
     void api<{ candidates: Pair[] }>(`/api/transactions?pairFor=${tx.id}`)
       .then((res) => setPairs(res.candidates))
+      .catch(() => undefined);
+    void api<{ accounts: ShelfAccount[] }>("/api/accounts")
+      .then((res) => setShelfAccounts(res.accounts))
       .catch(() => undefined);
   }, [tx.id]);
 
@@ -186,11 +204,33 @@ export function ChargeSheet({
   const currentCategory = categories.find((category) => category.id === categoryId);
   const currentCategoryColor = getCategoryColor(currentCategory);
   const merchantName = tx.merchantName || name;
+  const showCrossing = Boolean(isTransfer || tx.isTransfer || transferPairId);
+  const linked = pairs.find((pair) => pair.id === transferPairId) ?? null;
+  const sourceAccount = shelfAccounts.find((account) => account.name === tx.account?.name) ?? null;
+  const destAccount = linked?.account ? shelfAccounts.find((account) => account.name === linked.account) ?? null : null;
+
+  function choosePair(pair: Pair | null) {
+    setTransferPairId(pair?.id ?? null);
+    if (pair) setIsTransfer(true);
+    setCrossed(false);
+    setCrossPieces(null);
+    setCrossToken((value) => value + 1);
+    setPicking(null);
+  }
 
   return (
     <Sheet
       title={pickingCategory ? "Select Category" : merchantName}
       onClose={pickingCategory ? () => setPickingCategory(false) : onClose}
+      origin={pickingCategory ? null : origin}
+      originAnchor={pickingCategory ? undefined : originAnchor}
+      carry={pickingCategory ? null : carry}
+      titleAnchor={pickingCategory ? undefined : titleAnchor}
+      overlay={crossPieces}
+      onOverlayDone={() => {
+        setCrossPieces(null);
+        setCrossed(true);
+      }}
     >
       {pickingCategory ? (
         <View style={{ gap: 12 }}>
@@ -216,7 +256,7 @@ export function ChargeSheet({
       ) : (
         <>
       <View style={{ alignItems: "center", gap: 6, paddingVertical: 8 }}>
-        <FlowAmount cents={tx.amountCents} size={36} />
+        <SheetAmount cents={tx.amountCents} />
         <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center" }}>
           {[dayLabel(tx.date), tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
         </Text>
@@ -228,6 +268,21 @@ export function ChargeSheet({
       </View>
 
       {error ? <Note>{error}</Note> : null}
+
+      {showCrossing ? (
+        <TransferCross
+          txId={tx.id}
+          amountText={money(Math.abs(tx.amountCents))}
+          source={sourceAccount}
+          dest={destAccount}
+          destName={linked?.account ?? null}
+          crossed={crossed}
+          token={crossToken}
+          pairs={pairs}
+          onChoose={choosePair}
+          onFly={setCrossPieces}
+        />
+      ) : null}
 
       {/* Dedicated Category Selector Card */}
       <Pressable
@@ -251,7 +306,7 @@ export function ChargeSheet({
           pressed ? { opacity: 0.85, transform: [{ scale: 0.985 }] } : null,
         ]}
       >
-        <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: currentCategoryColor }} />
+        <SheetSwatch color={currentCategoryColor} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 12, fontWeight: "600", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
             Category
@@ -341,17 +396,13 @@ export function ChargeSheet({
           </Pressable>
           {picking === "pair" ? (
             <Card>
-              <Pressable onPress={() => { setTransferPairId(null); setPicking(null); }} style={choice}>
+              <Pressable onPress={() => choosePair(null)} style={choice}>
                 <Text style={{ color: colors.ink }}>No linked transfer</Text>
               </Pressable>
               {pairs.map((pair) => (
                 <Pressable
                   key={pair.id}
-                  onPress={() => {
-                    setTransferPairId(pair.id);
-                    setIsTransfer(true);
-                    setPicking(null);
-                  }}
+                  onPress={() => choosePair(pair)}
                   style={choice}
                 >
                   <Text style={{ color: transferPairId === pair.id ? colors.accentInk : colors.ink }}>
@@ -419,6 +470,135 @@ export function ChargeSheet({
     </>
   )}
 </Sheet>
+  );
+}
+
+function balanceFace(account: ShelfAccount | null) {
+  if (!account) return null;
+  const liability = isLiability(account.type);
+  const cents = liability ? -Math.abs(account.currentBalanceCents) : account.currentBalanceCents;
+  return {
+    name: account.name,
+    label: liability ? signed(cents) : money(cents),
+    color: liability ? colors.danger : colors.ink,
+  };
+}
+
+function SheetAmount({ cents }: { cents: number }) {
+  const flow = flowMoney(cents);
+  const measure = useMeasuredAnchor("sheet.amount", { text: flow.text, color: flow.color, fontSize: 36 });
+  const opacity = useFlightHidden("sheet.amount");
+  return (
+    <View {...measure} style={{ opacity }}>
+      <FlowAmount cents={cents} size={36} />
+    </View>
+  );
+}
+
+function SheetSwatch({ color }: { color: string }) {
+  const measure = useMeasuredAnchor("sheet.color");
+  const opacity = useFlightHidden("sheet.color");
+  return <View {...measure} style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: color, opacity }} />;
+}
+
+function TransferCross({
+  txId,
+  amountText,
+  source,
+  dest,
+  destName,
+  crossed,
+  token,
+  pairs,
+  onChoose,
+  onFly,
+}: {
+  txId: string;
+  amountText: string;
+  source: ShelfAccount | null;
+  dest: ShelfAccount | null;
+  destName: string | null;
+  crossed: boolean;
+  token: number;
+  pairs: Pair[];
+  onChoose: (pair: Pair) => void;
+  onFly: (pieces: FlightPiece[]) => void;
+}) {
+  const reduceMotion = useReduceMotion();
+  const sourceFace = balanceFace(source);
+  const destFace = balanceFace(dest);
+  const sourceMeasure = useMeasuredAnchor(
+    `transfer.source.${txId}`,
+    sourceFace ? { text: sourceFace.label, color: sourceFace.color, fontSize: 16 } : null,
+  );
+  const destMeasure = useMeasuredAnchor(
+    `transfer.dest.${txId}`,
+    destFace ? { text: destFace.label, color: destFace.color, fontSize: 16 } : null,
+  );
+  const started = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (crossed || !source || !dest) return;
+    if (reduceMotion) return;
+    if (started.current === token) return;
+    const timer = setTimeout(() => {
+      const from = anchorRect(`transfer.source.${txId}`);
+      const to = anchorRect(`transfer.dest.${txId}`);
+      if (!from || !to) return;
+      started.current = token;
+      onFly([
+        {
+          key: `cross-${token}`,
+          text: amountText,
+          color: colors.tertiary,
+          fontSize: 22,
+          fontWeight: "700",
+          from,
+          to,
+          toFontSize: 16,
+        },
+      ]);
+    }, 160);
+    return () => clearTimeout(timer);
+  }, [amountText, crossed, dest, onFly, reduceMotion, source, token, txId]);
+
+  return (
+    <View style={{ gap: 10, padding: 16, borderRadius: 18, borderCurve: "continuous", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }}>
+      <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.6, color: colors.tertiary }}>TRANSFER</Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+        <View {...sourceMeasure} style={{ flex: 1 }}>
+          <Text style={{ fontSize: 13, color: colors.muted }}>{sourceFace?.name ?? "This account"}</Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: sourceFace?.color ?? colors.ink, fontVariant: ["tabular-nums"] }}>
+            {sourceFace?.label ?? "—"}
+          </Text>
+        </View>
+        <View {...destMeasure} style={{ flex: 1, alignItems: "flex-end" }}>
+          <Text style={{ fontSize: 13, color: colors.muted }}>{destFace?.name ?? destName ?? "Other account"}</Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: destFace?.color ?? colors.ink, fontVariant: ["tabular-nums"] }}>
+            {destFace?.label ?? "—"}
+          </Text>
+        </View>
+      </View>
+      {crossed || reduceMotion ? (
+        <Text style={{ textAlign: "center", fontSize: 13, color: colors.tertiary }}>
+          {destFace ? `Settled in ${destFace.name}` : "Pick the other side"}
+        </Text>
+      ) : (
+        <Text style={{ textAlign: "center", fontSize: 22, fontWeight: "700", color: colors.tertiary, fontVariant: ["tabular-nums"] }}>{amountText}</Text>
+      )}
+      {!dest ? (
+        <View style={{ gap: 0 }}>
+          {pairs.length === 0 ? <Text style={{ fontSize: 14, color: colors.muted }}>No matching transfer yet.</Text> : null}
+          {pairs.map((pair) => (
+            <Pressable key={pair.id} onPress={() => onChoose(pair)} style={{ minHeight: 44, justifyContent: "center" }}>
+              <Text style={{ fontSize: 15, color: colors.ink }}>
+                {`${pair.date} · ${pair.name}${pair.account ? ` · ${pair.account}` : ""}`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 

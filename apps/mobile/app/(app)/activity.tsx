@@ -1,12 +1,13 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
-import { dayLabel, flowMoney, money, monthLabel, monthRange, todayISO } from "../../src/format";
+import { dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, todayISO } from "../../src/format";
+import { anchorRect, onShelfRefresh, peekCategoryReturn, playFlight, registerAnchor, takeCategoryReturn, useFlightArrival, useFlightHidden, useMeasuredAnchor, type FlightPiece, type FlightRect } from "../../src/flight";
 import { tapCelebration, tapPress, tapSelect } from "../../src/haptic";
 import { Icon, MerchantMark } from "../../src/icons";
 import { dropQuickLog, mergeActivityRows, pinUnreviewed, settleQuickLog, stageQuickLog, subscribeLive, type QuickLog } from "../../src/live-edits";
@@ -115,6 +116,8 @@ export default function ActivityScreen() {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>(() => peek<{ accounts: { id: string; name: string }[] }>("/api/accounts")?.accounts ?? []);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Tx | null>(null);
+  const [unfold, setUnfold] = useState<FlightRect | null>(null);
+  const [carry, setCarry] = useState<FlightPiece[] | null>(null);
   const [filters, setFilters] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -193,6 +196,8 @@ export default function ActivityScreen() {
   }, [search, unreviewedOnly, categoryId, accountFilter, tag, range]);
 
   useEffect(() => subscribeLive(() => setLiveTick((value) => value + 1)), []);
+  useEffect(() => onShelfRefresh(() => { void load(); }), [load]);
+  useFlightArrival("category-open", reduceMotion);
   const [outboxTick, setOutboxTick] = useState(0);
   useEffect(
     () =>
@@ -487,7 +492,9 @@ export default function ActivityScreen() {
   const month = range ? { year: Number(range.start.slice(0, 4)), month: Number(range.start.slice(5, 7)) } : null;
   const filtered = Boolean(search || accountFilter || categoryId || tag || range || unreviewedOnly);
   const accountName = accounts.find((a) => a.id === accountFilter)?.name;
-  const categoryName = categories.find((c) => c.id === categoryId)?.name;
+  const categoryName =
+    categories.find((c) => c.id === categoryId)?.name ??
+    rows?.find((row) => row.categoryId === categoryId)?.category?.name;
 
   const [refreshing, setRefreshing] = useState(false);
   const pull = useCallback(() => {
@@ -805,7 +812,20 @@ export default function ActivityScreen() {
             </Pressable>
           ) : null}
           {categoryName ? (
-            <Pressable onPress={() => setCategoryId("")} style={styles.activeChip}>
+            <Pressable onPress={() => {
+              const back = peekCategoryReturn();
+              const from = anchorRect("activity.category.banner");
+              if (back && from) {
+                playFlight({
+                  id: "category-back",
+                  pieces: [
+                    { key: "swatch", kind: "fill", color: shelfColor(rows?.find((row) => row.categoryId === categoryId)?.category?.color), fontSize: 8, from, to: anchorRect(back.anchor) ?? back.rect },
+                  ],
+                }, reduceMotion);
+                takeCategoryReturn();
+              }
+              setCategoryId("");
+            }} style={styles.activeChip}>
               <Text style={styles.activeChipText}>{categoryName} ✕</Text>
             </Pressable>
           ) : null}
@@ -815,6 +835,16 @@ export default function ActivityScreen() {
             </Pressable>
           ) : null}
         </View>
+      ) : null}
+
+      {categoryId && categoryName ? (
+        <CategoryBanner
+          name={categoryName}
+          cents={(rows ?? [])
+            .filter((row) => !row.isTransfer && !row.hidden && row.amountCents > 0)
+            .reduce((sum, row) => sum + row.amountCents, 0)}
+          color={shelfColor(categories.find((item) => item.id === categoryId)?.color ?? rows?.find((row) => row.categoryId === categoryId)?.category?.color)}
+        />
       ) : null}
 
       {selecting ? (
@@ -882,7 +912,8 @@ export default function ActivityScreen() {
             ? ["Transfer", tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ")
             : [tx.category?.name, tx.account?.name, tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ") || "Uncategorized";
           return (
-            <View
+            <RowFrame
+              id={tx.id}
               style={[
                 styles.rowWrapper,
                 item.isFirst && styles.rowFirst,
@@ -895,6 +926,22 @@ export default function ActivityScreen() {
                 peek={!tx.reviewed}
                 onPress={() => {
                   if (!selecting) {
+                    const from = anchorRect(`activity.row.${tx.id}`);
+                    const nameFrom = anchorRect(`activity.row.${tx.id}.name`) ?? from;
+                    const amountFrom = anchorRect(`activity.row.${tx.id}.amount`) ?? from;
+                    const swatch = anchorRect(`activity.row.${tx.id}.swatch`);
+                    const pieces: FlightPiece[] = [];
+                    if (nameFrom) {
+                      pieces.push({ key: "name", text: tx.merchantName || tx.name, color: colors.ink, fontSize: 16, fontWeight: "600", from: nameFrom, toAnchor: "sheet.title", toFontSize: 20 });
+                    }
+                    if (amountFrom) {
+                      pieces.push({ key: "amount", text: amount.text, color: amount.color, toColor: tx.category?.color ? shelfColor(tx.category.color) : amount.color, fontSize: 16, fontWeight: "700", from: amountFrom, toAnchor: "sheet.amount", toFontSize: 36 });
+                    }
+                    if (swatch) {
+                      pieces.push({ key: "color", kind: "fill", color: shelfColor(tx.category?.color), fontSize: 8, from: swatch, toAnchor: "sheet.color" });
+                    }
+                    setUnfold(from);
+                    setCarry(from ? pieces : null);
                     setSelected(tx);
                     return;
                   }
@@ -915,21 +962,17 @@ export default function ActivityScreen() {
                       {selectedIds.includes(tx.id) ? <Icon name="check" size={12} color="#fff" filled /> : null}
                     </View>
                   ) : null}
-                  <MerchantMark name={tx.merchantName || tx.name} color={tx.category?.color ?? undefined} />
+                  <RowSwatch id={tx.id} color={tx.category?.color} name={tx.merchantName || tx.name} />
                   <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
-                    <Text numberOfLines={1} style={styles.txName}>
-                      {tx.name}
-                    </Text>
+                    <RowName id={tx.id} name={tx.merchantName || tx.name} />
                     <Text numberOfLines={1} style={styles.txMeta}>
                       {meta}
                     </Text>
                   </View>
-                  <Text style={[styles.txAmount, { color: amount.color }]}>
-                    {amount.text}
-                  </Text>
+                  <RowAmount id={tx.id} text={amount.text} color={amount.color} />
                 </View>
               </SwipeRow>
-            </View>
+            </RowFrame>
           );
         }}
       />
@@ -937,6 +980,10 @@ export default function ActivityScreen() {
       {/* Transaction Details / Edit Sheet */}
       {selected ? (
         <ChargeSheet
+          origin={unfold}
+          originAnchor={selected ? `activity.row.${selected.id}` : undefined}
+          carry={carry}
+          titleAnchor="sheet.title"
           tx={{
             ...selected,
             hidden: selected.hidden ?? false,
@@ -949,7 +996,11 @@ export default function ActivityScreen() {
             splits: selected.splits ?? [],
           }}
           groups={groups}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            setUnfold(null);
+            setCarry(null);
+          }}
           onOptimistic={(draft) => {
             const before = selected ?? sheetEdit.current?.before;
             if (!before) return;
@@ -1311,6 +1362,82 @@ function ReviewHold() {
     <View style={{ gap: 8 }}>
       <Note>Couldn’t save those reviews. They stay reviewed on this phone.</Note>
       <Button label="Retry all" tone="quiet" onPress={retryAllReviews} />
+    </View>
+  );
+}
+
+function RowFrame({ id, style, children }: { id: string; style?: object; children: ReactNode }) {
+  const ref = useRef<View>(null);
+  const rowHidden = useFlightHidden(`activity.row.${id}`);
+  const txHidden = useFlightHidden(`activity.tx.${id}`);
+  return (
+    <View
+      ref={ref}
+      collapsable={false}
+      onLayout={() => {
+        requestAnimationFrame(() => {
+          ref.current?.measureInWindow((x, y, width, height) => {
+            if (width <= 0 || height <= 0) return;
+            registerAnchor(`activity.row.${id}`, { x, y, width, height });
+            registerAnchor(`activity.tx.${id}`, { x, y, width, height });
+          });
+        });
+      }}
+      style={[style, { opacity: Math.min(rowHidden, txHidden) }]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function RowSwatch({ id, color, name }: { id: string; color?: string | null; name: string }) {
+  const measure = useMeasuredAnchor(`activity.row.${id}.swatch`);
+  return (
+    <View {...measure}>
+      <MerchantMark name={name} color={color} />
+    </View>
+  );
+}
+
+function RowName({ id, name }: { id: string; name: string }) {
+  const measure = useMeasuredAnchor(`activity.row.${id}.name`, { text: name, color: colors.ink, fontSize: 15 });
+  const opacity = useFlightHidden(`activity.row.${id}.name`);
+  return (
+    <View {...measure} style={{ opacity }}>
+      <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "500", color: colors.ink, letterSpacing: -0.2 }}>
+        {name}
+      </Text>
+    </View>
+  );
+}
+
+function RowAmount({ id, text, color }: { id: string; text: string; color: string }) {
+  const measure = useMeasuredAnchor(`activity.row.${id}.amount`, { text, color, fontSize: 16 });
+  const opacity = useFlightHidden(`activity.row.${id}.amount`);
+  return (
+    <View {...measure} style={{ opacity }}>
+      <Text style={{ fontSize: 16, fontWeight: "600", color, fontVariant: ["tabular-nums"] }}>{text}</Text>
+    </View>
+  );
+}
+
+function CategoryBanner({ name, cents, color }: { name: string; cents: number; color: string }) {
+  const banner = useMeasuredAnchor("activity.category.banner");
+  const title = useMeasuredAnchor("activity.category.title", { text: name, color: colors.ink, fontSize: 22 });
+  const amount = useMeasuredAnchor("activity.category.amount", { text: money(cents), color: colors.ink, fontSize: 28 });
+  const titleOpacity = useFlightHidden("activity.category.title");
+  const amountOpacity = useFlightHidden("activity.category.amount");
+  return (
+    <View {...banner} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 6 }}>
+      <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: color }} />
+      <View {...title} style={{ flex: 1, opacity: titleOpacity }}>
+        <Text numberOfLines={1} style={{ fontSize: 22, fontWeight: "700", color: colors.ink, letterSpacing: -0.4 }}>
+          {name}
+        </Text>
+      </View>
+      <View {...amount} style={{ opacity: amountOpacity }}>
+        <Text style={{ fontSize: 28, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.6 }}>{money(cents)}</Text>
+      </View>
     </View>
   );
 }
