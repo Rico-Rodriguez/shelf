@@ -1,28 +1,41 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../src/api";
-import { flowMoney, merchantMatchKey, sameMerchant } from "../src/format";
+import { Charge, ChargeGroup, ChargeSheet } from "../src/charge";
+import { dayLabel, flowMoney, merchantMatchKey, sameMerchant, shortDate } from "../src/format";
 import { Back, Button, Card, Hero, LedgerRow, Loading, Note, Screen } from "../src/ui";
 
-type Tx = { id: string; name: string; date: string; amountCents: number; pending: boolean; category: { id: string; name: string } | null };
+type MerchantCharge = Omit<Charge, "category"> & {
+  category: { id: string; name: string; color?: string | null } | null;
+};
 type Rule = { id: string; matchMerchant: string | null; actionCategoryId: string | null; name: string };
+
+function whenLabel(iso: string) {
+  const when = dayLabel(iso);
+  return when === "Today" || when === "Yesterday" ? when : shortDate(iso);
+}
 
 export default function MerchantScreen() {
   const params = useLocalSearchParams<{ name?: string }>();
   const name = params.name ?? "";
-  const [rows, setRows] = useState<Tx[] | null>(null);
+  const [rows, setRows] = useState<MerchantCharge[] | null>(null);
+  const [groups, setGroups] = useState<ChargeGroup[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [selected, setSelected] = useState<MerchantCharge | null>(null);
   const [rule, setRule] = useState<Rule | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function load() {
     if (!name) return;
-    void api<{ transactions: Tx[] }>(`/api/transactions?merchant=${encodeURIComponent(name)}`)
+    void api<{ transactions: MerchantCharge[] }>(`/api/transactions?merchant=${encodeURIComponent(name)}`)
       .then((res) => setRows(res.transactions))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load this merchant"));
-    void api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories")
-      .then((res) => setCategories(res.groups.flatMap((group) => group.categories)))
+    void api<{ groups: ChargeGroup[] }>("/api/categories")
+      .then((res) => {
+        setGroups(res.groups);
+        setCategories(res.groups.flatMap((group) => group.categories));
+      })
       .catch(() => undefined);
     void api<{ rules: Rule[] }>("/api/rules")
       .then((res) => {
@@ -115,14 +128,27 @@ export default function MerchantScreen() {
               <LedgerRow
                 key={tx.id}
                 divided={index > 0}
-                name={tx.name}
-                meta={[tx.date, tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                name={tx.merchantName || tx.name}
+                color={tx.category?.color}
+                meta={[whenLabel(tx.date), tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
                 amount={flow.text}
                 amountColor={flow.color}
+                onPress={() => setSelected(tx)}
               />
             );
           })}
         </Card>
+      ) : null}
+      {selected ? (
+        <ChargeSheet
+          tx={selected}
+          groups={groups}
+          onClose={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            load();
+          }}
+        />
       ) : null}
     </Screen>
   );

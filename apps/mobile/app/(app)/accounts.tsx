@@ -2,7 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
-import { isLiability, money, netWorthCents, signed } from "../../src/format";
+import { accountIdentity, isLiability, money, netWorthCents, signed } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
 import { Back, Button, Card, colors, Field, GlassButton, Hero, LoadError, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
@@ -23,10 +23,7 @@ type Account = {
 type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
 
 function accountLine(account: Account) {
-  const kind = account.subtype || account.type;
-  const label = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "";
-  const mask = account.mask ? `···${account.mask}` : "";
-  return [label, mask].filter(Boolean).join(" · ");
+  return accountIdentity(account);
 }
 
 type AccountsPayload = { accounts: Account[]; items?: Item[]; plaidConfigured: boolean };

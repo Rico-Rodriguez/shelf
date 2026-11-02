@@ -3,12 +3,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { load as read, peek, subscribeCache } from "../../src/api";
 import {
+  billsStillDueCents,
+  budgetPace,
   dashboardPath,
   dayLabel,
   flowMoney,
+  goalPace,
   inDaysPhrase,
   money,
+  monthFraction,
   monthRange,
+  nearestOpenGoal,
   netWorthCents,
   shelfColor,
   shortDate,
@@ -34,8 +39,31 @@ import {
   SpendMix,
 } from "../../src/ui";
 
+type Bill = {
+  id: string;
+  amountCents: number;
+  cadence: string;
+  nextDate: string;
+  isIncome: boolean;
+  isActive: boolean;
+};
+
+type OpenGoal = {
+  id: string;
+  name: string;
+  kind: string;
+  targetCents: number;
+  targetDate: string | null;
+  progressCents: number;
+  remainingCents: number;
+  createdAt?: string | null;
+};
+
+type Invest = { totalCents?: number; gainCents?: number | null };
+
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
+  pendingCents?: number;
   budget: { plannedCents: number; spentCents: number; remainingCents: number };
   unreviewed: { count: number };
   accountCount: number;
@@ -67,15 +95,25 @@ export default function HomeScreen() {
   });
   const [error, setError] = useState<string | null>(null);
   const [moneyOpen, setMoneyOpen] = useState(false);
+  const [recurrences, setRecurrences] = useState<Bill[] | null>(() => peek<{ recurrences: Bill[] }>("/api/recurring")?.recurrences ?? null);
+  const [goals, setGoals] = useState<OpenGoal[] | null>(() => peek<{ goals: OpenGoal[] }>("/api/goals")?.goals ?? null);
+  const [investments, setInvestments] = useState<Invest | null>(() => peek<Invest>("/api/investments") ?? null);
+  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
 
   const load = useCallback(() => {
     return Promise.all([
       read<Dash>(dashPath),
       read<{ accounts: NetWorthAccount[] }>("/api/accounts").catch(() => null),
+      read<{ recurrences: Bill[] }>("/api/recurring").catch(() => null),
+      read<{ goals: OpenGoal[] }>("/api/goals").catch(() => null),
+      read<Invest>("/api/investments").catch(() => null),
     ])
-      .then(([next, accounts]) => {
+      .then(([next, accounts, recurring, goalRows, invest]) => {
         setData(next);
         if (accounts) setWorth(netWorthCents(accounts.accounts));
+        if (recurring) setRecurrences(recurring.recurrences);
+        if (goalRows) setGoals(goalRows.goals);
+        if (invest) setInvestments(invest);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
@@ -115,6 +153,49 @@ export default function HomeScreen() {
 
   const totalPlannedCents = shownDash?.budget.plannedCents ?? 0;
   const spentCents = shownDash?.budget.spentCents ?? 0;
+  const leftCents = totalPlannedCents - spentCents;
+  const pace = budgetPace(spentCents, totalPlannedCents);
+  const paceCents = Math.round(totalPlannedCents * monthFraction());
+  const dueCents = recurrences ? billsStillDueCents(recurrences, now.getFullYear(), now.getMonth() + 1) : null;
+  const afterBills = dueCents == null ? null : leftCents - dueCents;
+  const pendingCents = shownDash?.pendingCents ?? 0;
+  const nearest = goals ? nearestOpenGoal(goals) : null;
+  const nearestPace = nearest ? goalPace(nearest) : null;
+  const savedCents = shownDash?.cashFlow.savedCents ?? 0;
+  const gainCents = investments?.gainCents ?? null;
+  const marketCents = investments?.totalCents;
+
+  function heroFacts(includePlan: boolean) {
+    const items: { kicker: string; value: string; color?: string; onPress?: () => void }[] = includePlan
+      ? [
+          { kicker: "Spent", value: money(spentCents) },
+          { kicker: "Plan", value: money(totalPlannedCents) },
+        ]
+      : [
+          { kicker: "Income", value: money(shownDash?.cashFlow.incomeCents ?? 0) },
+          { kicker: "Spent", value: money(shownDash?.cashFlow.spendingCents ?? 0) },
+          {
+            kicker: savedCents < 0 ? "Net deficit" : "Net saved",
+            value: money(Math.abs(savedCents)),
+            color: savedCents < 0 ? colors.danger : colors.positive,
+          },
+        ];
+    if (includePlan && afterBills != null) {
+      items.push({
+        kicker: "After bills",
+        value: money(afterBills),
+        color: afterBills < 0 ? colors.danger : undefined,
+        onPress: () => {
+          tapPress();
+          router.push("/bills");
+        },
+      });
+    }
+    if (pendingCents > 0) {
+      items.push({ kicker: "Pending", value: money(pendingCents), color: colors.tertiary });
+    }
+    return items;
+  }
 
   return (
     <Screen framed onRefresh={load}>
@@ -125,21 +206,20 @@ export default function HomeScreen() {
         <>
           {totalPlannedCents > 0 ? (
             <Hero
-              label="Left to spend"
-              cents={totalPlannedCents - spentCents}
-              tone={totalPlannedCents - spentCents < 0 ? "bad" : undefined}
+              label={scrub ? shortDate(scrub.date) : "Left to spend"}
+              cents={scrub ? scrub.cents : leftCents}
+              tone={!scrub && leftCents < 0 ? "bad" : undefined}
+              status={{ label: pace.label, tone: pace.tone }}
               points={shownDash.spendSeries}
+              reference={{ cents: paceCents, label: "Pace" }}
+              onScrub={setScrub}
+              live={scrub != null}
               onPressFigure={() => {
                 tapPress();
                 router.push("/(app)/budget");
               }}
             >
-              <Facts
-                items={[
-                  { kicker: "Spent", value: money(spentCents) },
-                  { kicker: "Plan", value: money(totalPlannedCents) },
-                ]}
-              />
+              <Facts items={heroFacts(true)} />
             </Hero>
           ) : (
             <Hero
@@ -148,23 +228,14 @@ export default function HomeScreen() {
               tone={(worth ?? 0) < 0 ? "bad" : undefined}
               points={shownDash.spendSeries}
             >
-              <Facts
-                items={[
-                  { kicker: "Income", value: money(shownDash.cashFlow.incomeCents) },
-                  { kicker: "Spent", value: money(shownDash.cashFlow.spendingCents) },
-                  {
-                    kicker: shownDash.cashFlow.savedCents < 0 ? "Net deficit" : "Net saved",
-                    value: money(Math.abs(shownDash.cashFlow.savedCents)),
-                    color: shownDash.cashFlow.savedCents < 0 ? colors.danger : colors.positive,
-                  },
-                ]}
-              />
+              <Facts items={heroFacts(false)} />
             </Hero>
           )}
 
           <Card>
             <MenuRow
               title="Your money"
+              subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} left` : undefined}
               icon="wallet"
               onPress={() => {
                 tapPress();
@@ -222,12 +293,12 @@ export default function HomeScreen() {
                           divided={index > 0}
                           name={label}
                           color={tx.category?.color}
-                          meta={[whenShort, tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                          meta={[whenShort, tx.category?.name, tx.pending ? "Posts later" : ""].filter(Boolean).join(" · ")}
                           amount={flow.text}
-                          amountColor={flow.color}
+                          amountColor={tx.pending ? colors.tertiary : flow.color}
                           onPress={() => {
                             tapPress();
-                            router.push({ pathname: "/(app)/activity", params: { q: label } });
+                            router.push({ pathname: "/merchant", params: { name: label } });
                           }}
                         />
                       );
@@ -351,6 +422,13 @@ export default function HomeScreen() {
           <MenuRow
             title="Goals"
             icon="flag"
+            trailing={
+              nearest && nearestPace ? (
+                <Text style={{ fontSize: 14, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>
+                  {`${money(nearest.remainingCents)} · ${nearestPace.label}`}
+                </Text>
+              ) : undefined
+            }
             onPress={() => {
               setMoneyOpen(false);
               router.push("/goals");
@@ -359,6 +437,20 @@ export default function HomeScreen() {
           <MenuRow
             title="Cash flow"
             icon="flow"
+            trailing={
+              shownDash ? (
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color: savedCents < 0 ? colors.danger : colors.positive,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {money(Math.abs(savedCents))}
+                </Text>
+              ) : undefined
+            }
             onPress={() => {
               setMoneyOpen(false);
               router.push("/cash-flow");
@@ -367,6 +459,16 @@ export default function HomeScreen() {
           <MenuRow
             title="Investments"
             icon="chart"
+            trailing={
+              marketCents == null ? undefined : (
+                <Text style={{ fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
+                  <Text style={{ color: colors.ink }}>{money(marketCents)}</Text>
+                  {gainCents != null ? (
+                    <Text style={{ color: gainCents >= 0 ? colors.positive : colors.danger }}>{`  ${money(Math.abs(gainCents))}`}</Text>
+                  ) : null}
+                </Text>
+              )
+            }
             onPress={() => {
               setMoneyOpen(false);
               router.push("/investments");

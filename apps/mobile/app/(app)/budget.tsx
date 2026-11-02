@@ -1,8 +1,8 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
-import { budgetPace, dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
+import { budgetPace, dayLabel, flowMoney, money, monthFraction, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { mergeBudget, subscribeLive } from "../../src/live-edits";
 import { celebrate } from "../../src/toast";
@@ -41,6 +41,8 @@ function budgetAgrees(server: Budget, local: Budget) {
 }
 
 export default function BudgetScreen() {
+  const params = useLocalSearchParams<{ categoryId?: string }>();
+  const openedCategory = useRef<string | null>(null);
   const now = new Date();
   const opening = peek<Budget>(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
@@ -227,6 +229,15 @@ export default function BudgetScreen() {
     setConfirmDelete(false);
     load();
   }
+
+  useEffect(() => {
+    const id = typeof params.categoryId === "string" ? params.categoryId : "";
+    if (!id || !plan || openedCategory.current === id) return;
+    const row = plan.rows.find((item) => item.category.id === id);
+    if (!row) return;
+    openedCategory.current = id;
+    openRow(row);
+  }, [params.categoryId, plan]);
 
   function openRow(row: BudgetRow) {
     setEditing(row);
@@ -463,6 +474,8 @@ export default function BudgetScreen() {
                     <Card>
                       {group.rows.map((row, index) => {
                         const paced = row.availableCents > 0;
+                        const rowPace = paced ? budgetPace(row.spentCents, row.availableCents) : null;
+                        const rowPaceColor = rowPace?.tone === "bad" ? colors.danger : rowPace?.tone === "warn" ? colors.warn : colors.positive;
                         const rowOver = paced && row.remainingCents < 0;
                         const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
 
@@ -491,9 +504,9 @@ export default function BudgetScreen() {
                                 ) : null}
                               </View>
                               <View style={{ alignItems: "flex-end", gap: 2 }}>
-                                {paced ? (
-                                  <Text style={{ fontSize: 12, fontWeight: "500", color: rowOver ? colors.danger : colors.tertiary }}>
-                                    {rowOver ? "Over" : "Left"}
+                                {rowPace ? (
+                                  <Text style={{ fontSize: 12, fontWeight: "700", color: rowPaceColor }}>
+                                    {rowPace.label}
                                   </Text>
                                 ) : null}
                                 <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
@@ -504,6 +517,7 @@ export default function BudgetScreen() {
                                 value={row.spentCents}
                                 max={row.availableCents}
                                 color={rowOver ? colors.danger : color}
+                                markerRatio={monthFraction()}
                               />
                             ) : null}
                           </Pressable>
@@ -634,6 +648,8 @@ export default function BudgetScreen() {
       {editing && data ? (
         (() => {
           const paced = editing.availableCents > 0;
+          const rowPace = paced ? budgetPace(editing.spentCents, editing.availableCents) : null;
+          const rowPaceColor = rowPace?.tone === "bad" ? colors.danger : rowPace?.tone === "warn" ? colors.warn : colors.positive;
           const rowOver = paced && editing.remainingCents < 0;
           const figure = paced ? Math.abs(editing.remainingCents) : editing.spentCents;
           const color = shelfColor(editing.group?.color ?? "#8B939E");
@@ -643,6 +659,8 @@ export default function BudgetScreen() {
           return (
             <Sheet
               title={catName || editing.category.name}
+              subtitle={rowPace?.label}
+              subtitleColor={rowPace ? rowPaceColor : undefined}
               height="80%"
               onClose={() => setEditing(null)}
             >
@@ -679,6 +697,7 @@ export default function BudgetScreen() {
                       value={editing.spentCents}
                       max={editing.availableCents}
                       color={rowOver ? colors.danger : color}
+                      markerRatio={monthFraction()}
                     />
                   ) : null}
 

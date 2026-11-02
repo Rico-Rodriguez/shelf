@@ -4,13 +4,46 @@ import { Pressable, Text } from "react-native";
 import { api } from "../src/api";
 import { Back, Card, colors, Loading, Note, Screen } from "../src/ui";
 
-type NoteRow = { id: string; title: string; body: string; href: string | null; readAt: string | null };
+type NoteRow = {
+  id: string;
+  title: string;
+  body: string;
+  href: string | null;
+  kind?: string;
+  dedupeKey?: string | null;
+  readAt: string | null;
+};
 
-function openNote(href: string | null) {
-  if (!href) return;
+function idAfter(key: string, prefix: string): string {
+  if (!key.startsWith(prefix)) return "";
+  const rest = key.slice(prefix.length);
+  const split = rest.lastIndexOf(":");
+  return split >= 0 ? rest.slice(0, split) : rest;
+}
+
+function openNote(row: NoteRow) {
+  const href = row.href ?? "";
+  const key = row.dedupeKey ?? "";
+  if (row.kind === "review" || href.includes("reviewed=false")) {
+    router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+    return;
+  }
+  if (row.kind === "bill" || row.kind === "price" || href.startsWith("/recurring")) {
+    const id = idAfter(key, row.kind === "price" ? "price:" : "bill:");
+    router.push(id ? { pathname: "/bills", params: { id } } : "/bills");
+    return;
+  }
+  if (row.kind === "budget" || href.startsWith("/budget")) {
+    const categoryId = idAfter(key, "over:");
+    router.push(categoryId ? { pathname: "/(app)/budget", params: { categoryId } } : "/(app)/budget");
+    return;
+  }
+  if (row.kind === "large") {
+    if (row.title) router.push({ pathname: "/merchant", params: { name: row.title } });
+    else router.push("/(app)/activity");
+    return;
+  }
   if (href.startsWith("/transactions")) router.push("/(app)/activity");
-  else if (href.startsWith("/recurring")) router.push("/bills");
-  else if (href.startsWith("/budget")) router.push("/(app)/budget");
   else if (href.startsWith("/accounts")) router.push("/(app)/accounts");
 }
 
@@ -47,7 +80,7 @@ export default function NotificationsScreen() {
             <Pressable
               key={row.id}
               onPress={() => {
-                openNote(row.href);
+                openNote(row);
                 void api("/api/notifications", { method: "POST", body: JSON.stringify({ id: row.id }) }).then(load);
               }}
               style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 12, gap: 2, justifyContent: "center", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, opacity: row.readAt ? 0.55 : 1 }}

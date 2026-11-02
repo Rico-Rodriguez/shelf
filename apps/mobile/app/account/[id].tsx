@@ -2,20 +2,24 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { api, peek } from "../../src/api";
-import { isLiability, money, outflow, payoffMonths, shortDate } from "../../src/format";
+import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
+import { accountIdentity, dayLabel, isLiability, money, payoffMonthLabel, payoffMonths, shortDate } from "../../src/format";
+import { HoldingRow, type HoldingRowData } from "../../src/holding";
 import { clearAccountOverlay, overlayAccount } from "../../src/live-edits";
 import { connectBank } from "../../src/plaid";
-import { Back, Button, Card, colors, Field, Hero, LoadError, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
+import { Back, Button, Card, colors, Field, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
 
 type Liability = { apr: number | null; minimumCents: number | null; due: string | null };
 type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
-type Holding = { id?: string; institutionValueCents: number; account: { id: string } | null; security: { name?: string; ticker?: string; type?: string | null } | null };
+type Holding = HoldingRowData & { id?: string; account: { id: string } | null; security: { name?: string; ticker?: string; type?: string | null } | null };
 
 type Detail = {
   account: {
     id: string;
     name: string;
     type: string;
+    subtype?: string | null;
+    mask?: string | null;
     currentBalanceCents: number;
     availableBalanceCents?: number | null;
     isHidden: boolean;
@@ -37,6 +41,9 @@ export default function AccountScreen() {
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
+  const [charges, setCharges] = useState<Charge[]>([]);
+  const [groups, setGroups] = useState<ChargeGroup[]>([]);
+  const [selected, setSelected] = useState<Charge | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
 
@@ -58,6 +65,12 @@ export default function AccountScreen() {
       .catch(() => undefined);
     void api<{ holdings: Holding[] }>("/api/investments")
       .then((res) => setHoldings(res.holdings.filter((row) => row.account?.id === id)))
+      .catch(() => undefined);
+    void api<{ transactions: Charge[] }>(`/api/transactions?accountId=${id}&limit=500`)
+      .then((res) => setCharges(res.transactions))
+      .catch(() => undefined);
+    void api<{ groups: ChargeGroup[] }>("/api/categories")
+      .then((res) => setGroups(res.groups))
       .catch(() => undefined);
   }
 
@@ -110,11 +123,15 @@ export default function AccountScreen() {
   const months = data?.liability?.apr != null && data.liability.minimumCents != null && account
     ? payoffMonths(account.currentBalanceCents, data.liability.apr, data.liability.minimumCents)
     : undefined;
+  const identity = account ? accountIdentity(account) : "";
+  const visibleCharges = scrub ? charges.filter((tx) => tx.date === scrub.date) : charges.slice(0, 12);
+  const due = data?.liability?.due?.slice(0, 10);
+  const dueLabel = due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? shortDate(due) : data?.liability?.due || "—";
 
   return (
     <Screen
       title={account?.name ?? "Account"}
-      subtitle={item && item.status !== "ok" ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}` : item?.institutionName || undefined}
+      subtitle={identity || (item && item.status !== "ok" ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}` : item?.institutionName || undefined)}
       refresh={<Back />}
     >
       {error ? <LoadError message={error} onRetry={load} /> : null}
@@ -156,10 +173,10 @@ export default function AccountScreen() {
               <Card>
                 <RowLine label="APR" value={data.liability.apr == null ? "—" : `${data.liability.apr}%`} />
                 <RowLine label="Minimum payment" value={data.liability.minimumCents == null ? "—" : money(data.liability.minimumCents)} />
-                <RowLine label="Next due" value={data.liability.due ?? "—"} />
+                <RowLine label="Next due" value={dueLabel} />
               </Card>
               {data.liability.apr != null && data.liability.minimumCents != null ? (
-                <Note>{months == null ? "The minimum does not cover interest." : `At the minimum, about ${months} months.`}</Note>
+                <Note>{months == null ? "The minimum does not cover interest." : `Paid off ${payoffMonthLabel(months)}`}</Note>
               ) : null}
             </View>
           ) : null}
@@ -169,23 +186,45 @@ export default function AccountScreen() {
               <SpendMix rows={slices.map((slice) => ({ key: slice.name, cents: slice.cents, color: slice.color }))} />
               <Card>
                 {holdings.map((holding, index) => (
-                  <RowLine key={holding.id ?? index} label={holding.security?.ticker || holding.security?.name || "Holding"} value={money(holding.institutionValueCents)} />
+                  <HoldingRow key={holding.id ?? index} holding={holding} divided={index > 0} />
                 ))}
               </Card>
             </View>
           ) : null}
-          <Section title="Recent activity" />
+          <Section title={scrub ? dayLabel(scrub.date) : "Recent activity"} />
           <Card>
-            {data.transactions.length === 0 ? <Note>No transactions yet.</Note> : null}
-            {data.transactions.map((tx, index) => (
-              <Pressable key={tx.id} style={{ minHeight: 52, paddingHorizontal: 16, justifyContent: "center", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}>
-                <Text style={{ fontSize: 16, color: colors.ink }}>{tx.name}</Text>
-                <Text style={{ fontSize: 13, color: colors.muted }}>{`${tx.date} · ${outflow(tx.amountCents)}`}</Text>
-              </Pressable>
-            ))}
+            {visibleCharges.length === 0 ? <Note>{scrub ? "No charges that day." : "No transactions yet."}</Note> : null}
+            {visibleCharges.map((tx, index) => {
+              const when = dayLabel(tx.date);
+              const whenShort = when === "Today" || when === "Yesterday" ? when : shortDate(tx.date);
+              const flow = tx.amountCents < 0 ? `+${money(Math.abs(tx.amountCents))}` : money(tx.amountCents);
+              return (
+                <LedgerRow
+                  key={tx.id}
+                  divided={index > 0}
+                  name={tx.merchantName || tx.name}
+                  color={tx.category?.color}
+                  meta={[whenShort, tx.category?.name].filter(Boolean).join(" · ")}
+                  amount={flow}
+                  amountColor={tx.amountCents < 0 ? colors.positive : colors.ink}
+                  onPress={() => setSelected(tx)}
+                />
+              );
+            })}
           </Card>
           <Button label="All activity" tone="quiet" onPress={() => router.push({ pathname: "/(app)/activity", params: { accountId: account.id } })} />
         </>
+      ) : null}
+      {selected ? (
+        <ChargeSheet
+          tx={selected}
+          groups={groups}
+          onClose={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            load();
+          }}
+        />
       ) : null}
     </Screen>
   );

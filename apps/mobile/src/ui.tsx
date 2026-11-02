@@ -10,7 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useWordmark } from "./brand";
 import { ScrollLockProvider } from "./scroll";
 import { GroupedBars, SpendChart } from "./chart";
-import { flowMoney, money, monthLabel, shiftMonth, shortMonthLabel, todayISO, shelfColor } from "./format";
+import { dashboardPath, flowMoney, money, monthLabel, sameMerchant, shiftMonth, shortMonthLabel, todayISO, shelfColor } from "./format";
 import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
@@ -18,7 +18,7 @@ import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
 import { api, load, peek } from "./api";
 import * as SecureStore from "expo-secure-store";
 import { celebrate } from "./toast";
-import { dropQuickLog, settleQuickLog, stageQuickLog, type QuickLog } from "./live-edits";
+import { dropQuickLog, mergeBudget, mergeDashboard, settleQuickLog, stageQuickLog, type QuickLog } from "./live-edits";
 import Svg, { Circle } from "react-native-svg";
 
 export { GroupedBars, SpendChart };
@@ -695,7 +695,25 @@ export function ToggleRow({ label, detail, on, onPress, divided }: { label: stri
   );
 }
 
-export function MenuRow({ title, icon, onPress, divided, danger, active }: { title: string; icon?: string; onPress: () => void; divided?: boolean; danger?: boolean; active?: boolean }) {
+export function MenuRow({
+  title,
+  subtitle,
+  icon,
+  onPress,
+  divided,
+  danger,
+  active,
+  trailing,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  onPress: () => void;
+  divided?: boolean;
+  danger?: boolean;
+  active?: boolean;
+  trailing?: ReactNode;
+}) {
   const styles = useStyles();
   return (
     <Pressable
@@ -711,7 +729,17 @@ export function MenuRow({ title, icon, onPress, divided, danger, active }: { tit
           <Icon name={icon} size={18} color={danger ? colors.danger : active ? colors.accentInk : colors.ink} />
         </View>
       ) : null}
-      <Text style={[styles.rowTitle, { fontWeight: "500", color: danger ? colors.danger : active ? colors.accentInk : colors.ink }]}>{title}</Text>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[styles.rowTitle, { flex: 0, fontWeight: "500", color: danger ? colors.danger : active ? colors.accentInk : colors.ink }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text numberOfLines={1} style={styles.meta}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {trailing}
       {danger ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
     </Pressable>
   );
@@ -1001,16 +1029,30 @@ export function Hero({
   );
 }
 
-export function Facts({ items }: { items: { kicker: string; value: string; color?: string }[] }) {
+export function Facts({ items }: { items: { kicker: string; value: string; color?: string; onPress?: () => void }[] }) {
   const styles = useStyles();
   return (
     <View style={styles.facts}>
-      {items.map((item) => (
-        <View key={item.kicker} style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.kicker}>{item.kicker}</Text>
-          <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
-        </View>
-      ))}
+      {items.map((item) => {
+        const body = (
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.kicker}>{item.kicker}</Text>
+            <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
+          </View>
+        );
+        if (!item.onPress) return <View key={item.kicker} style={{ flex: 1 }}>{body}</View>;
+        return (
+          <Pressable
+            key={item.kicker}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.kicker} ${item.value}`}
+            onPress={item.onPress}
+            style={{ flex: 1 }}
+          >
+            {body}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -1408,6 +1450,7 @@ export function SheetContainer({
   onClose,
   title,
   subtitle,
+  subtitleColor,
   rightAction,
   children,
   minHeight = 320,
@@ -1418,6 +1461,7 @@ export function SheetContainer({
   onClose: () => void;
   title?: string;
   subtitle?: string;
+  subtitleColor?: string;
   rightAction?: ReactNode;
   children: ReactNode;
   minHeight?: number | `${number}%`;
@@ -1565,7 +1609,7 @@ export function SheetContainer({
                     {title}
                   </Text>
                   {subtitle ? (
-                    <Text style={styles.sheetSubtitle} numberOfLines={1}>
+                    <Text style={[styles.sheetSubtitle, subtitleColor ? { color: subtitleColor } : null]} numberOfLines={1}>
                       {subtitle}
                     </Text>
                   ) : null}
@@ -1614,6 +1658,7 @@ export function SheetContainer({
 export function Sheet({
   title,
   subtitle,
+  subtitleColor,
   onClose,
   children,
   height = "80%",
@@ -1621,6 +1666,7 @@ export function Sheet({
 }: {
   title: string;
   subtitle?: string;
+  subtitleColor?: string;
   onClose: () => void;
   children: ReactNode;
   height?: number | `${number}%`;
@@ -1631,6 +1677,7 @@ export function Sheet({
       visible
       title={title}
       subtitle={subtitle}
+      subtitleColor={subtitleColor}
       onClose={onClose}
       height={height}
       minHeight={minHeight}
@@ -2004,6 +2051,7 @@ export function QuickLogModal({
   const [accountId, setAccountId] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rules, setRules] = useState<{ matchMerchant: string | null; actionCategoryId: string | null }[]>([]);
 
   useEffect(() => {
     if (!visible) return;
@@ -2054,6 +2102,13 @@ export function QuickLogModal({
       const preferred = opening?.accountId && list.some((account) => account.id === opening.accountId) ? opening.accountId : null;
       setAccountId(preferred ?? match?.id ?? list[0]?.id ?? "");
     })();
+    const cachedRules = peek<{ rules: { matchMerchant: string | null; actionCategoryId: string | null }[] }>("/api/rules");
+    if (cachedRules?.rules) setRules(cachedRules.rules);
+    void api<{ rules: { matchMerchant: string | null; actionCategoryId: string | null }[] }>("/api/rules")
+      .then((res) => {
+        if (!cancelled) setRules(res.rules);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -2112,6 +2167,53 @@ export function QuickLogModal({
   const head = categoryPool.slice(0, 8);
   const quickPillCats = preferred && !head.some((c) => c.id === preferred.id) ? [preferred, ...head].slice(0, 8) : head;
   const saveLabel = !accountName ? "Choose an account" : cents > 0 ? `Add to ${accountName}` : "Enter an amount";
+  const now = new Date();
+  const rawDash = peek<{
+    transactions: {
+      id: string;
+      name: string;
+      amountCents: number;
+      date: string;
+      merchantName: string | null;
+      categoryId?: string | null;
+      category?: { id?: string } | null;
+    }[];
+    budget: { plannedCents: number; spentCents: number; remainingCents: number };
+    cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
+    unreviewed: { count: number };
+  }>(dashboardPath());
+  const dash = rawDash ? mergeDashboard(rawDash) : null;
+  const rawBudget = peek<{
+    expenseSpentCents: number;
+    rows: { category: { id: string; name: string }; availableCents: number; remainingCents: number; spentCents: number }[];
+  }>(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
+  const budget = rawBudget ? mergeBudget(rawBudget) : null;
+  const plannedCents = dash?.budget.plannedCents ?? 0;
+  const leftCents = plannedCents - (dash?.budget.spentCents ?? 0);
+  const nextLeft = isIncome ? leftCents + cents : leftCents - cents;
+  const planRow = budget?.rows.find((row) => row.category.id === selectedCatId && row.availableCents > 0);
+  const nextCategory = planRow ? (isIncome ? planRow.remainingCents + cents : planRow.remainingCents - cents) : null;
+  const seenMerchants = new Set<string>();
+  const merchantChips: { name: string; categoryId: string | null }[] = [];
+  for (const tx of dash?.transactions ?? []) {
+    const name = tx.merchantName?.trim();
+    if (!name || seenMerchants.has(name)) continue;
+    seenMerchants.add(name);
+    merchantChips.push({ name, categoryId: tx.categoryId ?? tx.category?.id ?? null });
+  }
+
+  function applyMerchant(name: string, categoryId: string | null) {
+    setMerchant(name);
+    const rule = rules.find((item) => item.matchMerchant && item.actionCategoryId && sameMerchant(name, item.matchMerchant));
+    const nextId = rule?.actionCategoryId ?? categoryId;
+    if (!nextId) return;
+    const cat = categories.find((item) => item.id === nextId);
+    if (!cat) return;
+    const income = cat.kind === "income";
+    incomeMode.current = income;
+    setIsIncome(income);
+    setSelectedCatId(cat.id);
+  }
 
   return (
     <Sheet
@@ -2188,6 +2290,33 @@ export function QuickLogModal({
           >
             {isIncome && cents > 0 ? "+" : ""}{money(cents)}
           </Text>
+          {plannedCents > 0 && cents > 0 ? (
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                textAlign: "center",
+                color: nextLeft < 0 ? palette.danger : palette.muted,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {`Left to spend ${money(nextLeft)}`}
+            </Text>
+          ) : null}
+          {planRow && nextCategory != null && cents > 0 ? (
+            <Text
+              style={{
+                fontSize: 13,
+                textAlign: "center",
+                color: nextCategory < 0 ? palette.danger : palette.tertiary,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {nextCategory < 0
+                ? `${planRow.category.name} · ${money(Math.abs(nextCategory))} over`
+                : `${planRow.category.name} · ${money(nextCategory)} left`}
+            </Text>
+          ) : null}
 
           <Pressable
             onPress={() => setPickingAccount(true)}
@@ -2211,6 +2340,39 @@ export function QuickLogModal({
               {accountName || "Choose"}
             </Text>
           </Pressable>
+
+          {merchantChips.length ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {merchantChips.map((chip) => {
+                const selected = merchant.trim().toLowerCase() === chip.name.toLowerCase();
+                return (
+                  <Pressable
+                    key={chip.name}
+                    onPress={() => {
+                      tapSelect();
+                      applyMerchant(chip.name, chip.categoryId);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 99,
+                      backgroundColor: selected
+                        ? isDark
+                          ? "rgba(255,255,255,0.18)"
+                          : "rgba(0,0,0,0.1)"
+                        : isDark
+                          ? "rgba(255,255,255,0.06)"
+                          : "rgba(0,0,0,0.04)",
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: selected ? "700" : "500", color: selected ? palette.ink : palette.muted }}>
+                      {chip.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
 
           <View
             style={{
