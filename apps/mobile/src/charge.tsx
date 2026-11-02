@@ -69,11 +69,15 @@ export function ChargeSheet({
   groups,
   onClose,
   onSaved,
+  onOptimistic,
+  onRevert,
 }: {
   tx: Charge;
   groups: ChargeGroup[];
   onClose: () => void;
-  onSaved: (clearedIds?: string[]) => void;
+  onSaved: (clearedIds?: string[], ruleId?: string | null) => void;
+  onOptimistic?: (draft: { categoryId: string | null; always: boolean; hidden: boolean; name: string }) => void;
+  onRevert?: (message: string, retry: () => void) => void;
 }) {
   const [name, setName] = useState(tx.name);
   const [categoryId, setCategoryId] = useState(tx.categoryId);
@@ -106,27 +110,25 @@ export function ChargeSheet({
       .catch(() => undefined);
   }, [tx.id]);
 
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/api/transactions/${tx.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name,
-          categoryId: categoryId || null,
-          reviewed: true,
-          hidden,
-          notes,
-          isTransfer: Boolean(transferPairId) || isTransfer,
-          goalId,
-          transferPairId,
-          tags: tagText.split(",").map((item) => item.trim()).filter(Boolean),
-          splits: splits.filter((part) => part.categoryId && part.amount).map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
-        }),
-      });
+  function save() {
+    const draft = { categoryId: categoryId || null, always: always && Boolean(categoryId), hidden, name };
+    const body = {
+      name,
+      categoryId: categoryId || null,
+      reviewed: true,
+      hidden,
+      notes,
+      isTransfer: Boolean(transferPairId) || isTransfer,
+      goalId,
+      transferPairId,
+      tags: tagText.split(",").map((item) => item.trim()).filter(Boolean),
+      splits: splits.filter((part) => part.categoryId && part.amount).map((part) => ({ categoryId: part.categoryId, amount: Number(part.amount) })),
+    };
+    const persist = async () => {
+      await api(`/api/transactions/${tx.id}`, { method: "PATCH", body: JSON.stringify(body) });
       const clearedIds: string[] = [tx.id];
-      if (always && categoryId) {
+      let ruleId: string | null = null;
+      if (draft.always && categoryId) {
         const merchant = tx.merchantName || name;
         const ruleRes = await api<{ id: string; applied?: number; ids?: string[] }>("/api/rules", {
           method: "POST",
@@ -139,16 +141,22 @@ export function ChargeSheet({
             applyUnreviewed: true,
           }),
         });
-        if (ruleRes?.ids?.length) {
-          clearedIds.push(...ruleRes.ids);
-        }
+        ruleId = ruleRes.id;
+        if (ruleRes.ids?.length) clearedIds.push(...ruleRes.ids);
       }
-      onSaved(clearedIds);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
-    } finally {
-      setBusy(false);
-    }
+      onSaved(clearedIds, ruleId);
+    };
+    const retry = () => {
+      onOptimistic?.(draft);
+      void persist().catch((err: unknown) => {
+        onRevert?.(err instanceof Error ? err.message : "Could not save", retry);
+      });
+    };
+    onOptimistic?.(draft);
+    onClose();
+    void persist().catch((err: unknown) => {
+      onRevert?.(err instanceof Error ? err.message : "Could not save", retry);
+    });
   }
 
   function categoryName(id: string | null) {

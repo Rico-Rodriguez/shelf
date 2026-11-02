@@ -18,6 +18,7 @@ import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
 import { api, load, peek } from "./api";
 import * as SecureStore from "expo-secure-store";
 import { celebrate } from "./toast";
+import { dropQuickLog, settleQuickLog, stageQuickLog, type QuickLog } from "./live-edits";
 import Svg, { Circle } from "react-native-svg";
 
 export { GroupedBars, SpendChart };
@@ -1966,14 +1967,28 @@ function pickQuickCategory(
   return pool[0] ?? null;
 }
 
+export type QuickLogDraft = {
+  amount: string;
+  merchant: string;
+  isIncome: boolean;
+  accountId: string;
+  categoryId: string | null;
+};
+
 export function QuickLogModal({
   visible,
   onClose,
   onSuccess,
+  onFail,
+  draft,
+  initialError,
 }: {
   visible: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
+  onFail?: (draft: QuickLogDraft, message: string) => void;
+  draft?: QuickLogDraft | null;
+  initialError?: string | null;
 }) {
   const { palette } = useTheme();
   const isDark = palette.scheme === "dark";
@@ -1992,17 +2007,21 @@ export function QuickLogModal({
 
   useEffect(() => {
     if (!visible) return;
-    setAmount("");
+    const opening = draft ?? null;
+    setAmount(opening?.amount ?? "");
     setPickingAccount(false);
-    setIsIncome(false);
-    incomeMode.current = false;
-    setMerchant("");
-    setError(null);
+    setIsIncome(opening?.isIncome ?? false);
+    incomeMode.current = opening?.isIncome ?? false;
+    setMerchant(opening?.merchant ?? "");
+    setError(initialError ?? null);
     setBusy(false);
+    if (opening?.categoryId) setSelectedCatId(opening.categoryId);
+    if (opening?.accountId) setAccountId(opening.accountId);
 
     const applyCats = (flat: { id: string; name: string; color: string; kind: string }[]) => {
       setCategories(flat);
-      setSelectedCatId(pickQuickCategory(flat, incomeMode.current)?.id ?? null);
+      if (opening?.categoryId && flat.some((item) => item.id === opening.categoryId)) setSelectedCatId(opening.categoryId);
+      else if (!opening) setSelectedCatId(pickQuickCategory(flat, incomeMode.current)?.id ?? null);
     };
     const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null; kind?: string }[] }[] }>("/api/categories");
     if (cachedCats?.groups) {
@@ -2032,43 +2051,55 @@ export function QuickLogModal({
       setAccounts(list);
       const saved = await SecureStore.getItemAsync(QUICK_ACCOUNT_KEY).catch(() => null);
       const match = list.find((account) => account.id === saved);
-      setAccountId(match?.id ?? list[0]?.id ?? "");
+      const preferred = opening?.accountId && list.some((account) => account.id === opening.accountId) ? opening.accountId : null;
+      setAccountId(preferred ?? match?.id ?? list[0]?.id ?? "");
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [visible, draft, initialError]);
 
   async function handleSave() {
     const cents = amountToCents(amount);
     if (cents <= 0 || !accountId) return;
-    setBusy(true);
-    setError(null);
+    const pool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
+    const chosenCat = pool.find((c) => c.id === selectedCatId) ?? pickQuickCategory(categories, isIncome);
+    const label = merchant.trim() || chosenCat?.name || (isIncome ? "Income" : "Expense");
+    const savedDraft: QuickLogDraft = { amount, merchant, isIncome, accountId, categoryId: chosenCat?.id ?? null };
+    const log: QuickLog = {
+      tempId: `tmp-${Date.now()}`,
+      name: label,
+      amountCents: isIncome ? -cents : cents,
+      date: todayISO(),
+      categoryId: chosenCat?.id ?? null,
+      categoryName: chosenCat?.name ?? null,
+      categoryColor: chosenCat?.color ?? null,
+      accountId,
+      accountName: accounts.find((account) => account.id === accountId)?.name ?? "",
+      amount,
+      merchant: label,
+      isIncome,
+    };
+    stageQuickLog(log);
+    celebrate(isIncome ? "Income logged" : "Expense logged");
+    onClose();
     try {
-      const pool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
-      const chosenCat = pool.find((c) => c.id === selectedCatId) ?? pickQuickCategory(categories, isIncome);
-      const label = merchant.trim() || chosenCat?.name || (isIncome ? "Income" : "Expense");
-      const signedDollars = (cents / 100) * (isIncome ? -1 : 1);
-
       await api("/api/transactions", {
         method: "POST",
         body: JSON.stringify({
           name: label,
-          amount: signedDollars,
-          date: todayISO(),
+          amount: (cents / 100) * (isIncome ? -1 : 1),
+          date: log.date,
           categoryId: chosenCat?.id,
           accountId,
         }),
       });
       await SecureStore.setItemAsync(QUICK_ACCOUNT_KEY, accountId).catch(() => undefined);
-
-      celebrate(isIncome ? "Income logged" : "Expense logged");
-      onSuccess?.();
-      onClose();
+      await onSuccess?.();
+      settleQuickLog(log);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to log charge");
-    } finally {
-      setBusy(false);
+      dropQuickLog(log.tempId);
+      onFail?.(savedDraft, err instanceof Error ? err.message : "Failed to log charge");
     }
   }
 

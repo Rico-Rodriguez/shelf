@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
-import { annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
+import { advanceDueDate, annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
 import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, Sheet, Switch } from "../src/ui";
 
 type Bill = {
@@ -63,11 +63,15 @@ export default function BillsScreen() {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [picking, setPicking] = useState<"cadence" | "category" | "account" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
+  const listEpoch = useRef(0);
 
   function load() {
+    const started = listEpoch.current;
     void api<{ recurrences: Bill[] }>("/api/recurring")
       .then((res) => {
+        if (started !== listEpoch.current) return;
         setRows(res.recurrences);
         setError(null);
       })
@@ -164,6 +168,22 @@ export default function BillsScreen() {
     setEditing(row);
   }
 
+  function markPaid(row: Bill) {
+    const snapshot = rows;
+    const nextDate = advanceDueDate(row.nextDate || todayISO(), row.cadence);
+    listEpoch.current += 1;
+    setRows((current) => (current ?? []).map((item) => (item.id === row.id ? { ...item, nextDate } : item)));
+    setEditing(null);
+    setActionError(null);
+    void api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: row.id }) })
+      .then(() => load())
+      .catch(() => {
+        listEpoch.current += 1;
+        setRows(snapshot);
+        setActionError({ message: "Could not mark that bill paid.", retry: () => markPaid(row) });
+      });
+  }
+
   async function save() {
     setBusy(true);
     try {
@@ -227,6 +247,7 @@ export default function BillsScreen() {
       }
     >
       {error ? <LoadError message={error} onRetry={load} /> : null}
+      {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {rows === null && !error ? <Loading /> : null}
       {rows ? (
         <Hero label="Due this month" cents={outflow} points={points.length > 1 ? points : undefined}>
@@ -324,7 +345,7 @@ export default function BillsScreen() {
               <Button
                 label="Skip this cycle"
                 tone="quiet"
-                onPress={() => void api("/api/recurring", { method: "POST", body: JSON.stringify({ action: "paid", id: editing.id }) }).then(() => { setEditing(null); load(); })}
+                onPress={() => markPaid(editing)}
               />
               <Button label={editing.isActive ? "Pause" : "Resume"} tone="quiet" onPress={() => void pause(editing)} />
               <Button label={confirmDelete ? "Delete this bill?" : "Delete"} tone="danger" onPress={() => { if (!confirmDelete) { setConfirmDelete(true); return; } void remove(editing); }} />

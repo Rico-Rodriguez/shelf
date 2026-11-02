@@ -9,7 +9,7 @@ import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
 import { useReduceTransparency, useTheme } from "../../src/theme";
-import { colors, QuickLogModal } from "../../src/ui";
+import { colors, QuickLogModal, type QuickLogDraft } from "../../src/ui";
 
 const TABS = [
   { name: "index", title: "Today", icon: "home" },
@@ -463,6 +463,8 @@ export default function AppTabs() {
   const [netWorth, setNetWorth] = useState<number | null>(null);
   const [hasPlan, setHasPlan] = useState(false);
   const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const [quickDraft, setQuickDraft] = useState<QuickLogDraft | null>(null);
+  const [quickError, setQuickError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -557,11 +559,13 @@ export default function AppTabs() {
 
   const refreshAfterLog = () => {
     const now = new Date();
-    void load(dashboardPath()).catch(() => undefined);
-    void load("/api/transactions?").catch(() => undefined);
-    void load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined);
-    void load("/api/transactions?countOnly=1").catch(() => undefined);
-    void load("/api/accounts").catch(() => undefined);
+    return Promise.all([
+      load(dashboardPath()).catch(() => undefined),
+      load("/api/transactions?").catch(() => undefined),
+      load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined),
+      load("/api/transactions?countOnly=1").catch(() => undefined),
+      load("/api/accounts").catch(() => undefined),
+    ]).then(() => undefined);
   };
 
   const onBudget = path.includes("budget");
@@ -582,7 +586,11 @@ export default function AppTabs() {
               const event = props.navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
               if (!focused && !event.defaultPrevented) props.navigation.navigate(route.name);
             }}
-            onQuickLog={() => setQuickLogOpen(true)}
+            onQuickLog={() => {
+              setQuickDraft(null);
+              setQuickError(null);
+              setQuickLogOpen(true);
+            }}
           />
         )}
         screenOptions={{
@@ -631,8 +639,15 @@ export default function AppTabs() {
       {/* Global Frictionless Quick-Log Sheet */}
       <QuickLogModal
         visible={quickLogOpen}
+        draft={quickDraft}
+        initialError={quickError}
         onClose={() => setQuickLogOpen(false)}
         onSuccess={refreshAfterLog}
+        onFail={(next, message) => {
+          setQuickDraft(next);
+          setQuickError(message);
+          setQuickLogOpen(true);
+        }}
       />
     </>
   );

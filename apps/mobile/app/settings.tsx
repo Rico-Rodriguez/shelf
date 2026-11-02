@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Share, View } from "react-native";
 import { api, apiText } from "../src/api";
-import { Back, Button, Card, Field, MenuRow, Note, Screen, Section, Segment } from "../src/ui";
+import { Back, Button, Card, Field, LoadError, MenuRow, Note, Screen, Section, Segment } from "../src/ui";
 import { useSession } from "../src/session";
 import { useTheme } from "../src/theme";
 
@@ -21,6 +21,38 @@ export default function SettingsScreen() {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [home, setHome] = useState<Household | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [sampleBusy, setSampleBusy] = useState<"load" | "clear" | null>(null);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [demoOn, setDemoOn] = useState<boolean | null>(null);
+  const demo = demoOn ?? Boolean(state?.demoLoaded);
+
+  function loadSample() {
+    setSampleBusy("load");
+    setSampleError(null);
+    setMessage(null);
+    void api<{ already?: boolean }>("/api/demo/seed", { method: "POST" })
+      .then((res) => {
+        setDemoOn(true);
+        setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
+        return refresh();
+      })
+      .catch((err: unknown) => setSampleError(err instanceof Error ? err.message : "Could not load sample data"))
+      .finally(() => setSampleBusy(null));
+  }
+
+  function clearSample() {
+    setSampleBusy("clear");
+    setSampleError(null);
+    setMessage(null);
+    void api("/api/demo/clear", { method: "POST" })
+      .then(() => {
+        setDemoOn(false);
+        setMessage("Sample data removed.");
+        return refresh();
+      })
+      .catch((err: unknown) => setSampleError(err instanceof Error ? err.message : "Could not remove sample data"))
+      .finally(() => setSampleBusy(null));
+  }
 
   useEffect(() => {
     void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => {
@@ -40,6 +72,7 @@ export default function SettingsScreen() {
   return (
     <Screen title="Settings" refresh={<Back />}>
       {message ? <Note>{message}</Note> : null}
+      {sampleError ? <LoadError message={sampleError} onRetry={demo ? clearSample : loadSample} /> : null}
 
       <Section title="Appearance" />
       <Card>
@@ -86,30 +119,16 @@ export default function SettingsScreen() {
 
       <Section title="Sample" />
       <Card>
-        {state?.demoLoaded ? (
+        {demo ? (
           <MenuRow
-            title="Remove sample data"
+            title={sampleBusy === "clear" ? "Removing sample data" : "Remove sample data"}
             danger
-            onPress={() =>
-              void api("/api/demo/clear", { method: "POST" })
-                .then(() => {
-                  setMessage("Sample data removed.");
-                  return refresh();
-                })
-                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not remove sample data"))
-            }
+            onPress={clearSample}
           />
         ) : (
           <MenuRow
-            title="Load sample data"
-            onPress={() =>
-              void api<{ already?: boolean }>("/api/demo/seed", { method: "POST" })
-                .then((res) => {
-                  setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
-                  return refresh();
-                })
-                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not load sample data"))
-            }
+            title={sampleBusy === "load" ? "Loading sample data" : "Load sample data"}
+            onPress={loadSample}
           />
         )}
       </Card>

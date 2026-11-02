@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api, load as read, peek } from "../../src/api";
+import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { isLiability, money, netWorthCents, signed } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
@@ -60,6 +60,15 @@ export default function AccountsScreen() {
       void load();
     }, [load]),
   );
+
+  useEffect(() => {
+    return subscribeCache<AccountsPayload>("/api/accounts", (res) => {
+      if (!res?.accounts) return;
+      setAccounts(res.accounts);
+      setItems(res.items ?? []);
+      setPlaidConfigured(res.plaidConfigured);
+    });
+  }, []);
 
   const all = accounts ?? [];
   const hidden = all.filter((account) => account.isHidden);

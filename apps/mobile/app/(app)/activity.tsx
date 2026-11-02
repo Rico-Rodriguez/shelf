@@ -6,10 +6,12 @@ import { BlurView } from "expo-blur";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
-import { categorizeLabel, dayLabel, flowMoney, merchantMatchKey, monthLabel, monthRange, todayISO } from "../../src/format";
+import { dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
 import { tapCelebration, tapPress, tapSelect } from "../../src/haptic";
 import { Icon, MerchantMark } from "../../src/icons";
-import { ConfirmMark, offerUndo, UndoHost } from "../../src/toast";
+import { dropQuickLog, mergeActivityRows, pinUnreviewed, settleQuickLog, stageQuickLog, subscribeLive, type QuickLog } from "../../src/live-edits";
+import { matchingReviewIds, performReview, restoreReviewRows, runUndoable } from "../../src/review-flow";
+import { ConfirmMark, dismissUndo, offerUndo, UndoHost } from "../../src/toast";
 import { SwipeRow } from "../../src/swipe";
 import {
   Button,
@@ -115,7 +117,6 @@ export default function ActivityScreen() {
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState("");
   const [income, setIncome] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState("");
@@ -123,7 +124,11 @@ export default function ActivityScreen() {
   const [addDate, setAddDate] = useState(todayISO());
   const [addMore, setAddMore] = useState(false);
   const [reviewUndoHistory, setReviewUndoHistory] = useState<{ tx: Charge; undoFn: () => Promise<void> }[]>([]);
-  const cleared = useRef(new Set<string>());
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
+  const [liveTick, setLiveTick] = useState(0);
+  const patches = useRef(new Map<string, Partial<Tx>>());
+  const reviewEpoch = useRef(0);
+  const sheetEdit = useRef<{ before: Tx; ids: string[]; snapshots: Tx[]; categoryId: string | null; hidden: boolean } | null>(null);
 
   useEffect(() => {
     if (params.focus === "1" && params.reviewed === "false") {
@@ -138,14 +143,36 @@ export default function ActivityScreen() {
   }, [query]);
 
   const load = useCallback(() => {
+    const started = reviewEpoch.current;
     return Promise.all([
       read<TxPayload>(txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range)),
       read<{ groups: ChargeGroup[] }>("/api/categories"),
       read<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
     ])
       .then(([tx, cats, accts]) => {
-        setRows(tx.transactions.filter((t) => !cleared.current.has(t.id)));
-        setUnreviewed(tx.unreviewed);
+        if (started !== reviewEpoch.current) return;
+        for (const row of tx.transactions) {
+          const patch = patches.current.get(row.id);
+          if (!patch) continue;
+          const agreed =
+            (patch.reviewed === undefined || patch.reviewed === row.reviewed) &&
+            (patch.categoryId === undefined || patch.categoryId === row.categoryId) &&
+            (patch.hidden === undefined || patch.hidden === row.hidden);
+          if (agreed) patches.current.delete(row.id);
+        }
+        setRows(
+          tx.transactions.flatMap((row) => {
+            const patch = patches.current.get(row.id);
+            const next = patch ? ({ ...row, ...patch } as Tx) : row;
+            if (next.hidden) return [];
+            if (unreviewedOnly && next.reviewed) return [];
+            return [next];
+          }),
+        );
+        const pending = [...patches.current.values()].filter((patch) => patch.reviewed && !patch.hidden).length;
+        const nextCount = Math.max(0, tx.unreviewed - pending);
+        setUnreviewed(nextCount);
+        pinUnreviewed(nextCount);
         setReviewBaseline((curr) => curr ?? tx.unreviewed);
         setFaces(tx.faces ?? {});
         setFrequentCategoryIds(tx.frequentCategoryIds ?? []);
@@ -157,98 +184,115 @@ export default function ActivityScreen() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load activity"));
   }, [search, unreviewedOnly, categoryId, accountFilter, tag, range]);
 
+  useEffect(() => subscribeLive(() => setLiveTick((value) => value + 1)), []);
+
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
   );
 
+  const shown = useMemo(
+    () =>
+      mergeActivityRows(rows, {
+        unreviewedOnly,
+        search,
+        categoryId,
+        accountId: accountFilter,
+        tag,
+        range,
+      }),
+    [rows, liveTick, unreviewedOnly, search, categoryId, accountFilter, tag, range],
+  );
+
   const grouped = useMemo(() => {
     const map = new Map<string, Tx[]>();
-    for (const tx of rows ?? []) {
+    for (const tx of shown ?? []) {
       const list = map.get(tx.date) ?? [];
       list.push(tx);
       map.set(tx.date, list);
     }
     return [...map.entries()];
-  }, [rows]);
+  }, [shown]);
 
-  const unreviewedRows = useMemo(() => (rows ?? []).filter((tx) => !tx.reviewed), [rows]);
+  const unreviewedRows = useMemo(() => (shown ?? []).filter((tx) => !tx.reviewed), [shown]);
   const categories = useMemo(() => groups.flatMap((group) => group.categories), [groups]);
 
-  function dropFromQueue(ids: string[]) {
-    for (const id of ids) cleared.current.add(id);
-    const gone = new Set(ids);
-    setRows((current) => (current ? current.filter((r) => !gone.has(r.id)) : []));
-    setUnreviewed((count) => Math.max(0, count - ids.length));
+  function categoryFace(id: string | null) {
+    if (!id) return null;
+    const cat = categories.find((item) => item.id === id);
+    return cat ? { name: cat.name, color: cat.color ?? null } : null;
   }
 
-  function restoreCleared(ids: string[]) {
-    for (const id of ids) cleared.current.delete(id);
+  function shiftCount(delta: number) {
+    setUnreviewed((count) => {
+      const next = Math.max(0, count + delta);
+      pinUnreviewed(next);
+      return next;
+    });
   }
 
-  async function handleReviewConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
-    dropFromQueue([tx.id]);
-    let appliedCount = 0;
-    let appliedIds: string[] = [];
-    let previousEntries: { id: string; categoryId: string | null }[] = [];
-    let createdRuleId: string | null = null;
-
-    try {
-      await api(`/api/transactions/${tx.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
+  function paintReviewed(ids: string[], nextCategoryId: string | null, snapshots: Tx[], keepCategory = false) {
+    const face = keepCategory ? null : categoryFace(nextCategoryId);
+    const chosen = new Set(ids);
+    for (const id of ids) {
+      const row = snapshots.find((item) => item.id === id);
+      const categoryId = keepCategory ? (row?.categoryId ?? null) : nextCategoryId;
+      patches.current.set(id, {
+        reviewed: true,
+        categoryId,
+        category: face ? { name: face.name, color: face.color ?? null } : row?.category ?? null,
       });
-
-      if (makeRule && nextCategoryId) {
-        const merchant = tx.merchantName || tx.name;
-        const res = await api<{ id: string; applied?: number; ids?: string[]; previous?: { id: string; categoryId: string | null }[] }>("/api/rules", {
-          method: "POST",
-          body: JSON.stringify({
-            name: merchant,
-            matchMerchant: merchantMatchKey(merchant),
-            actionCategoryId: nextCategoryId,
-            enabled: true,
-            applyUnreviewed: true,
-          }),
-        });
-        if (res) {
-          createdRuleId = res.id;
-          appliedCount = res.applied ?? 0;
-          appliedIds = (res.ids ?? []).filter((id) => id !== tx.id);
-          previousEntries = res.previous ?? [];
-          dropFromQueue(appliedIds);
-        }
-      }
-
-      const undoFn = async () => {
-        restoreCleared([tx.id, ...appliedIds]);
-        await api(`/api/transactions/${tx.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ categoryId: tx.categoryId, reviewed: false }),
-        });
-        if (previousEntries.length > 0) {
-          await api("/api/transactions/review-all", {
-            method: "POST",
-            body: JSON.stringify({ restore: previousEntries }),
-          });
-        }
-        if (createdRuleId) {
-          await api(`/api/rules/${createdRuleId}`, { method: "DELETE" });
-        }
-        setRows((current) => (current ? [tx, ...current] : [tx]));
-        setUnreviewed((count) => count + 1 + appliedIds.length);
-      };
-
-      setReviewUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
-
-      offerUndo(appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed", async () => {
-        await undoFn();
-        setReviewUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
-      });
-    } catch {
-      load();
     }
+    setRows((current) =>
+      (current ?? []).flatMap((row) => {
+        if (!chosen.has(row.id)) return [row];
+        const patch = patches.current.get(row.id);
+        const next = patch ? ({ ...row, ...patch } as Tx) : { ...row, reviewed: true };
+        return unreviewedOnly ? [] : [next];
+      }),
+    );
+    shiftCount(-snapshots.filter((row) => !row.reviewed).length);
+  }
+
+  function unpaintReviewed(ids: string[], snapshots: Tx[]) {
+    for (const id of ids) patches.current.delete(id);
+    setRows((current) => restoreReviewRows(current ?? [], snapshots));
+    shiftCount(snapshots.filter((row) => !row.reviewed).length);
+  }
+
+  function handleReviewConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
+    const source = rows ?? [];
+    const rule = makeRule && Boolean(nextCategoryId);
+    const ids = matchingReviewIds(source, tx, rule);
+    const snapshots = source.filter((row) => ids.includes(row.id));
+    setActionError(null);
+    reviewEpoch.current += 1;
+    performReview({
+      tx,
+      categoryId: nextCategoryId,
+      makeRule: rule,
+      ids,
+      previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId })),
+      label: ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
+      apply: () => paintReviewed(ids, nextCategoryId, snapshots),
+      restore: () => {
+        reviewEpoch.current += 1;
+        unpaintReviewed(ids, snapshots);
+      },
+      onFailure: (retry) => {
+        setReviewUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
+        setActionError({ message: "Could not save that category.", retry });
+      },
+      onUndo: (undo) => {
+        const undoFn = async () => {
+          setReviewUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
+          await undo();
+        };
+        setReviewUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
+        return undoFn;
+      },
+    });
   }
 
   function handleReviewSkip(tx: Charge) {
@@ -280,62 +324,125 @@ export default function ActivityScreen() {
     await last.undoFn();
   }, [reviewUndoHistory]);
 
-  async function hideTx(id: string) {
-    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
-    setRows((current) => (current ? current.filter((r) => r.id !== id) : []));
+  function hideTx(id: string) {
+    const snapshot = (rows ?? []).find((tx) => tx.id === id);
+    if (!snapshot) return;
+    const wasOpen = !snapshot.reviewed;
+    let undone = false;
+    setActionError(null);
+    reviewEpoch.current += 1;
+    const apply = () => {
+      patches.current.set(id, { ...patches.current.get(id), hidden: true });
+      setRows((current) => (current ?? []).filter((row) => row.id !== id));
+      if (wasOpen) shiftCount(-1);
+    };
+    const restore = () => {
+      reviewEpoch.current += 1;
+      patches.current.delete(id);
+      setRows((current) => restoreReviewRows(current ?? [], [snapshot]));
+      if (wasOpen) shiftCount(1);
+    };
+    apply();
+    const hideRequest = api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: true }) });
     offerUndo("Hidden", async () => {
-      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
-      load();
+      undone = true;
+      restore();
+      try {
+        await hideRequest;
+      } catch {
+        return;
+      }
+      try {
+        await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
+      } catch {
+        apply();
+        setActionError({ message: "Could not undo hiding that transaction.", retry: () => hideTx(id) });
+      }
     });
-    load();
+    void hideRequest.catch(() => {
+      if (undone) return;
+      dismissUndo();
+      restore();
+      setActionError({ message: "Could not hide that transaction.", retry: () => hideTx(id) });
+    });
   }
 
-  async function markDone(id: string) {
-    const previous = rows?.find((tx) => tx.id === id);
-    if (!previous) return;
-    dropFromQueue([id]);
-    try {
-      await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ reviewed: true }) });
-      offerUndo("Marked reviewed", async () => {
-        restoreCleared([id]);
-        await api(`/api/transactions/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ reviewed: false, categoryId: previous.categoryId, hidden: previous.hidden }),
-        });
-        load();
-      });
-    } finally {
-      load();
+  function markDone(id: string) {
+    const tx = (rows ?? []).find((row) => row.id === id);
+    if (!tx) return;
+    handleReviewConfirm(tx, tx.categoryId, false);
+  }
+
+  function add() {
+    const dollars = Number(amount);
+    if (!name.trim() || !Number.isFinite(dollars) || dollars === 0 || !accountId) {
+      setActionError({ message: "Add a name, amount, and account.", retry: () => add() });
+      return;
     }
-  }
-
-  async function add() {
-    setBusy(true);
-    try {
-      const dollars = Number(amount);
-      const created = await api<{ id: string }>("/api/transactions", {
-        method: "POST",
-        body: JSON.stringify({
-          accountId,
-          name,
-          amount: income ? -Math.abs(dollars) : Math.abs(dollars),
-          date: addDate || todayISO(),
-          categoryId: addCategory || undefined,
-        }),
-      });
-      setName("");
-      setAmount("");
-      setAdding(false);
-      offerUndo("Added", async () => {
+    const cents = Math.round(Math.abs(dollars) * 100);
+    const cat = categories.find((item) => item.id === addCategory);
+    const acct = accounts.find((item) => item.id === accountId);
+    const draft = { name: name.trim(), amount, income, accountId, addCategory, addDate: addDate || todayISO() };
+    const log: QuickLog = {
+      tempId: `tmp-${Date.now()}`,
+      name: draft.name,
+      amountCents: draft.income ? -cents : cents,
+      date: draft.addDate,
+      categoryId: draft.addCategory || null,
+      categoryName: cat?.name ?? null,
+      categoryColor: cat?.color ?? null,
+      accountId: draft.accountId,
+      accountName: acct?.name ?? "",
+      amount: draft.amount,
+      merchant: draft.name,
+      isIncome: draft.income,
+    };
+    let cancelled = false;
+    stageQuickLog(log);
+    setName("");
+    setAmount("");
+    setAdding(false);
+    setActionError(null);
+    const settle = api<{ id: string }>("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify({
+        accountId: log.accountId,
+        name: log.name,
+        amount: draft.income ? -Math.abs(dollars) : Math.abs(dollars),
+        date: log.date,
+        categoryId: log.categoryId || undefined,
+      }),
+    });
+    offerUndo("Added", async () => {
+      cancelled = true;
+      dropQuickLog(log.tempId);
+      try {
+        const created = await settle;
         await api(`/api/transactions/${created.id}`, { method: "DELETE" });
-        load();
+        void load();
+      } catch {
+        // The add never landed, so the row is already gone.
+      }
+    });
+    void settle
+      .then(async () => {
+        if (cancelled) return;
+        await load();
+        settleQuickLog(log);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        dropQuickLog(log.tempId);
+        dismissUndo();
+        setName(draft.name);
+        setAmount(draft.amount);
+        setIncome(draft.income);
+        setAccountId(draft.accountId);
+        setAddCategory(draft.addCategory);
+        setAddDate(draft.addDate);
+        setAdding(true);
+        setActionError({ message: "Could not add that transaction.", retry: () => add() });
       });
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add");
-    } finally {
-      setBusy(false);
-    }
   }
 
   const month = range ? { year: Number(range.start.slice(0, 4)), month: Number(range.start.slice(5, 7)) } : null;
@@ -398,6 +505,7 @@ export default function ActivityScreen() {
         }
       >
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }}>
+          {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
           {unreviewedRows.length > 0 ? (
             <ReviewDeck
               rows={unreviewedRows}
@@ -463,6 +571,7 @@ export default function ActivityScreen() {
   const listHeader = (
     <View style={{ gap: 10, paddingBottom: 8 }}>
       {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
+      {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
 
       {/* Search Bar + Filter Icon with indicator dot */}
       <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
@@ -750,32 +859,71 @@ export default function ActivityScreen() {
           }}
           groups={groups}
           onClose={() => setSelected(null)}
-          onSaved={() => {
-            const before = selected;
-            setSelected(null);
+          onOptimistic={(draft) => {
+            const before = selected ?? sheetEdit.current?.before;
+            if (!before) return;
+            const source = rows ?? [];
+            const ids = matchingReviewIds(source, before, draft.always);
+            const snapshots = source.filter((row) => ids.includes(row.id));
+            const known = snapshots.some((row) => row.id === before.id) ? snapshots : [before, ...snapshots];
+            sheetEdit.current = { before, ids, snapshots: known, categoryId: draft.categoryId, hidden: draft.hidden };
+            setActionError(null);
+            reviewEpoch.current += 1;
+            paintReviewed(ids, draft.categoryId, known);
+            setRows((current) =>
+              (current ?? []).flatMap((row) => {
+                if (row.id !== before.id) return [row];
+                if (draft.hidden) return [];
+                return [{ ...row, name: draft.name || row.name }];
+              }),
+            );
+            if (draft.hidden) {
+              patches.current.set(before.id, { ...patches.current.get(before.id), hidden: true });
+            }
+          }}
+          onRevert={(message, retry) => {
+            const edit = sheetEdit.current;
+            if (edit) {
+              reviewEpoch.current += 1;
+              unpaintReviewed(edit.ids, edit.snapshots);
+            }
+            dismissUndo();
+            setActionError({ message, retry });
+          }}
+          onSaved={(_clearedIds, ruleId) => {
+            const edit = sheetEdit.current;
+            if (!edit) return;
+            const before = edit.before;
             offerUndo("Saved", async () => {
-              await api(`/api/transactions/${before.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  name: before.name,
-                  merchantName: before.merchantName,
-                  categoryId: before.categoryId,
-                  reviewed: before.reviewed,
-                  hidden: before.hidden,
-                  notes: before.notes,
-                  goalId: before.goalId,
-                  isTransfer: before.isTransfer,
-                  transferPairId: before.transferPairId,
-                  tags: (before.tags ?? []).map((tag) => tag.name),
-                  splits: (before.splits ?? []).map((part) => ({
-                    categoryId: part.categoryId,
-                    amountCents: part.amountCents,
-                  })),
-                }),
-              });
-              load();
+              reviewEpoch.current += 1;
+              unpaintReviewed(edit.ids, edit.snapshots);
+              try {
+                await api(`/api/transactions/${before.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    name: before.name,
+                    merchantName: before.merchantName,
+                    categoryId: before.categoryId,
+                    reviewed: before.reviewed,
+                    hidden: before.hidden,
+                    notes: before.notes,
+                    goalId: before.goalId,
+                    isTransfer: before.isTransfer,
+                    transferPairId: before.transferPairId,
+                    tags: (before.tags ?? []).map((tag) => tag.name),
+                    splits: (before.splits ?? []).map((part) => ({
+                      categoryId: part.categoryId,
+                      amountCents: part.amountCents,
+                    })),
+                  }),
+                });
+                if (ruleId) await api(`/api/rules/${ruleId}`, { method: "DELETE" });
+                void load();
+              } catch {
+                paintReviewed(edit.ids, edit.categoryId, edit.snapshots);
+                setActionError({ message: "Could not undo that edit.", retry: () => undefined });
+              }
             });
-            load();
           }}
         />
       ) : null}
@@ -897,20 +1045,23 @@ export default function ActivityScreen() {
             <Button
               label={`Accept ${unreviewedRows.length}`}
               onPress={() => {
-                const restore = unreviewedRows.map((tx) => ({ id: tx.id, categoryId: tx.categoryId }));
-                void api("/api/transactions/review-all", {
-                  method: "POST",
-                  body: JSON.stringify({ ids: restore.map((tx) => tx.id) }),
-                }).then(() => {
-                  setFilters(false);
-                  offerUndo("Accepted all", async () => {
-                    await api("/api/transactions/review-all", {
-                      method: "POST",
-                      body: JSON.stringify({ restore }),
-                    });
-                    load();
-                  });
-                  load();
+                const snapshots = unreviewedRows.filter((tx) => tx.categoryId);
+                const ids = snapshots.map((tx) => tx.id);
+                const restore = snapshots.map((tx) => ({ id: tx.id, categoryId: tx.categoryId }));
+                setFilters(false);
+                setActionError(null);
+                reviewEpoch.current += 1;
+                runUndoable({
+                  label: "Accepted all",
+                  apply: () => paintReviewed(ids, null, snapshots, true),
+                  restore: () => {
+                    reviewEpoch.current += 1;
+                    unpaintReviewed(ids, snapshots);
+                  },
+                  request: () => api("/api/transactions/review-all", { method: "POST", body: JSON.stringify({ ids }) }).then(() => undefined),
+                  compensate: () => api("/api/transactions/review-all", { method: "POST", body: JSON.stringify({ restore }) }).then(() => undefined),
+                  onFailure: (retry) => setActionError({ message: "Could not accept those transactions.", retry }),
+                  onUndoFailure: (retry) => setActionError({ message: "Could not undo accepting those.", retry }),
                 });
               }}
             />
@@ -979,7 +1130,7 @@ export default function ActivityScreen() {
               </Pressable>
             ))}
           </Card>
-          <Button label="Add transaction" onPress={() => void add()} busy={busy} />
+          <Button label="Add transaction" onPress={add} />
         </Sheet>
       ) : null}
 
@@ -997,38 +1148,40 @@ export default function ActivityScreen() {
           <Button
             label="Mark reviewed"
             onPress={() => {
-              const previous = (rows ?? []).filter((tx) => selectedIds.includes(tx.id)).map((tx) => ({
-                id: tx.id,
-                categoryId: tx.categoryId,
-                reviewed: tx.reviewed,
-                hidden: tx.hidden,
-              }));
-              void Promise.all(
-                selectedIds.map((id) =>
-                  api(`/api/transactions/${id}`, {
-                    method: "PATCH",
-                    body: JSON.stringify({ categoryId: bulkCategory || undefined, reviewed: true }),
-                  }),
-                ),
-              ).then(() => {
-                setSelectedIds([]);
-                setSelecting(false);
-                offerUndo("Reviewed selected", async () => {
-                  await Promise.all(
-                    previous.map((tx) =>
-                      api(`/api/transactions/${tx.id}`, {
+              const snapshots = (rows ?? []).filter((tx) => selectedIds.includes(tx.id));
+              const ids = snapshots.map((tx) => tx.id);
+              const categoryOverride = bulkCategory || null;
+              setSelectedIds([]);
+              setSelecting(false);
+              setActionError(null);
+              reviewEpoch.current += 1;
+              runUndoable({
+                label: "Reviewed selected",
+                apply: () => paintReviewed(ids, categoryOverride, snapshots, !categoryOverride),
+                restore: () => {
+                  reviewEpoch.current += 1;
+                  unpaintReviewed(ids, snapshots);
+                },
+                request: () =>
+                  Promise.all(
+                    ids.map((id) =>
+                      api(`/api/transactions/${id}`, {
                         method: "PATCH",
-                        body: JSON.stringify({
-                          categoryId: tx.categoryId,
-                          reviewed: tx.reviewed,
-                          hidden: tx.hidden,
-                        }),
+                        body: JSON.stringify({ categoryId: categoryOverride || undefined, reviewed: true }),
                       }),
                     ),
-                  );
-                  load();
-                });
-                load();
+                  ).then(() => undefined),
+                compensate: () =>
+                  Promise.all(
+                    snapshots.map((tx) =>
+                      api(`/api/transactions/${tx.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ categoryId: tx.categoryId, reviewed: tx.reviewed, hidden: tx.hidden }),
+                      }),
+                    ),
+                  ).then(() => undefined),
+                onFailure: (retry) => setActionError({ message: "Could not mark those reviewed.", retry }),
+                onUndoFailure: (retry) => setActionError({ message: "Could not undo that review.", retry }),
               });
             }}
           />

@@ -162,6 +162,39 @@ export function addDays(iso: string, days: number): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/** Move a due date by whole months and clamp to the last day of the target month. */
+export function addCalendarMonths(iso: string, months: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const absolute = year * 12 + monthIndex + months;
+  const nextYear = Math.floor(absolute / 12);
+  const nextMonth = ((absolute % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(nextYear, nextMonth + 1, 0)).getUTCDate();
+  const clamped = Math.min(day, lastDay);
+  return `${nextYear}-${String(nextMonth + 1).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
+}
+
+/** Next due date after marking a bill paid. Matches the server's cadence step. */
+export function advanceDueDate(due: string, cadence: string): string {
+  if (cadence === "weekly") return addDays(due, 7);
+  if (cadence === "biweekly") return addDays(due, 14);
+  if (cadence === "quarterly") return addCalendarMonths(due, 3);
+  if (cadence === "yearly") return addCalendarMonths(due, 12);
+  return addCalendarMonths(due, 1);
+}
+
+export function monthlyNeedCents(remainingCents: number, targetDate: string | null, today = todayISO()): number | null {
+  if (!targetDate || remainingCents <= 0) return null;
+  if (targetDate < today) return remainingCents;
+  const a = new Date(`${today}T12:00:00`);
+  const b = new Date(`${targetDate}T12:00:00`);
+  const months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  return Math.ceil(remainingCents / (months > 0 ? months : 1));
+}
+
 const CADENCE_DAYS: Record<string, number> = {
   weekly: 7,
   biweekly: 14,

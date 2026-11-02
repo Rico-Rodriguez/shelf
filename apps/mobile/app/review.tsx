@@ -5,11 +5,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/api";
 import { Charge, ChargeGroup } from "../src/charge";
 import { ReviewDeck } from "../src/decide";
-import { merchantMatchKey } from "../src/format";
 import { tapCelebration, tapPress } from "../src/haptic";
 import { Icon } from "../src/icons";
-import { ConfirmMark, offerUndo, UndoHost } from "../src/toast";
-import { colors, Loading } from "../src/ui";
+import { pinUnreviewed } from "../src/live-edits";
+import { matchingReviewIds, performReview, restoreReviewRows } from "../src/review-flow";
+import { ConfirmMark, UndoHost } from "../src/toast";
+import { colors, LoadError, Loading } from "../src/ui";
 
 type TxPayload = {
   transactions: Charge[];
@@ -20,10 +21,6 @@ type TxPayload = {
 
 type UndoAction = {
   tx: Charge;
-  label: string;
-  appliedIds: string[];
-  previousEntries: { id: string; categoryId: string | null }[];
-  createdRuleId: string | null;
   undoFn: () => Promise<void>;
 };
 
@@ -35,20 +32,33 @@ export default function ReviewScreen() {
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const [unreviewed, setUnreviewed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
   const [undoHistory, setUndoHistory] = useState<UndoAction[]>([]);
-  const cleared = useRef(new Set<string>());
+  const patches = useRef(new Map<string, { reviewed: boolean; categoryId: string | null; category: Charge["category"] }>());
+  const epoch = useRef(0);
 
   const load = useCallback(() => {
+    const started = epoch.current;
     return Promise.all([
       api<TxPayload>("/api/transactions?reviewed=false"),
       api<{ groups: ChargeGroup[] }>("/api/categories"),
     ])
       .then(([tx, cats]) => {
-        setRows(tx.transactions.filter((t) => !cleared.current.has(t.id)));
-        setUnreviewed(tx.unreviewed);
+        if (started !== epoch.current) return;
+        const returned = new Set(tx.transactions.map((row) => row.id));
+        for (const id of [...patches.current.keys()]) {
+          const row = tx.transactions.find((item) => item.id === id);
+          if (!returned.has(id) || row?.reviewed) patches.current.delete(id);
+        }
+        setRows(tx.transactions.filter((row) => !row.reviewed && !patches.current.get(row.id)?.reviewed));
+        const pending = [...patches.current.values()].filter((patch) => patch.reviewed).length;
+        const nextCount = Math.max(0, tx.unreviewed - pending);
+        setUnreviewed(nextCount);
+        pinUnreviewed(nextCount);
         setFaces(tx.faces ?? {});
         setFrequentCategoryIds(tx.frequentCategoryIds ?? []);
         setReviewBaseline((curr) => curr ?? tx.unreviewed);
+        setGroups(cats.groups);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load review"));
@@ -59,98 +69,75 @@ export default function ReviewScreen() {
   }, [load]);
 
   const unreviewedRows = useMemo(() => (rows ?? []).filter((tx) => !tx.reviewed), [rows]);
+  const categories = useMemo(() => groups.flatMap((group) => group.categories), [groups]);
 
-  function dropFromQueue(ids: string[]) {
-    for (const id of ids) cleared.current.add(id);
-    const gone = new Set(ids);
-    setRows((current) => (current ? current.filter((r) => !gone.has(r.id)) : []));
-    setUnreviewed((count) => Math.max(0, count - ids.length));
+  function categoryFace(id: string | null): Charge["category"] {
+    if (!id) return null;
+    const cat = categories.find((item) => item.id === id);
+    return cat ? { name: cat.name, color: cat.color ?? null } : null;
   }
 
-  function restoreCleared(ids: string[]) {
-    for (const id of ids) cleared.current.delete(id);
+  function shiftCount(delta: number) {
+    setUnreviewed((count) => {
+      const next = Math.max(0, count + delta);
+      pinUnreviewed(next);
+      return next;
+    });
   }
 
-  async function handleConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
-    dropFromQueue([tx.id]);
-    let appliedCount = 0;
-    let appliedIds: string[] = [];
-    let previousEntries: { id: string; categoryId: string | null }[] = [];
-    let createdRuleId: string | null = null;
-
-    try {
-      await api(`/api/transactions/${tx.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ categoryId: nextCategoryId, reviewed: true }),
-      });
-
-      if (makeRule && nextCategoryId) {
-        const merchant = tx.merchantName || tx.name;
-        const res = await api<{ id: string; applied?: number; ids?: string[]; previous?: { id: string; categoryId: string | null }[] }>("/api/rules", {
-          method: "POST",
-          body: JSON.stringify({
-            name: merchant,
-            matchMerchant: merchantMatchKey(merchant),
-            actionCategoryId: nextCategoryId,
-            enabled: true,
-            applyUnreviewed: true,
-          }),
-        });
-        if (res) {
-          createdRuleId = res.id;
-          appliedCount = res.applied ?? 0;
-          appliedIds = (res.ids ?? []).filter((id) => id !== tx.id);
-          previousEntries = res.previous ?? [];
-          dropFromQueue(appliedIds);
-        }
-      }
-
-      const undoFn = async () => {
-        restoreCleared([tx.id, ...appliedIds]);
-        await api(`/api/transactions/${tx.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ categoryId: tx.categoryId, reviewed: false }),
-        });
-        if (previousEntries.length > 0) {
-          await api("/api/transactions/review-all", {
-            method: "POST",
-            body: JSON.stringify({ restore: previousEntries }),
-          });
-        }
-        if (createdRuleId) {
-          await api(`/api/rules/${createdRuleId}`, { method: "DELETE" });
-        }
-        setRows((current) => (current ? [tx, ...current] : [tx]));
-        setUnreviewed((count) => count + 1 + appliedIds.length);
-      };
-
-      const undoItem: UndoAction = {
-        tx,
-        label: appliedCount > 0 ? `Categorized ${appliedCount + 1}` : "Reviewed",
-        appliedIds,
-        previousEntries,
-        createdRuleId,
-        undoFn,
-      };
-
-      setUndoHistory((prev) => [undoItem, ...prev]);
-
-      offerUndo(undoItem.label, async () => {
-        await undoFn();
-        setUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
-      });
-    } catch {
-      load();
+  function paint(ids: string[], categoryId: string | null, snapshots: Charge[]) {
+    const face = categoryFace(categoryId);
+    const chosen = new Set(ids);
+    for (const id of ids) {
+      patches.current.set(id, { reviewed: true, categoryId, category: face });
     }
+    setRows((current) => (current ?? []).filter((row) => !chosen.has(row.id)));
+    shiftCount(-snapshots.filter((row) => !row.reviewed).length);
+  }
+
+  function unpaint(ids: string[], snapshots: Charge[]) {
+    for (const id of ids) patches.current.delete(id);
+    setRows((current) => restoreReviewRows(current ?? [], snapshots));
+    shiftCount(snapshots.filter((row) => !row.reviewed).length);
+  }
+
+  function handleConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
+    const source = rows ?? [];
+    const rule = makeRule && Boolean(nextCategoryId);
+    const ids = matchingReviewIds(source, tx, rule);
+    const snapshots = source.filter((row) => ids.includes(row.id));
+    setActionError(null);
+    epoch.current += 1;
+    performReview({
+      tx,
+      categoryId: nextCategoryId,
+      makeRule: rule,
+      ids,
+      previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId })),
+      label: ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
+      apply: () => paint(ids, nextCategoryId, snapshots),
+      restore: () => {
+        epoch.current += 1;
+        unpaint(ids, snapshots);
+      },
+      onFailure: (retry) => {
+        setUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
+        setActionError({ message: "Could not save that category.", retry });
+      },
+      onUndo: (undo) => {
+        const undoFn = async () => {
+          setUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
+          await undo();
+        };
+        setUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
+        return undoFn;
+      },
+    });
   }
 
   function handleSkip(tx: Charge) {
     const undoItem: UndoAction = {
       tx,
-      label: "Skipped",
-      appliedIds: [],
-      previousEntries: [],
-      createdRuleId: null,
       undoFn: async () => {
         setRows((current) => {
           if (!current) return [tx];
@@ -220,9 +207,8 @@ export default function ReviewScreen() {
         </Pressable>
       </View>
 
-      {error ? (
-        <Text style={styles.errorText}>{error}</Text>
-      ) : null}
+      {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
+      {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
 
       {/* Loading state */}
       {rows === null && !error ? (
