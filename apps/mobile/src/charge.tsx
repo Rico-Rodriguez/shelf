@@ -71,6 +71,7 @@ export function ChargeSheet({
   onSaved,
   onOptimistic,
   onRevert,
+  onHold,
 }: {
   tx: Charge;
   groups: ChargeGroup[];
@@ -78,6 +79,15 @@ export function ChargeSheet({
   onSaved: (clearedIds?: string[], ruleId?: string | null) => void;
   onOptimistic?: (draft: { categoryId: string | null; always: boolean; hidden: boolean; name: string }) => void;
   onRevert?: (message: string, retry: () => void) => void;
+  onHold?: (hold: {
+    categoryId: string | null;
+    always: boolean;
+    hidden: boolean;
+    name: string;
+    body: Record<string, unknown>;
+    merchant: string;
+    rename?: string;
+  }) => void;
 }) {
   const [name, setName] = useState(tx.name);
   const [categoryId, setCategoryId] = useState(tx.categoryId);
@@ -146,13 +156,23 @@ export function ChargeSheet({
       }
       onSaved(clearedIds, ruleId);
     };
+    onOptimistic?.(draft);
+    if (onHold) {
+      onHold({
+        ...draft,
+        body,
+        merchant: tx.merchantName || name,
+        rename: name !== tx.name ? name : undefined,
+      });
+      onClose();
+      return;
+    }
     const retry = () => {
       onOptimistic?.(draft);
       void persist().catch((err: unknown) => {
         onRevert?.(err instanceof Error ? err.message : "Could not save", retry);
       });
     };
-    onOptimistic?.(draft);
     onClose();
     void persist().catch((err: unknown) => {
       onRevert?.(err instanceof Error ? err.message : "Could not save", retry);

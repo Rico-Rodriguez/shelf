@@ -136,15 +136,27 @@ export function merchantKey(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-/** Stable merchant stem for rules, so store numbers and card suffixes still match. */
+/**
+ * Merchant key for rules. Lowercase, strip punctuation, collapse spaces, and drop one trailing " - {place}".
+ * Keep this in step with apps/mobile/src/format.ts.
+ */
 export function merchantMatchKey(name: string) {
-  const cleaned = name
+  const withoutPlace = name.replace(/\s+-\s+[^-]+$/, "").trim();
+  return withoutPlace
     .toLowerCase()
-    .replace(/[#*]+\s*[a-z0-9]+/g, " ")
-    .replace(/\b\d{3,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (cleaned.length >= 3) return cleaned;
-  return merchantKey(name);
+}
+
+/** Same payee when the keys match, or they share a word-boundary prefix of at least two words. A single word does not glue longer names together. */
+export function sameMerchant(a: string, b: string): boolean {
+  const left = merchantMatchKey(a).split(" ").filter(Boolean);
+  const right = merchantMatchKey(b).split(" ").filter(Boolean);
+  if (!left.length || !right.length) return false;
+  let shared = 0;
+  const limit = Math.min(left.length, right.length);
+  while (shared < limit && left[shared] === right[shared]) shared += 1;
+  if (shared === left.length && shared === right.length) return true;
+  return shared >= 2;
 }

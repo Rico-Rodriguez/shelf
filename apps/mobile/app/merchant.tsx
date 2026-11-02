@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../src/api";
-import { flowMoney, merchantMatchKey } from "../src/format";
+import { flowMoney, merchantMatchKey, sameMerchant } from "../src/format";
 import { Back, Button, Card, Hero, LedgerRow, Loading, Note, Screen } from "../src/ui";
 
 type Tx = { id: string; name: string; date: string; amountCents: number; pending: boolean; category: { id: string; name: string } | null };
@@ -26,7 +26,7 @@ export default function MerchantScreen() {
       .catch(() => undefined);
     void api<{ rules: Rule[] }>("/api/rules")
       .then((res) => {
-        const match = res.rules.find((item) => item.matchMerchant && name.toLowerCase().includes(item.matchMerchant.toLowerCase()));
+        const match = res.rules.find((item) => item.matchMerchant && sameMerchant(name, item.matchMerchant));
         setRule(match ?? null);
       })
       .catch(() => undefined);
