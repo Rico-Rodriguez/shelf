@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import {
   accounts,
   budgetItems,
+  budgetMonths,
   goals,
   goalAccounts,
   holdings,
@@ -18,12 +19,10 @@ import { getOrCreateBudgetMonth } from "./budget";
 import { nid } from "./ids";
 import { addDays, addMonths, todayISO, yearMonth } from "./dates";
 import { snapshotNetWorth } from "./networth";
-import { prepareVault, sealedBudgetItemWrite } from "./secrets";
+import { prepareVault, sealedBudgetItemWrite, sealedBudgetMonthWrite } from "./secrets";
 
 export async function seedDemoHouse(dek: Buffer) {
   const db = await getDb();
-  const [cfg] = await db.select().from(settings);
-  if (cfg?.demoLoaded) return { ok: true, already: true };
 
   const checking = nid();
   const savings = nid();
@@ -148,6 +147,11 @@ export async function seedDemoHouse(dek: Buffer) {
     if (!planned) continue;
     await db.update(budgetItems).set(sealedBudgetItemWrite(planned, 0, dek)).where(eq(budgetItems.id, item.id));
   }
+
+  await db
+    .update(budgetMonths)
+    .set(sealedBudgetMonthWrite(320_000, dek, openedMonth.flexPoolCents ?? 0))
+    .where(eq(budgetMonths.id, openedMonth.id));
 
   await snapshotNetWorth(dek);
   const prev = addMonths(year, month, -1);

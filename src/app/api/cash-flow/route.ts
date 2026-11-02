@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { accounts, categories, categoryGroups, transactionSplits, transactions } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
-import { addMonths, monthKey, yearMonth } from "@/lib/dates";
+import { addMonths, monthKey, requestedMonth } from "@/lib/dates";
 import { transactionParts } from "@/lib/spend";
 import { openAccount, openSplit, openTx } from "@/lib/secrets";
 
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const categoryId = url.searchParams.get("categoryId");
     const merchant = url.searchParams.get("merchant")?.toLowerCase();
     const months = Number(url.searchParams.get("months") ?? 12);
-    const now = yearMonth();
+    const now = requestedMonth(url);
     const db = await getDb();
     const [txRows, splitRows, cats, groups, acctRows] = await Promise.all([
       db.select().from(transactions),

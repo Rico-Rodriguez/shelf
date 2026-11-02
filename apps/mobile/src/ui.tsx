@@ -1908,6 +1908,15 @@ export function SpendCard({
   );
 }
 
+function pickQuickCategory(
+  list: { id: string; name: string; color: string; kind: string }[],
+  income: boolean,
+) {
+  const pool = list.filter((c) => (income ? c.kind === "income" : c.kind !== "income"));
+  if (!income) return pool.find((c) => c.id === "cat-uncategorized") ?? pool[0] ?? null;
+  return pool[0] ?? null;
+}
+
 export function QuickLogModal({
   visible,
   onClose,
@@ -1926,7 +1935,8 @@ export function QuickLogModal({
   const [isIncome, setIsIncome] = useState(false);
   const [merchant, setMerchant] = useState("");
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
-  const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color: string; kind: string }[]>([]);
+  const incomeMode = useRef(false);
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [accountId, setAccountId] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -1936,21 +1946,22 @@ export function QuickLogModal({
     if (!visible) return;
     setCents(0);
     setIsIncome(false);
+    incomeMode.current = false;
     setMerchant("");
     setError(null);
     setBusy(false);
 
-    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories");
-    if (cachedCats?.groups) {
-      const flat = cachedCats.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
+    const applyCats = (flat: { id: string; name: string; color: string; kind: string }[]) => {
       setCategories(flat);
-      if (flat[0]) setSelectedCatId(flat[0].id);
+      setSelectedCatId(pickQuickCategory(flat, incomeMode.current)?.id ?? null);
+    };
+    const cachedCats = peek<{ groups: { name: string; categories: { id: string; name: string; color?: string | null; kind?: string }[] }[] }>("/api/categories");
+    if (cachedCats?.groups) {
+      applyCats(cachedCats.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color), kind: c.kind ?? "expense" })));
     } else {
-      void api<{ groups: { name: string; categories: { id: string; name: string; color?: string | null }[] }[] }>("/api/categories")
+      void api<{ groups: { name: string; categories: { id: string; name: string; color?: string | null; kind?: string }[] }[] }>("/api/categories")
         .then((res) => {
-          const flat = res.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color) }));
-          setCategories(flat);
-          if (flat[0]) setSelectedCatId(flat[0].id);
+          applyCats(res.groups.flatMap((g) => g.categories).map((c) => ({ id: c.id, name: c.name, color: shelfColor(c.color), kind: c.kind ?? "expense" })));
         })
         .catch(() => undefined);
     }
@@ -1974,7 +1985,8 @@ export function QuickLogModal({
     setBusy(true);
     setError(null);
     try {
-      const chosenCat = categories.find((c) => c.id === selectedCatId);
+      const pool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
+      const chosenCat = pool.find((c) => c.id === selectedCatId) ?? pickQuickCategory(categories, isIncome);
       const label = merchant.trim() || chosenCat?.name || (isIncome ? "Income" : "Expense");
       const signedDollars = (cents / 100) * (isIncome ? -1 : 1);
 
@@ -1984,7 +1996,7 @@ export function QuickLogModal({
           name: label,
           amount: signedDollars,
           date: todayISO(),
-          categoryId: selectedCatId || undefined,
+          categoryId: chosenCat?.id,
           accountId: accountId || undefined,
         }),
       });
@@ -2001,7 +2013,10 @@ export function QuickLogModal({
 
   if (!visible) return null;
 
-  const quickPillCats = categories.slice(0, 8);
+  const categoryPool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
+  const preferred = pickQuickCategory(categories, isIncome);
+  const head = categoryPool.slice(0, 8);
+  const quickPillCats = preferred && !head.some((c) => c.id === preferred.id) ? [preferred, ...head].slice(0, 8) : head;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -2047,7 +2062,9 @@ export function QuickLogModal({
               <Pressable
                 onPress={() => {
                   tapSelect();
+                  incomeMode.current = false;
                   setIsIncome(false);
+                  setSelectedCatId(pickQuickCategory(categories, false)?.id ?? null);
                 }}
                 style={{
                   paddingHorizontal: 14,
@@ -2063,7 +2080,9 @@ export function QuickLogModal({
               <Pressable
                 onPress={() => {
                   tapSelect();
+                  incomeMode.current = true;
                   setIsIncome(true);
+                  setSelectedCatId(pickQuickCategory(categories, true)?.id ?? null);
                 }}
                 style={{
                   paddingHorizontal: 14,

@@ -48,6 +48,15 @@ export function todayISO(): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+export function deviceYearMonth(date = new Date()) {
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
+export function dashboardPath(date = new Date()) {
+  const { year, month } = deviceYearMonth(date);
+  return `/api/dashboard?year=${year}&month=${month}`;
+}
+
 export function dayLabel(iso: string): string {
   const today = todayISO();
   if (iso === today) return "Today";

@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
 import {
+  dashboardPath,
   dayLabel,
   flowMoney,
   inDaysPhrase,
@@ -21,6 +22,7 @@ import {
   Hero,
   LedgerRow,
   Loading,
+  MenuRow,
   Note,
   SpendCard,
   ReviewBanner,
@@ -54,18 +56,19 @@ type Dash = {
 };
 
 export default function HomeScreen() {
-  const [data, setData] = useState<Dash | null>(() => peek<Dash>("/api/dashboard") ?? null);
+  const dashPath = dashboardPath();
+  const [data, setData] = useState<Dash | null>(() => peek<Dash>(dashboardPath()) ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    return read<Dash>("/api/dashboard")
+    return read<Dash>(dashPath)
       .then((next) => {
         setData(next);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
-  }, []);
+  }, [dashPath]);
 
   useFocusEffect(
     useCallback(() => {
@@ -145,6 +148,38 @@ export default function HomeScreen() {
               />
             </Hero>
           )}
+
+          <View style={{ gap: 8 }}>
+            <Section title="Your money" />
+            <Card>
+              <MenuRow
+                title="Goals"
+                icon="flag"
+                onPress={() => {
+                  tapPress();
+                  router.push("/goals");
+                }}
+              />
+              <MenuRow
+                title="Cash flow"
+                icon="flow"
+                divided
+                onPress={() => {
+                  tapPress();
+                  router.push("/cash-flow");
+                }}
+              />
+              <MenuRow
+                title="Investments"
+                icon="chart"
+                divided
+                onPress={() => {
+                  tapPress();
+                  router.push("/investments");
+                }}
+              />
+            </Card>
+          </View>
 
           {/* Quick Review Prompt when Unreviewed Charges Exist */}
           {data.unreviewed.count > 0 ? (

@@ -170,7 +170,11 @@ export default function GoalsScreen() {
           <Field label="Target" value={form.target} onChangeText={(target) => setForm({ ...form, target })} keyboardType="decimal-pad" />
           <Field label="Name" value={form.name} onChangeText={(name) => setForm({ ...form, name })} />
           <Field label="Target date" value={form.targetDate} onChangeText={(targetDate) => setForm({ ...form, targetDate })} placeholder="YYYY-MM-DD" />
-          <Note>Progress comes from the linked balances.</Note>
+          <Note>
+            {form.kind === "pay_down"
+              ? "Until you link an account, what's left is the target. Linking a card or loan uses that balance."
+              : "Progress is what you've added toward this goal, not the whole account. Tag a charge with this goal to count it."}
+          </Note>
           <Card>
             {accounts.length === 0 ? <Note>Add an account first.</Note> : null}
             {accounts.map((account, index) => {

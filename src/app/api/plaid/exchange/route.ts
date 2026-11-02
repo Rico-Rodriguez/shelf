@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { plaidItems } from "@/db/schema";
-import { AuthError, requireDek, requireWriter } from "@/lib/auth";
+import { AuthError, requireWriter } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { nid } from "@/lib/ids";
 import { getPlaidClient, plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";

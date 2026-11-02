@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { recurrences, suppressedMerchants, transactions } from "@/db/schema";
-import { addDays, todayISO } from "./dates";
+import { addCalendarMonths, addDays, todayISO } from "./dates";
 import { nid } from "./ids";
 import { inferRecurringKind, merchantKey } from "./plan";
 import { openRecurrence, openTx, sealedRecurrenceWrite } from "./secrets";
@@ -155,16 +155,25 @@ export async function confirmRecurring(dek: Buffer, drafts: RecurrenceDraft[]) {
   return { created };
 }
 
+function advanceDueDate(due: string, cadence: string): string {
+  if (cadence === "weekly") return addDays(due, 7);
+  if (cadence === "biweekly") return addDays(due, 14);
+  if (cadence === "quarterly") return addCalendarMonths(due, 3);
+  if (cadence === "yearly") return addCalendarMonths(due, 12);
+  return addCalendarMonths(due, 1);
+}
+
 export async function markRecurrencePaid(id: string, date = todayISO()) {
   const db = await getDb();
   const all = await db.select().from(recurrences);
   const found = all.find((r) => r.id === id);
   if (!found) throw new Error("Recurrence not found");
+  const due = found.nextDate || date;
   await db
     .update(recurrences)
     .set({
       lastPaidDate: date,
-      nextDate: nextFromCadence(date, found.cadence),
+      nextDate: advanceDueDate(due, found.cadence),
     })
     .where(eq(recurrences.id, id));
 }

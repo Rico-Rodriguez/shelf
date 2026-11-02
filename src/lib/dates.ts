@@ -28,6 +28,35 @@ export function addDays(iso: string, days: number): string {
   return todayISO(d);
 }
 
+/** Move a calendar day by whole months and clamp to the last day of the target month. */
+export function addCalendarMonths(iso: string, months: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const absolute = year * 12 + monthIndex + months;
+  const nextYear = Math.floor(absolute / 12);
+  const nextMonth = ((absolute % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(nextYear, nextMonth + 1, 0)).getUTCDate();
+  const clamped = Math.min(day, lastDay);
+  return `${nextYear}-${String(nextMonth + 1).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
+}
+
+/** Phone month when `year` and `month` are valid. Otherwise the server's current month. */
+export function requestedMonth(url: URL): { year: number; month: number } {
+  const now = yearMonth();
+  const yearRaw = url.searchParams.get("year");
+  const monthRaw = url.searchParams.get("month");
+  if (yearRaw == null && monthRaw == null) return now;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12 || year < 1970 || year > 9999) {
+    return now;
+  }
+  return { year, month };
+}
+
 export function monthName(year: number, month: number): string {
   return new Date(year, month - 1, 1).toLocaleString("en-US", {
     month: "long",

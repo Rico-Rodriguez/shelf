@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { accounts, budgetItems, categories, categoryGroups, plaidItems, recurrences, settings, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { getOrCreateBudgetMonth, incomeInMonth, spendByDay, spentByCategory } from "@/lib/budget";
-import { yearMonth } from "@/lib/dates";
+import { requestedMonth } from "@/lib/dates";
 import { refreshNotifications } from "@/lib/notify";
 import { plaidConfigured, TRIAL_ITEM_LIMIT } from "@/lib/plaid";
 import { inferRecurringKind } from "@/lib/plan";
@@ -16,11 +16,11 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_LAYOUT = ["netWorth", "cashFlow", "budget", "unreviewed", "recurring", "goals", "transactions", "investments"];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const dek = await requireDek();
     const db = await getDb();
-    const now = yearMonth();
+    const now = requestedMonth(new URL(request.url));
     const monthRow = await getOrCreateBudgetMonth(now.year, now.month, dek);
     const spent = await spentByCategory(now.year, now.month, dek);
     const cats = await db.select().from(categories);

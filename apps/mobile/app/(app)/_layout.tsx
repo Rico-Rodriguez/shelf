@@ -7,7 +7,7 @@ import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
-import { money } from "../../src/format";
+import { dashboardPath, money } from "../../src/format";
 import { useReduceTransparency, useTheme } from "../../src/theme";
 import { colors, QuickLogModal } from "../../src/ui";
 
@@ -479,7 +479,7 @@ export default function AppTabs() {
     const now = new Date();
     const firstPaint = Promise.all(
       [
-        "/api/dashboard",
+        dashboardPath(),
         "/api/accounts",
         "/api/categories",
         "/api/transactions?",
@@ -511,18 +511,19 @@ export default function AppTabs() {
     const notes = peek<{ unread: number }>("/api/notifications");
     if (notes) setUnread(notes.unread);
 
-    const updateNetWorth = (accts?: { currentBalanceCents: number; type: string; isHidden: boolean }[]) => {
+    const updateNetWorth = (accts?: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[]) => {
       if (!accts) return;
-      const assets = accts
-        .filter((a) => !a.isHidden && a.type !== "credit" && a.type !== "loan")
-        .reduce((s, a) => s + a.currentBalanceCents, 0);
-      const debts = accts
-        .filter((a) => !a.isHidden && (a.type === "credit" || a.type === "loan"))
-        .reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
-      setNetWorth(assets - debts);
+      let assets = 0;
+      let liabilities = 0;
+      for (const account of accts) {
+        if (account.isHidden || !account.includeInNetWorth) continue;
+        if (account.type === "credit" || account.type === "loan") liabilities += Math.abs(account.currentBalanceCents);
+        else assets += account.currentBalanceCents;
+      }
+      setNetWorth(assets - liabilities);
     };
 
-    const cachedAccts = peek<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts");
+    const cachedAccts = peek<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts");
     if (cachedAccts?.accounts) updateNetWorth(cachedAccts.accounts);
 
     void load<{ unreviewed: number }>("/api/transactions?countOnly=1")
@@ -531,7 +532,7 @@ export default function AppTabs() {
     void load<{ notifications: unknown[]; unread: number }>("/api/notifications")
       .then((res) => setUnread(res.unread))
       .catch(() => undefined);
-    void load<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts")
+    void load<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts")
       .then((res) => updateNetWorth(res.accounts))
       .catch(() => undefined);
 
@@ -541,7 +542,7 @@ export default function AppTabs() {
     const unsubNotes = subscribeCache<{ unread: number }>("/api/notifications", (res) => {
       if (res && typeof res.unread === "number") setUnread(res.unread);
     });
-    const unsubAccts = subscribeCache<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean }[] }>("/api/accounts", (res) => {
+    const unsubAccts = subscribeCache<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts", (res) => {
       if (res?.accounts) updateNetWorth(res.accounts);
     });
     return () => {
@@ -553,7 +554,7 @@ export default function AppTabs() {
 
   const refreshAfterLog = () => {
     const now = new Date();
-    void load("/api/dashboard").catch(() => undefined);
+    void load(dashboardPath()).catch(() => undefined);
     void load("/api/transactions?").catch(() => undefined);
     void load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined);
     void load("/api/transactions?countOnly=1").catch(() => undefined);

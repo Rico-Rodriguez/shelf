@@ -25,8 +25,8 @@ export default function TotpScreen() {
   }
 
   return (
-    <Screen title="Code" subtitle="Enter the six-digit code from your authenticator.">
-      <Field label="Code" value={code} onChangeText={setCode} keyboardType="number-pad" />
+    <Screen title="Code" subtitle="Six-digit code, or a one-time recovery code.">
+      <Field label="Code" value={code} onChangeText={setCode} keyboardType="default" />
       {error ? <Note>{error}</Note> : null}
       <Button label="Continue" onPress={() => void submit()} busy={busy} />
     </Screen>

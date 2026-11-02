@@ -20,7 +20,8 @@ export default function CashFlowScreen() {
 
   useEffect(() => {
     setSeries(null);
-    void api<{ series: Point[] }>(`/api/cash-flow?grain=${grain}&months=12`)
+    const now = new Date();
+    void api<{ series: Point[] }>(`/api/cash-flow?grain=${grain}&months=12&year=${now.getFullYear()}&month=${now.getMonth() + 1}`)
       .then((res) => {
         setSeries(res.series);
         setError(null);

@@ -5,7 +5,6 @@ import { accounts, goalAccounts, goals, transactions } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
 import { dollarsToCents } from "@/lib/money";
-import { classifyAccount } from "@/lib/networth";
 import { monthlyNeed } from "@/lib/plan";
 import { openAccount, openGoal, openTx, sealedGoalWrite } from "@/lib/secrets";
 
@@ -26,26 +25,32 @@ export async function GET() {
     const openedTxs = txs.map((row) => openTx(row, dek));
     const data = openedGoals.map((g) => {
       const linked = links.filter((l) => l.goalId === g.id).map((l) => openedAccounts.find((a) => a.id === l.accountId)!).filter(Boolean);
+      const tagged = openedTxs.filter((t) => t.goalId === g.id);
       let progressCents = 0;
-      if (g.kind === "save_up") {
-        progressCents = linked.reduce((s, a) => s + (classifyAccount(a.type) === "asset" ? a.currentBalanceCents : 0), 0);
+      let remainingCents = 0;
+      if (g.kind === "pay_down") {
+        if (linked.length === 0) {
+          progressCents = 0;
+          remainingCents = g.targetCents;
+        } else {
+          const owed = linked.reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
+          const paid = tagged.filter((t) => t.amountCents > 0 && !t.pending).reduce((s, t) => s + t.amountCents, 0);
+          progressCents = g.targetCents > 0 ? Math.max(0, g.targetCents - owed) : paid;
+          remainingCents = owed;
+        }
       } else {
-        const owed = linked.reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
-        const paid = openedTxs
-          .filter((t) => t.goalId === g.id && t.amountCents > 0 && !t.pending)
+        progressCents = tagged
+          .filter((t) => t.amountCents > 0 && !t.pending && !t.hidden)
           .reduce((s, t) => s + t.amountCents, 0);
-        progressCents = g.targetCents > 0 ? Math.max(0, g.targetCents - owed) : paid;
+        remainingCents = Math.max(0, g.targetCents - progressCents);
       }
-      const linkedTx = openedTxs.filter((t) => t.goalId === g.id);
-      const owed = linked.reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
-      const remainingCents = g.kind === "pay_down" ? owed : Math.max(0, g.targetCents - progressCents);
       return {
         ...g,
         accounts: linked,
         progressCents,
         remainingCents,
         monthlyCents: monthlyNeed(remainingCents, g.targetDate),
-        transactions: linkedTx,
+        transactions: tagged,
       };
     });
     return NextResponse.json({ goals: data, accounts: openedAccounts });

@@ -96,6 +96,7 @@ export default function SettingsScreen() {
                     setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
                     return refresh();
                   })
+                  .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not load sample data"))
               }
             />
           </Card>

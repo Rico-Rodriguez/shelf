@@ -312,7 +312,7 @@ export default function ActivityScreen() {
     setBusy(true);
     try {
       const dollars = Number(amount);
-      await api("/api/transactions", {
+      const created = await api<{ id: string }>("/api/transactions", {
         method: "POST",
         body: JSON.stringify({
           accountId,
@@ -326,6 +326,7 @@ export default function ActivityScreen() {
       setAmount("");
       setAdding(false);
       offerUndo("Added", async () => {
+        await api(`/api/transactions/${created.id}`, { method: "DELETE" });
         load();
       });
       load();
@@ -749,8 +750,28 @@ export default function ActivityScreen() {
           groups={groups}
           onClose={() => setSelected(null)}
           onSaved={() => {
+            const before = selected;
             setSelected(null);
             offerUndo("Saved", async () => {
+              await api(`/api/transactions/${before.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  name: before.name,
+                  merchantName: before.merchantName,
+                  categoryId: before.categoryId,
+                  reviewed: before.reviewed,
+                  hidden: before.hidden,
+                  notes: before.notes,
+                  goalId: before.goalId,
+                  isTransfer: before.isTransfer,
+                  transferPairId: before.transferPairId,
+                  tags: (before.tags ?? []).map((tag) => tag.name),
+                  splits: (before.splits ?? []).map((part) => ({
+                    categoryId: part.categoryId,
+                    amountCents: part.amountCents,
+                  })),
+                }),
+              });
               load();
             });
             load();
@@ -874,18 +895,23 @@ export default function ActivityScreen() {
           {unreviewedRows.length > 0 && unreviewedRows.every((tx) => tx.categoryId) ? (
             <Button
               label={`Accept ${unreviewedRows.length}`}
-              onPress={() =>
+              onPress={() => {
+                const restore = unreviewedRows.map((tx) => ({ id: tx.id, categoryId: tx.categoryId }));
                 void api("/api/transactions/review-all", {
                   method: "POST",
-                  body: JSON.stringify({ ids: unreviewedRows.map((tx) => tx.id) }),
+                  body: JSON.stringify({ ids: restore.map((tx) => tx.id) }),
                 }).then(() => {
                   setFilters(false);
                   offerUndo("Accepted all", async () => {
+                    await api("/api/transactions/review-all", {
+                      method: "POST",
+                      body: JSON.stringify({ restore }),
+                    });
                     load();
                   });
                   load();
-                })
-              }
+                });
+              }}
             />
           ) : null}
         </Sheet>
@@ -969,7 +995,13 @@ export default function ActivityScreen() {
           <Text style={styles.bulkText}>{`${selectedIds.length} selected`}</Text>
           <Button
             label="Mark reviewed"
-            onPress={() =>
+            onPress={() => {
+              const previous = (rows ?? []).filter((tx) => selectedIds.includes(tx.id)).map((tx) => ({
+                id: tx.id,
+                categoryId: tx.categoryId,
+                reviewed: tx.reviewed,
+                hidden: tx.hidden,
+              }));
               void Promise.all(
                 selectedIds.map((id) =>
                   api(`/api/transactions/${id}`, {
@@ -981,11 +1013,23 @@ export default function ActivityScreen() {
                 setSelectedIds([]);
                 setSelecting(false);
                 offerUndo("Reviewed selected", async () => {
+                  await Promise.all(
+                    previous.map((tx) =>
+                      api(`/api/transactions/${tx.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                          categoryId: tx.categoryId,
+                          reviewed: tx.reviewed,
+                          hidden: tx.hidden,
+                        }),
+                      }),
+                    ),
+                  );
                   load();
                 });
                 load();
-              })
-            }
+              });
+            }}
           />
         </View>
       ) : null}

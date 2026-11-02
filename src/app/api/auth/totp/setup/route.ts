@@ -5,6 +5,7 @@ import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { AuthError, getSession, jsonWithDeviceToken } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
+import { generateRecoveryCodes, storeRecoveryCodes } from "@/lib/recovery";
 import { generateTotpSecret, totpUri, verifyTotp } from "@/lib/totp";
 import { prepareVault } from "@/lib/secrets";
 
@@ -47,13 +48,15 @@ export async function POST(request: Request) {
       .update(users)
       .set({ totpSecretEnc: encryptSecret(session.totpSetupSecret, dek), totpEnabled: true })
       .where(eq(users.id, user.id));
+    const recoveryCodes = generateRecoveryCodes();
+    await storeRecoveryCodes(user.id, recoveryCodes);
     session.unlocked = true;
     session.pendingEnroll = false;
     session.pendingTotp = false;
     session.totpSetupSecret = undefined;
     await session.save();
     await prepareVault(dek);
-    return jsonWithDeviceToken(session, { ok: true });
+    return jsonWithDeviceToken(session, { ok: true, recoveryCodes });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
     throw err;
