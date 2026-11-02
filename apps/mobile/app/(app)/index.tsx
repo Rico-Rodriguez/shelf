@@ -13,7 +13,6 @@ import {
   inDaysPhrase,
   money,
   monthRange,
-  monthSaved,
   nearestOpenGoal,
   netWorthCents,
   sameMerchant,
@@ -27,12 +26,10 @@ import {
   goalPreview,
   launchLeftToPlan,
   playFlight,
-  recallAnchor,
   setCategoryReturn,
   stageFlight,
   useFlightArrival,
   useFlightClock,
-  useFlightHidden,
   useMeasuredAnchor,
 } from "../../src/flight";
 import { tapPress } from "../../src/haptic";
@@ -52,7 +49,6 @@ import {
   ReviewBanner,
   Screen,
   Section,
-  Sheet,
   SpendMix,
 } from "../../src/ui";
 
@@ -75,8 +71,6 @@ type OpenGoal = {
   remainingCents: number;
   createdAt?: string | null;
 };
-
-type Invest = { totalCents?: number; gainCents?: number | null };
 
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
@@ -111,10 +105,8 @@ export default function HomeScreen() {
     return cached?.accounts ? netWorthCents(cached.accounts) : null;
   });
   const [error, setError] = useState<string | null>(null);
-  const [moneyOpen, setMoneyOpen] = useState(false);
   const [recurrences, setRecurrences] = useState<Bill[] | null>(() => peek<{ recurrences: Bill[] }>("/api/recurring")?.recurrences ?? null);
   const [goals, setGoals] = useState<OpenGoal[] | null>(() => peek<{ goals: OpenGoal[] }>("/api/goals")?.goals ?? null);
-  const [investments, setInvestments] = useState<Invest | null>(() => peek<Invest>("/api/investments") ?? null);
   const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
   const [figureSeed, setFigureSeed] = useState<string | null>(null);
   const reduceMotion = useReduceMotion();
@@ -128,14 +120,12 @@ export default function HomeScreen() {
       read<{ accounts: NetWorthAccount[] }>("/api/accounts").catch(() => null),
       read<{ recurrences: Bill[] }>("/api/recurring").catch(() => null),
       read<{ goals: OpenGoal[] }>("/api/goals").catch(() => null),
-      read<Invest>("/api/investments").catch(() => null),
     ])
-      .then(([next, accounts, recurring, goalRows, invest]) => {
+      .then(([next, accounts, recurring, goalRows]) => {
         setData(next);
         if (accounts) setWorth(netWorthCents(accounts.accounts));
         if (recurring) setRecurrences(recurring.recurrences);
         if (goalRows) setGoals(goalRows.goals);
-        if (invest) setInvestments(invest);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
@@ -190,12 +180,7 @@ export default function HomeScreen() {
         }),
       )
     : null;
-  const saved = monthSaved(shownDash?.cashFlow.incomeCents ?? 0, shownDash?.cashFlow.spendingCents ?? 0);
   const savedCents = (shownDash?.cashFlow.incomeCents ?? 0) - (shownDash?.cashFlow.spendingCents ?? 0);
-  const goalLine =
-    goals == null ? null : goals.length === 0 ? "No goals" : `${money((nearest ?? goals[0]).remainingCents)} left`;
-  const gainCents = investments?.gainCents ?? null;
-  const marketCents = investments?.totalCents;
 
   const heroText = leftCents < 0 ? money(leftCents) : money(leftCents);
   useFlightArrival("plan-to-left", reduceMotion, (plan) => {
@@ -423,7 +408,7 @@ export default function HomeScreen() {
               subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} left` : undefined}
               icon="wallet"
               compact
-              onPress={() => setMoneyOpen(true)}
+              onPress={() => router.push("/money")}
             />
           </Card>
 
@@ -447,7 +432,7 @@ export default function HomeScreen() {
                 <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
                   Add an account to see what you’ve spent and what’s left in the budget.
                 </Text>
-                <Button label="Add an account" onPress={() => router.push("/(app)/accounts")} block />
+                <Button label="Add an account" onPress={() => router.push("/accounts")} block />
               </View>
             </Card>
           ) : (
@@ -568,104 +553,7 @@ export default function HomeScreen() {
           )}
         </>
       ) : null}
-      {moneyOpen ? (
-        <Sheet title="Your money" fit onClose={() => setMoneyOpen(false)}>
-          <Card>
-            <MenuRow
-              title="Goals"
-              icon="flag"
-              trailing={goalLine ? <RemainingFigure text={goalLine} /> : undefined}
-              onPress={() => {
-                setMoneyOpen(false);
-                router.push("/goals");
-              }}
-            />
-            <MenuRow
-              title="Cash flow"
-              icon="flow"
-              divided
-              trailing={
-                shownDash ? (
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "600",
-                      color: saved.tone === "good" ? colors.positive : saved.tone === "bad" ? colors.danger : colors.ink,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {`${saved.signed ? "-" : ""}${money(saved.cents)}`}
-                  </Text>
-                ) : undefined
-              }
-              onPress={() => {
-                setMoneyOpen(false);
-                router.push("/cash-flow");
-              }}
-            />
-            <MenuRow
-              title="Investments"
-              icon="chart"
-              divided
-              trailing={marketCents == null ? undefined : <MarketValue cents={marketCents} gainCents={gainCents ?? null} />}
-              onPress={() => {
-                const from = anchorRect("market.today");
-                const mem = recallAnchor("market.today");
-                if (from && mem) {
-                  stageFlight(
-                    {
-                      id: "market-open",
-                      hide: ["market.hero"],
-                      pieces: [
-                        {
-                          key: "market",
-                          text: mem.text,
-                          color: mem.color,
-                          fontSize: mem.fontSize,
-                          fontWeight: "700",
-                          from,
-                          toAnchor: "market.hero",
-                          toFontSize: 46,
-                        },
-                      ],
-                    },
-                    reduceMotion,
-                  );
-                }
-                setMoneyOpen(false);
-                router.push("/investments");
-              }}
-            />
-          </Card>
-        </Sheet>
-      ) : null}
     </Screen>
-  );
-}
-
-function RemainingFigure({ text }: { text: string }) {
-  const measure = useMeasuredAnchor("money.remaining", { text, color: colors.ink, fontSize: 14 });
-  const opacity = useFlightHidden("money.remaining");
-  return (
-    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false} style={{ opacity, flexShrink: 1 }}>
-      <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{text}</Text>
-    </View>
-  );
-}
-
-function MarketValue({ cents, gainCents }: { cents: number; gainCents: number | null }) {
-  const text = money(cents);
-  const measure = useMeasuredAnchor("market.today", { text, color: colors.ink, fontSize: 14 });
-  return (
-    <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false}>
-      <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
-        <Text style={{ color: colors.ink }}>{text}</Text>
-        {gainCents != null ? (
-          <Text style={{ color: gainCents >= 0 ? colors.positive : colors.danger }}>{`  ${money(Math.abs(gainCents))}`}</Text>
-        ) : null}
-      </Text>
-    </View>
   );
 }
 

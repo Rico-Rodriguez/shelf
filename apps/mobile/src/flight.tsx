@@ -443,13 +443,13 @@ function FlightGlyph({ piece, progress }: { piece: FlightPiece; progress: Animat
   return (
     <Animated.View
       pointerEvents="none"
-      style={[{ position: "absolute", left: from.x, top: from.y, width: Math.max(from.width, 40), minHeight: from.height }, motion]}
+      style={[{ position: "absolute", left: from.x, top: from.y, minWidth: Math.max(from.width, 40), minHeight: from.height }, motion]}
     >
-      <Animated.Text style={[textStyle, { color: piece.color, opacity: piece.toColor && piece.toColor !== piece.color ? fadeOut : 1 }]} numberOfLines={1}>
+      <Animated.Text style={[textStyle, { color: piece.color, opacity: piece.toColor && piece.toColor !== piece.color ? fadeOut : 1 }]}>
         {piece.text}
       </Animated.Text>
       {piece.toColor && piece.toColor !== piece.color ? (
-        <Animated.Text style={[textStyle, { color: piece.toColor, opacity: fadeIn, position: "absolute", left: 0, top: 0 }]} numberOfLines={1}>
+        <Animated.Text style={[textStyle, { color: piece.toColor, opacity: fadeIn, position: "absolute", left: 0, top: 0 }]}>
           {piece.text}
         </Animated.Text>
       ) : null}

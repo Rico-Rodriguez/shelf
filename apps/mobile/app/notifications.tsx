@@ -44,7 +44,7 @@ function openNote(row: NoteRow) {
     return;
   }
   if (href.startsWith("/transactions")) router.push("/(app)/activity");
-  else if (href.startsWith("/accounts")) router.push("/(app)/accounts");
+  else if (href.startsWith("/accounts")) router.push("/accounts");
 }
 
 export default function NotificationsScreen() {
