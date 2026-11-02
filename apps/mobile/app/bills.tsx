@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
@@ -51,7 +52,9 @@ const CADENCE_LABEL: Record<string, string> = Object.fromEntries(CADENCES);
 const emptyForm = (): Form => ({ merchantName: "", amount: "", cadence: "monthly", nextDate: todayISO(), categoryId: "", accountId: "", kind: "bill" });
 
 export default function BillsScreen() {
+  const params = useLocalSearchParams<{ id?: string }>();
   const now = new Date();
+  const openedBill = useRef<string | null>(null);
   const [rows, setRows] = useState<Bill[] | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [finding, setFinding] = useState(false);
@@ -152,6 +155,26 @@ export default function BillsScreen() {
     setForm(emptyForm());
     setEditing("new");
   }
+
+  useEffect(() => {
+    const id = typeof params.id === "string" ? params.id : "";
+    if (!id || !rows || openedBill.current === id) return;
+    const bill = rows.find((row) => row.id === id);
+    if (!bill) return;
+    openedBill.current = id;
+    setConfirmDelete(false);
+    setPicking(null);
+    setForm({
+      merchantName: bill.merchantName,
+      amount: (bill.amountCents / 100).toFixed(2),
+      cadence: bill.cadence,
+      nextDate: bill.nextDate,
+      categoryId: bill.categoryId ?? "",
+      accountId: bill.accountId ?? "",
+      kind: bill.kind ?? "bill",
+    });
+    setEditing(bill);
+  }, [params.id, rows]);
 
   function openEdit(row: Bill) {
     setConfirmDelete(false);

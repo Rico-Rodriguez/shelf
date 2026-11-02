@@ -6,7 +6,7 @@ import { BlurView } from "expo-blur";
 import { api, load as read, peek } from "../../src/api";
 import { Charge, ChargeGroup, ChargeSheet } from "../../src/charge";
 import { ReviewDeck } from "../../src/decide";
-import { dayLabel, flowMoney, monthLabel, monthRange, todayISO } from "../../src/format";
+import { dayLabel, flowMoney, money, monthLabel, monthRange, todayISO } from "../../src/format";
 import { tapCelebration, tapPress, tapSelect } from "../../src/haptic";
 import { Icon, MerchantMark } from "../../src/icons";
 import { dropQuickLog, mergeActivityRows, pinUnreviewed, settleQuickLog, stageQuickLog, subscribeLive, type QuickLog } from "../../src/live-edits";
@@ -258,7 +258,7 @@ export default function ActivityScreen() {
     });
   }
 
-  function paintReviewed(ids: string[], nextCategoryId: string | null, snapshots: Tx[], keepCategory = false) {
+  function paintReviewed(ids: string[], nextCategoryId: string | null, snapshots: Tx[], keepCategory = false, goalId?: string | null) {
     const face = keepCategory ? null : categoryFace(nextCategoryId);
     const chosen = new Set(ids);
     for (const id of ids) {
@@ -268,6 +268,7 @@ export default function ActivityScreen() {
         reviewed: true,
         categoryId,
         category: face ? { name: face.name, color: face.color ?? null } : row?.category ?? null,
+        ...(goalId && id === snapshots[0]?.id ? { goalId } : {}),
       });
     }
     setRows((current) =>
@@ -287,23 +288,30 @@ export default function ActivityScreen() {
     shiftCount(snapshots.filter((row) => !row.reviewed).length);
   }
 
-  function handleReviewConfirm(tx: Charge, nextCategoryId: string | null, makeRule: boolean) {
+  function handleReviewConfirm(
+    tx: Charge,
+    nextCategoryId: string | null,
+    makeRule: boolean,
+    goal: { id: string; name: string; remainingCents: number } | null = null,
+  ) {
     const source = rows ?? [];
     const rule = makeRule && Boolean(nextCategoryId);
     const ids = matchingReviewIds(source, tx, rule);
     const snapshots = source.filter((row) => ids.includes(row.id));
+    const primaryFirst = [tx, ...snapshots.filter((row) => row.id !== tx.id)];
     setActionError(null);
     reviewEpoch.current += 1;
     performReview({
       tx,
       categoryId: nextCategoryId,
+      goalId: goal?.id ?? null,
       makeRule: rule,
       ids,
       previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId, reviewed: row.reviewed })),
       categoryName: categoryFace(nextCategoryId)?.name ?? null,
       categoryColor: categoryFace(nextCategoryId)?.color ?? null,
-      label: ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
-      apply: () => paintReviewed(ids, nextCategoryId, snapshots),
+      label: goal ? `${goal.name} · ${money(goal.remainingCents)} left` : ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
+      apply: () => paintReviewed(ids, nextCategoryId, primaryFirst, false, goal?.id ?? null),
       restore: () => {
         reviewEpoch.current += 1;
         unpaintReviewed(ids, snapshots);
@@ -491,7 +499,7 @@ export default function ActivityScreen() {
   const flatData = useMemo<ListItem[]>(() => {
     const list: ListItem[] = [];
     for (const [date, items] of grouped) {
-      const dayNet = items.reduce((sum, tx) => sum + tx.amountCents, 0);
+      const dayNet = items.reduce((sum, tx) => sum + (tx.isTransfer ? 0 : tx.amountCents), 0);
       const flow = flowMoney(dayNet);
       list.push({
         type: "header",
@@ -819,7 +827,17 @@ export default function ActivityScreen() {
             );
           }
           const tx = item.tx;
-          const amount = flowMoney(tx.amountCents);
+          const spent = flowMoney(tx.amountCents);
+          const amount = tx.isTransfer
+            ? { text: money(Math.abs(tx.amountCents)), color: colors.tertiary }
+            : tx.pending
+              ? { text: spent.text, color: colors.tertiary }
+              : spent;
+          const face = faces[tx.merchantName || tx.name];
+          const monthSoFar = face && face.monthCents > 0 ? `${money(face.monthCents)} this month` : "";
+          const meta = tx.isTransfer
+            ? ["Transfer", tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ")
+            : [tx.category?.name, tx.account?.name, tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ") || "Uncategorized";
           return (
             <View
               style={[
@@ -860,7 +878,7 @@ export default function ActivityScreen() {
                       {tx.name}
                     </Text>
                     <Text numberOfLines={1} style={styles.txMeta}>
-                      {[tx.category?.name, tx.account?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ") || "Uncategorized"}
+                      {meta}
                     </Text>
                   </View>
                   <Text style={[styles.txAmount, { color: amount.color }]}>

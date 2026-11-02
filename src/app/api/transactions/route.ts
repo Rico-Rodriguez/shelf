@@ -141,32 +141,31 @@ export async function GET(request: Request) {
       .from(transactions)
       .where(and(eq(transactions.reviewed, false), eq(transactions.hidden, false)));
 
-    let faces: Record<string, { monthCents: number; count: number }> | undefined;
-    let frequentCategoryIds: string[] | undefined;
-    if (reviewed === "false") {
-      const now = yearMonth();
-      const range = monthRange(now.year, now.month);
-      const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
-      const names = new Set(data.map((tx) => tx.merchantName || tx.name));
-      const totals: Record<string, { monthCents: number; count: number }> = {};
-      const categoryCounts = new Map<string, number>();
-      for (const tx of history) {
-        if (tx.hidden || tx.isTransfer) continue;
-        if (tx.reviewed && tx.categoryId) categoryCounts.set(tx.categoryId, (categoryCounts.get(tx.categoryId) ?? 0) + 1);
-        if (tx.pending || tx.amountCents <= 0 || tx.date < range.start || tx.date > range.end) continue;
-        const name = tx.merchantName || tx.name;
-        if (!names.has(name)) continue;
-        const face = totals[name] ?? { monthCents: 0, count: 0 };
-        face.monthCents += tx.amountCents;
-        face.count += 1;
-        totals[name] = face;
-      }
-      faces = totals;
-      frequentCategoryIds = [...categoryCounts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([id]) => id);
+    const now = yearMonth();
+    const range = monthRange(now.year, now.month);
+    const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
+    const names = new Set(data.map((tx) => tx.merchantName || tx.name));
+    const totals: Record<string, { monthCents: number; count: number }> = {};
+    const categoryCounts = new Map<string, number>();
+    for (const tx of history) {
+      if (tx.hidden || tx.isTransfer) continue;
+      if (reviewed === "false" && tx.reviewed && tx.categoryId) categoryCounts.set(tx.categoryId, (categoryCounts.get(tx.categoryId) ?? 0) + 1);
+      if (tx.pending || tx.amountCents <= 0 || tx.date < range.start || tx.date > range.end) continue;
+      const name = tx.merchantName || tx.name;
+      if (!names.has(name)) continue;
+      const face = totals[name] ?? { monthCents: 0, count: 0 };
+      face.monthCents += tx.amountCents;
+      face.count += 1;
+      totals[name] = face;
     }
+    const faces = totals;
+    const frequentCategoryIds =
+      reviewed === "false"
+        ? [...categoryCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([id]) => id)
+        : undefined;
 
     return NextResponse.json({ transactions: data, unreviewed: Number(n), faces, frequentCategoryIds });
   } catch (err) {

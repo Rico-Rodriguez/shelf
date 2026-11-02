@@ -60,6 +60,7 @@ type ReviewRun = {
   categoryId: string | null;
   categoryName?: string | null;
   categoryColor?: string | null;
+  goalId?: string | null;
   makeRule: boolean;
   ids: string[];
   previous: { id: string; categoryId: string | null; reviewed: boolean }[];
@@ -81,6 +82,7 @@ export function performReview(input: ReviewRun) {
     keepCategory: false,
     wasUnreviewed: !row.reviewed,
   }));
+  const goalId = input.goalId || null;
   const job = enqueueReview({
     txId: input.tx.id,
     categoryId: input.categoryId,
@@ -88,6 +90,8 @@ export function performReview(input: ReviewRun) {
     merchant,
     affected,
     previous: input.previous,
+    body: goalId ? { categoryId: input.categoryId, reviewed: true, goalId } : undefined,
+    revert: goalId ? { categoryId: input.tx.categoryId, reviewed: input.tx.reviewed, goalId: input.tx.goalId } : undefined,
   });
   input.apply();
 
