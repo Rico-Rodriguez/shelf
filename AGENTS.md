@@ -5,7 +5,7 @@
 - **Server**: Next.js deployed on Vercel / Railway.
 - **Mobile Client**: Expo React Native in `apps/mobile`.
 - **OTA Updates (`publish-ota.yml`)**: Runs automatically on pushes affecting `apps/mobile/**`. It exports the JS bundle and updates the phone over-the-air seamlessly without requiring a new binary install.
-- **Native iOS IPA Builds (`ios-ipa.yml`)**: Builds the unsigned/ad-hoc `Shelf.ipa` using macOS runners.
+- **Native iOS IPA Builds (`ios-ipa.yml`)**: Manual `workflow_dispatch` only. A successful build uploads the versioned IPA, stable `Shelf.ipa`, and `altstore.json` to the `ipa` release. Feather adds `https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/altstore.json`. Do not add a push trigger, and do not commit the IPA into the site.
 
 ## Critical Rules for AI Assistants
 

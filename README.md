@@ -38,14 +38,20 @@ These changes are inside the installed iOS app, so they need a new `Shelf.ipa`:
 - The icon, the name under the icon, or the splash screen.
 - A new iOS permission, such as the camera or photo prompt.
 - The `shelf` URL scheme as iOS has it registered. The update also carries a copy of that scheme so linking can start. iOS still only opens URLs the installed app registered.
-- `runtimeVersion` or the update address in `apps/mobile/app.json`. Both are stored in the installed app. The current runtime is `1.2.0`. Bump it in the same change as the new install, so an older phone does not load a bundle that calls native code it does not have. `1.1.0` adds `react-native-svg` (charts) and `expo-haptics`. `1.2.0` adds Reanimated, Gesture Handler, and Lottie. Phones still on an older runtime keep the previous screens until they install the new IPA.
+- `runtimeVersion` or the update address in `apps/mobile/app.json`. Both are stored in the installed app. The current runtime is `1.3.0`. Bump it in the same change as the new install, so an older phone does not load a bundle that calls native code it does not have. `1.1.0` adds `react-native-svg` (charts) and `expo-haptics`. `1.2.0` adds Reanimated, Gesture Handler, and Lottie. `1.3.0` adds `expo-widgets` for the pending-charge island. Phones still on an older runtime keep the previous screens until they install the new IPA.
 
 Server changes, such as an API route or the database, deploy with the website. The phone does not need an update for those unless its screens have to change too.
 
 GitHub Actions builds that install file on a Mac runner (`.github/workflows/ios-ipa.yml`). Because macOS runners consume minutes at a 10× rate, **this workflow is strictly manual (`workflow_dispatch`) to avoid exhausting GitHub Actions quotas**. To build a new IPA:
 1. Go to your repository on GitHub → **Actions** → **Shelf IPA**.
 2. Click **Run workflow** (or run `gh workflow run ios-ipa.yml`).
-3. The run summary prints a direct download link (lasts ~10 minutes). After it expires, the file is saved to the `ipa` release tag (e.g. `https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf-1.2.0-2.ipa`). Sideload that file. Do not unzip it.
+3. The run summary prints a direct download link (lasts ~10 minutes). The same run publishes three files on the `ipa` release: the versioned IPA (for example `Shelf-1.2.0-2.ipa`), a stable `Shelf.ipa`, and `altstore.json`. Do not unzip the IPA.
+
+Install Shelf from Feather with this source, the same kind of release asset Critter Clash publishes as `altstore.json`:
+
+[https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/altstore.json](https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/altstore.json)
+
+The source lists the version, build number, byte size, date, bundle id, and display name from `apps/mobile/app.json`. Its download is [Shelf.ipa](https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf.ipa) on that release. The September 2026 asset was runtime `1.2.0` with the same version and build number (`1.2.0`, build `2`). This source replaces it when the manual build finishes. If Feather treats that as already installed, delete Shelf and install it again.
 
 > [!IMPORTANT]
 > **AI Assistant Rule**: Whenever making changes that touch native modules, iOS native code, `apps/mobile/app.json` permissions/plugins/icon/splash, or bumping `runtimeVersion`, you **MUST explicitly alert the user** that an OTA update is insufficient and they need to trigger the **Shelf IPA** workflow manually. For everyday UI, styling, screens, and copy changes, inform them that the automatic OTA pipeline (`publish-ota.yml`) handles it seamlessly hands-off on push without needing a manual build.
