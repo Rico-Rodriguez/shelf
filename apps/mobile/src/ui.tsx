@@ -718,6 +718,7 @@ export function MenuRow({
   divided,
   danger,
   active,
+  compact,
   trailing,
 }: {
   title: string;
@@ -727,6 +728,8 @@ export function MenuRow({
   divided?: boolean;
   danger?: boolean;
   active?: boolean;
+  /** Shorter row when the line has no secondary copy. */
+  compact?: boolean;
   trailing?: ReactNode;
 }) {
   const styles = useStyles();
@@ -736,7 +739,7 @@ export function MenuRow({
         tapPress();
         onPress();
       }}
-      style={({ pressed }) => [styles.ledger, pressed ? { backgroundColor: colors.fill } : null]}
+      style={({ pressed }) => [styles.ledger, compact ? styles.ledgerCompact : null, pressed ? { backgroundColor: colors.fill } : null]}
     >
       {divided ? <View style={[styles.hairline, { left: icon ? 62 : 16 }]} /> : null}
       {icon ? (
@@ -1147,19 +1150,28 @@ export function Facts({ items }: { items: { kicker: string; value: string; color
     <View style={styles.facts}>
       {items.map((item) => {
         const body = (
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.kicker}>{item.kicker}</Text>
-            <Text style={[styles.factValue, item.color ? { color: item.color } : null]}>{item.value}</Text>
+          <View style={{ gap: 2, alignSelf: "stretch" }}>
+            <Text style={styles.kicker} numberOfLines={1}>
+              {item.kicker}
+            </Text>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.55}
+              style={[styles.factValue, item.color ? { color: item.color } : null]}
+            >
+              {item.value}
+            </Text>
           </View>
         );
-        if (!item.onPress) return <View key={item.kicker} style={{ flex: 1 }}>{body}</View>;
+        if (!item.onPress) return <View key={item.kicker} style={{ flex: 1, minWidth: 0 }}>{body}</View>;
         return (
           <Pressable
             key={item.kicker}
             accessibilityRole="button"
             accessibilityLabel={`${item.kicker} ${item.value}`}
             onPress={item.onPress}
-            style={{ flex: 1 }}
+            style={{ flex: 1, minWidth: 0 }}
           >
             {body}
           </Pressable>
@@ -1568,6 +1580,7 @@ export function SheetContainer({
   minHeight = 320,
   height = "80%",
   scrollable = true,
+  fit = false,
 }: {
   visible?: boolean;
   onClose: () => void;
@@ -1579,6 +1592,8 @@ export function SheetContainer({
   minHeight?: number | `${number}%`;
   height?: number | `${number}%`;
   scrollable?: boolean;
+  /** Hug the rows instead of a tall empty panel. */
+  fit?: boolean;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1713,8 +1728,8 @@ export function SheetContainer({
         <Animated.View
           style={[
             styles.sheet,
-            minHeight ? { minHeight } : null,
-            height ? { height } : null,
+            fit ? null : minHeight ? { minHeight } : null,
+            fit ? null : height ? { height } : null,
             { transform: [{ translateY }] },
           ]}
         >
@@ -1762,7 +1777,9 @@ export function SheetContainer({
               </View>
             ) : null}
           </View>
-          {scrollable ? (
+          {fit ? (
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}>{children}</View>
+          ) : scrollable ? (
             <ScrollView
               style={{ flex: 1 }}
               keyboardShouldPersistTaps="handled"
@@ -1790,6 +1807,7 @@ export function Sheet({
   children,
   height = "80%",
   minHeight = 320,
+  fit = false,
 }: {
   title: string;
   subtitle?: string;
@@ -1798,6 +1816,8 @@ export function Sheet({
   children: ReactNode;
   height?: number | `${number}%`;
   minHeight?: number | `${number}%`;
+  /** Hug the rows instead of a tall empty panel. */
+  fit?: boolean;
 }) {
   return (
     <SheetContainer
@@ -1808,6 +1828,7 @@ export function Sheet({
       onClose={onClose}
       height={height}
       minHeight={minHeight}
+      fit={fit}
     >
       {children}
     </SheetContainer>
@@ -2834,6 +2855,10 @@ function makeStyles(colors: Palette) {
       paddingVertical: 11,
       position: "relative",
     },
+    ledgerCompact: {
+      minHeight: 44,
+      paddingVertical: 6,
+    },
     hairline: {
       position: "absolute",
       top: 0,
@@ -2922,13 +2947,13 @@ function makeStyles(colors: Palette) {
     facts: {
       marginHorizontal: -20,
       marginTop: 6,
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
       paddingTop: 14,
       paddingBottom: 16,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.line,
       flexDirection: "row",
-      gap: 12,
+      gap: 8,
     },
     kicker: { fontSize: 12, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" },
     factValue: { fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink, fontVariant: ["tabular-nums"] },
