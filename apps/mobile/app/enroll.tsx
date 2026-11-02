@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, Text } from "react-native";
 import { api } from "../src/api";
-import { useSession } from "../src/session";
+import { clearLock, useSession } from "../src/session";
 import { Button, colors, Field, Loading, Note, Screen } from "../src/ui";
 
 export default function EnrollScreen() {
@@ -28,6 +28,7 @@ export default function EnrollScreen() {
     setError(null);
     try {
       const res = await api<{ recoveryCodes?: string[] }>("/api/auth/totp/setup", { method: "POST", body: JSON.stringify({ code }) });
+      await clearLock();
       await refresh();
       if (res.recoveryCodes?.length) {
         setRecoveryCodes(res.recoveryCodes);
@@ -59,7 +60,7 @@ export default function EnrollScreen() {
       {qr ? <Image source={{ uri: qr }} style={{ width: 220, height: 220, alignSelf: "center" }} /> : <Loading />}
       {secret ? <Note>{secret}</Note> : null}
       <Field label="Code" value={code} onChangeText={setCode} keyboardType="number-pad" />
-      {error ? <Note>{error}</Note> : null}
+      {error ? <Note tone="danger">{error}</Note> : null}
       <Button label="Confirm" onPress={() => void submit()} busy={busy} />
     </Screen>
   );

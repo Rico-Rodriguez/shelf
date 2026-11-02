@@ -2,10 +2,10 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek } from "../../src/api";
-import { isLiability, money, signed } from "../../src/format";
+import { isLiability, money, netWorthCents, signed } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import { connectBank } from "../../src/plaid";
-import { Back, Button, Card, colors, Field, GlassButton, Hero, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
+import { Back, Button, Card, colors, Field, GlassButton, Hero, LoadError, Loading, Note, Screen, Section, Sheet } from "../../src/ui";
 
 type Account = {
   id: string;
@@ -16,6 +16,7 @@ type Account = {
   currentBalanceCents: number;
   isManual: boolean;
   isHidden: boolean;
+  includeInNetWorth?: boolean;
   plaidItemId: string | null;
 };
 
@@ -32,7 +33,8 @@ type AccountsPayload = { accounts: Account[]; items?: Item[]; plaidConfigured: b
 
 export default function AccountsScreen() {
   const cached = peek<AccountsPayload>("/api/accounts");
-  const [accounts, setAccounts] = useState<Account[] | null>(cached ? cached.accounts.filter((account) => !account.isHidden) : null);
+  const [accounts, setAccounts] = useState<Account[] | null>(cached ? cached.accounts : null);
+  const [showHidden, setShowHidden] = useState(false);
   const [items, setItems] = useState<Item[]>(cached?.items ?? []);
   const [plaidConfigured, setPlaidConfigured] = useState(cached?.plaidConfigured ?? false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export default function AccountsScreen() {
   const load = useCallback(() => {
     return read<AccountsPayload>("/api/accounts")
       .then((res) => {
-        setAccounts(res.accounts.filter((account) => !account.isHidden));
+        setAccounts(res.accounts);
         setItems(res.items ?? []);
         setPlaidConfigured(res.plaidConfigured);
         setError(null);
@@ -59,11 +61,13 @@ export default function AccountsScreen() {
     }, [load]),
   );
 
-  const visible = accounts ?? [];
-  const assets = visible.filter((account) => !isLiability(account.type));
-  const debts = visible.filter((account) => isLiability(account.type));
-  const assetTotal = assets.reduce((sum, account) => sum + account.currentBalanceCents, 0);
-  const debtTotal = debts.reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
+  const all = accounts ?? [];
+  const hidden = all.filter((account) => account.isHidden);
+  const visible = all.filter((account) => !account.isHidden || showHidden);
+  const worth = accounts ? netWorthCents(accounts) : 0;
+  const counted = all.filter((account) => !account.isHidden && account.includeInNetWorth !== false);
+  const assetTotal = counted.filter((account) => !isLiability(account.type)).reduce((sum, account) => sum + account.currentBalanceCents, 0);
+  const debtTotal = counted.filter((account) => isLiability(account.type)).reduce((sum, account) => sum + Math.abs(account.currentBalanceCents), 0);
 
   const institutions = useMemo(() => {
     const map = new Map<string, { key: string; name: string; rows: Account[] }>();
@@ -134,13 +138,13 @@ export default function AccountsScreen() {
         />
       }
     >
-      {error ? <Note>{error}</Note> : null}
+      {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
       {accounts === null && !error ? <Loading /> : null}
-      {visible.length > 0 ? (
+      {all.length > 0 ? (
         <Hero
           label="Net worth"
-          cents={assetTotal - debtTotal}
-          tone={assetTotal - debtTotal < 0 ? "bad" : undefined}
+          cents={worth}
+          tone={worth < 0 ? "bad" : undefined}
           shares={[
             { label: "Assets", cents: assetTotal, color: colors.accent },
             { label: "Debts", cents: debtTotal, color: colors.danger },
@@ -154,7 +158,7 @@ export default function AccountsScreen() {
           <Note key={item.id}>{`${item.institutionName || "Bank"} needs attention${item.errorCode ? ` (${item.errorCode})` : ""}`}</Note>
         ))}
 
-      {accounts && institutions.length === 0 ? (
+      {accounts && all.length === 0 ? (
         <View style={{ gap: 12, alignItems: "center" }}>
           <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>Add a bank or a balance</Text>
           <Button label="Add an account" onPress={() => setOpen(true)} />
@@ -173,7 +177,7 @@ export default function AccountsScreen() {
           </View>
         </Card>
       ) : accounts ? (
-        <Note>Add Plaid keys on the server to connect a bank.</Note>
+        <Note>Bank connect isn’t available.</Note>
       ) : null}
 
       {institutions.map((group) => {
@@ -198,7 +202,11 @@ export default function AccountsScreen() {
                   >
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "500", color: colors.ink }}>{account.name}</Text>
-                      {line ? <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted }}>{line}</Text> : null}
+                      {line || account.includeInNetWorth === false || account.isHidden ? (
+                        <Text numberOfLines={1} style={{ fontSize: 13, color: colors.muted }}>
+                          {[line, account.includeInNetWorth === false ? "Not in net worth" : "", account.isHidden ? "Hidden" : ""].filter(Boolean).join(" · ")}
+                        </Text>
+                      ) : null}
                     </View>
                     <Text style={{ fontSize: 16, fontWeight: "600", color: liability ? colors.danger : colors.ink }}>{liability ? signed(cents) : money(cents)}</Text>
                   </Pressable>
@@ -208,6 +216,20 @@ export default function AccountsScreen() {
           </View>
         );
       })}
+
+      {hidden.length > 0 ? (
+        <Pressable
+          onPress={() => {
+            tapPress();
+            setShowHidden((value) => !value);
+          }}
+          style={{ minHeight: 48, alignItems: "center", justifyContent: "center" }}
+        >
+          <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>
+            {showHidden ? "Hide hidden" : `Show hidden (${hidden.length})`}
+          </Text>
+        </Pressable>
+      ) : null}
 
       {open ? (
         <Sheet title="Add an account" onClose={() => setOpen(false)}>

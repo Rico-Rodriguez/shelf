@@ -109,7 +109,7 @@ export async function PUT(request: Request) {
       const flexPool = body.flexPoolCents ?? monthRow.flexPoolCents ?? 0;
       await db
         .update(budgetMonths)
-        .set(sealedBudgetMonthWrite(income, dek, flexPool))
+        .set({ ...sealedBudgetMonthWrite(income, dek, flexPool), isSample: false })
         .where(eq(budgetMonths.id, monthRow.id));
       if (body.plannedIncomeCents != null) {
         await db.update(settings).set(sealedSettingsIncome(body.plannedIncomeCents, dek)).where(eq(settings.id, "default"));
@@ -126,7 +126,7 @@ export async function PUT(request: Request) {
           const opened = openBudgetItem(found, dek);
           await db
             .update(budgetItems)
-            .set(sealedBudgetItemWrite(item.plannedCents, opened.rolloverInCents, dek))
+            .set({ ...sealedBudgetItemWrite(item.plannedCents, opened.rolloverInCents, dek), isSample: false })
             .where(eq(budgetItems.id, found.id));
         } else {
           await db.insert(budgetItems).values({
@@ -146,12 +146,12 @@ export async function PUT(request: Request) {
         const openedFrom = openBudgetItem(from, dek);
         const nextFrom = Math.max(0, openedFrom.plannedCents - body.move.cents);
         const moved = openedFrom.plannedCents - nextFrom;
-        await db.update(budgetItems).set(sealedBudgetItemWrite(nextFrom, openedFrom.rolloverInCents, dek)).where(eq(budgetItems.id, from.id));
+        await db.update(budgetItems).set({ ...sealedBudgetItemWrite(nextFrom, openedFrom.rolloverInCents, dek), isSample: false }).where(eq(budgetItems.id, from.id));
         if (moved > 0 && to) {
           const openedTo = openBudgetItem(to, dek);
           await db
             .update(budgetItems)
-            .set(sealedBudgetItemWrite(openedTo.plannedCents + moved, openedTo.rolloverInCents, dek))
+            .set({ ...sealedBudgetItemWrite(openedTo.plannedCents + moved, openedTo.rolloverInCents, dek), isSample: false })
             .where(eq(budgetItems.id, to.id));
         } else if (moved > 0) {
           await db.insert(budgetItems).values({
@@ -188,14 +188,14 @@ export async function POST(request: Request) {
       }
       await db
         .update(budgetMonths)
-        .set(sealedBudgetMonthWrite(suggested.suggestedIncome, dek, flexPool))
+        .set({ ...sealedBudgetMonthWrite(suggested.suggestedIncome, dek, flexPool), isSample: false })
         .where(eq(budgetMonths.id, monthRow.id));
       const existing = await db.select().from(budgetItems);
       for (const [categoryId, plannedCents] of Object.entries(suggested.suggested)) {
         const found = existing.find((i) => i.budgetMonthId === monthRow.id && i.categoryId === categoryId);
         if (found) {
           const opened = openBudgetItem(found, dek);
-          await db.update(budgetItems).set(sealedBudgetItemWrite(plannedCents, opened.rolloverInCents, dek)).where(eq(budgetItems.id, found.id));
+          await db.update(budgetItems).set({ ...sealedBudgetItemWrite(plannedCents, opened.rolloverInCents, dek), isSample: false }).where(eq(budgetItems.id, found.id));
         } else {
           await db.insert(budgetItems).values({
             id: nid(),

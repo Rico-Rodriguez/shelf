@@ -12,7 +12,7 @@ type Household = {
 };
 
 export default function SettingsScreen() {
-  const { state, signOut, refresh } = useSession();
+  const { state, signOut, lock, refresh } = useSession();
   const { mode, setMode } = useTheme();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -84,24 +84,35 @@ export default function SettingsScreen() {
         {!home ? <Note>Household</Note> : null}
       </Card>
 
-      {state?.demoLoaded ? null : (
-        <>
-          <Section title="Sample" />
-          <Card>
-            <MenuRow
-              title="Load sample data"
-              onPress={() =>
-                void api<{ already?: boolean }>("/api/demo/seed", { method: "POST" })
-                  .then((res) => {
-                    setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
-                    return refresh();
-                  })
-                  .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not load sample data"))
-              }
-            />
-          </Card>
-        </>
-      )}
+      <Section title="Sample" />
+      <Card>
+        {state?.demoLoaded ? (
+          <MenuRow
+            title="Remove sample data"
+            danger
+            onPress={() =>
+              void api("/api/demo/clear", { method: "POST" })
+                .then(() => {
+                  setMessage("Sample data removed.");
+                  return refresh();
+                })
+                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not remove sample data"))
+            }
+          />
+        ) : (
+          <MenuRow
+            title="Load sample data"
+            onPress={() =>
+              void api<{ already?: boolean }>("/api/demo/seed", { method: "POST" })
+                .then((res) => {
+                  setMessage(res.already ? "Sample data is already loaded." : "Sample data loaded. It is on Home.");
+                  return refresh();
+                })
+                .catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not load sample data"))
+            }
+          />
+        )}
+      </Card>
       <Section title="Rules" />
       <Card>
         <MenuRow title="Manage rules" icon="list" onPress={() => router.push("/rules")} />
@@ -147,7 +158,8 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <MenuRow title="Sign out" danger onPress={() => void signOut()} />
+        <MenuRow title="Lock" onPress={() => void lock().then(() => router.replace("/"))} />
+        <MenuRow title="Sign out" danger divided onPress={() => void signOut().then(() => router.replace("/"))} />
       </Card>
     </Screen>
   );

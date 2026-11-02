@@ -4,7 +4,7 @@ import { Alert, Pressable, Text, View } from "react-native";
 import { api } from "../../src/api";
 import { isLiability, money, outflow, payoffMonths, shortDate } from "../../src/format";
 import { connectBank } from "../../src/plaid";
-import { Back, Button, Card, colors, Field, Hero, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
+import { Back, Button, Card, colors, Field, Hero, LoadError, Loading, Note, Screen, Section, SpendMix, ToggleRow } from "../../src/ui";
 
 type Liability = { apr: number | null; minimumCents: number | null; due: string | null };
 type Item = { id: string; institutionName: string | null; status: string; errorCode: string | null };
@@ -106,8 +106,8 @@ export default function AccountScreen() {
       subtitle={item && item.status !== "ok" ? `${item.institutionName || "Bank"} · ${item.errorCode || "Needs attention"}` : item?.institutionName || undefined}
       refresh={<Back />}
     >
-      {error ? <Note>{error}</Note> : null}
-      {!data ? <Loading /> : null}
+      {error ? <LoadError message={error} onRetry={load} /> : null}
+      {!data && !error ? <Loading /> : null}
       {account && data ? (
         <>
           <Hero

@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { api, load as read, peek } from "../../src/api";
+import { load as read, peek } from "../../src/api";
 import {
   dashboardPath,
   dayLabel,
@@ -9,9 +9,11 @@ import {
   inDaysPhrase,
   money,
   monthRange,
+  netWorthCents,
   shelfColor,
   shortDate,
   todayISO,
+  type NetWorthAccount,
 } from "../../src/format";
 import { tapPress } from "../../src/haptic";
 import {
@@ -21,13 +23,13 @@ import {
   Facts,
   Hero,
   LedgerRow,
+  LoadError,
   Loading,
   MenuRow,
-  Note,
-  SpendCard,
   ReviewBanner,
   Screen,
   Section,
+  Sheet,
   SpendMix,
 } from "../../src/ui";
 
@@ -58,13 +60,21 @@ type Dash = {
 export default function HomeScreen() {
   const dashPath = dashboardPath();
   const [data, setData] = useState<Dash | null>(() => peek<Dash>(dashboardPath()) ?? null);
+  const [worth, setWorth] = useState<number | null>(() => {
+    const cached = peek<{ accounts: NetWorthAccount[] }>("/api/accounts");
+    return cached?.accounts ? netWorthCents(cached.accounts) : null;
+  });
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [moneyOpen, setMoneyOpen] = useState(false);
 
   const load = useCallback(() => {
-    return read<Dash>(dashPath)
-      .then((next) => {
+    return Promise.all([
+      read<Dash>(dashPath),
+      read<{ accounts: NetWorthAccount[] }>("/api/accounts").catch(() => null),
+    ])
+      .then(([next, accounts]) => {
         setData(next);
+        if (accounts) setWorth(netWorthCents(accounts.accounts));
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
@@ -76,22 +86,9 @@ export default function HomeScreen() {
     }, [load]),
   );
 
-  async function sample() {
-    setBusy(true);
-    try {
-      await api("/api/demo/seed", { method: "POST" });
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load sample data");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const today = todayISO();
   const now = new Date();
   const range = monthRange(now.getFullYear(), now.getMonth() + 1);
-  const currentMonthName = now.toLocaleDateString("en-US", { month: "long" });
 
   const bills = (data?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
   const upcomingBillsSlice = bills.slice(0, 3);
@@ -111,28 +108,34 @@ export default function HomeScreen() {
 
   return (
     <Screen framed onRefresh={load}>
-      {error ? <Note>{error}</Note> : null}
+      {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <Loading /> : null}
 
       {data ? (
         <>
-          {/* This month's spending against the budget */}
           {totalPlannedCents > 0 ? (
-            <SpendCard
-              monthName={currentMonthName}
-              spentCents={spentCents}
-              budgetCents={totalPlannedCents}
-              onPress={() => {
+            <Hero
+              label="Left to spend"
+              cents={totalPlannedCents - spentCents}
+              tone={totalPlannedCents - spentCents < 0 ? "bad" : undefined}
+              points={data.spendSeries}
+              onPressFigure={() => {
                 tapPress();
                 router.push("/(app)/budget");
               }}
-            />
+            >
+              <Facts
+                items={[
+                  { kicker: "Spent", value: money(spentCents) },
+                  { kicker: "Plan", value: money(totalPlannedCents) },
+                ]}
+              />
+            </Hero>
           ) : (
             <Hero
-              label="Cash flow this month"
-              cents={data.cashFlow.savedCents}
-              signed
-              status={{ label: "No budget set", tone: "neutral" }}
+              label="Net worth"
+              cents={worth ?? 0}
+              tone={(worth ?? 0) < 0 ? "bad" : undefined}
               points={data.spendSeries}
             >
               <Facts
@@ -149,37 +152,16 @@ export default function HomeScreen() {
             </Hero>
           )}
 
-          <View style={{ gap: 8 }}>
-            <Section title="Your money" />
-            <Card>
-              <MenuRow
-                title="Goals"
-                icon="flag"
-                onPress={() => {
-                  tapPress();
-                  router.push("/goals");
-                }}
-              />
-              <MenuRow
-                title="Cash flow"
-                icon="flow"
-                divided
-                onPress={() => {
-                  tapPress();
-                  router.push("/cash-flow");
-                }}
-              />
-              <MenuRow
-                title="Investments"
-                icon="chart"
-                divided
-                onPress={() => {
-                  tapPress();
-                  router.push("/investments");
-                }}
-              />
-            </Card>
-          </View>
+          <Card>
+            <MenuRow
+              title="Your money"
+              icon="wallet"
+              onPress={() => {
+                tapPress();
+                setMoneyOpen(true);
+              }}
+            />
+          </Card>
 
           {/* Quick Review Prompt when Unreviewed Charges Exist */}
           {data.unreviewed.count > 0 ? (
@@ -200,10 +182,9 @@ export default function HomeScreen() {
                   Welcome to Shelf
                 </Text>
                 <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
-                  Connect your bank or load demo data to see what you’ve spent and what’s left in the budget.
+                  Add an account to see what you’ve spent and what’s left in the budget.
                 </Text>
                 <Button label="Add an account" onPress={() => router.push("/(app)/accounts")} block />
-                <Button label={busy ? "Loading…" : "Load demo data"} tone="quiet" onPress={() => void sample()} busy={busy} block />
               </View>
             </Card>
           ) : (
@@ -354,6 +335,34 @@ export default function HomeScreen() {
             </>
           )}
         </>
+      ) : null}
+      {moneyOpen ? (
+        <Sheet title="Your money" onClose={() => setMoneyOpen(false)}>
+          <MenuRow
+            title="Goals"
+            icon="flag"
+            onPress={() => {
+              setMoneyOpen(false);
+              router.push("/goals");
+            }}
+          />
+          <MenuRow
+            title="Cash flow"
+            icon="flow"
+            onPress={() => {
+              setMoneyOpen(false);
+              router.push("/cash-flow");
+            }}
+          />
+          <MenuRow
+            title="Investments"
+            icon="chart"
+            onPress={() => {
+              setMoneyOpen(false);
+              router.push("/investments");
+            }}
+          />
+        </Sheet>
       ) : null}
     </Screen>
   );

@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { api } from "../src/api";
-import { useSession } from "../src/session";
+import { clearLock, useSession } from "../src/session";
 import { Button, Field, Note, Screen } from "../src/ui";
 
 export default function TotpScreen() {
@@ -15,6 +15,7 @@ export default function TotpScreen() {
     setError(null);
     try {
       await api("/api/auth/totp", { method: "POST", body: JSON.stringify({ code }) });
+      await clearLock();
       await refresh();
       router.replace("/(app)");
     } catch (err) {
@@ -27,7 +28,7 @@ export default function TotpScreen() {
   return (
     <Screen title="Code" subtitle="Six-digit code, or a one-time recovery code.">
       <Field label="Code" value={code} onChangeText={setCode} keyboardType="default" />
-      {error ? <Note>{error}</Note> : null}
+      {error ? <Note tone="danger">{error}</Note> : null}
       <Button label="Continue" onPress={() => void submit()} busy={busy} />
     </Screen>
   );

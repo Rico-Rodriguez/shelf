@@ -7,7 +7,7 @@ import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
-import { dashboardPath, money } from "../../src/format";
+import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
 import { useReduceTransparency, useTheme } from "../../src/theme";
 import { colors, QuickLogModal } from "../../src/ui";
 
@@ -461,6 +461,7 @@ export default function AppTabs() {
   const [unread, setUnread] = useState(0);
   const [syncLabel, setSyncLabel] = useState("");
   const [netWorth, setNetWorth] = useState<number | null>(null);
+  const [hasPlan, setHasPlan] = useState(false);
   const [quickLogOpen, setQuickLogOpen] = useState(false);
 
   useEffect(() => {
@@ -511,20 +512,15 @@ export default function AppTabs() {
     const notes = peek<{ unread: number }>("/api/notifications");
     if (notes) setUnread(notes.unread);
 
-    const updateNetWorth = (accts?: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[]) => {
+    const updateNetWorth = (accts?: NetWorthAccount[]) => {
       if (!accts) return;
-      let assets = 0;
-      let liabilities = 0;
-      for (const account of accts) {
-        if (account.isHidden || !account.includeInNetWorth) continue;
-        if (account.type === "credit" || account.type === "loan") liabilities += Math.abs(account.currentBalanceCents);
-        else assets += account.currentBalanceCents;
-      }
-      setNetWorth(assets - liabilities);
+      setNetWorth(netWorthCents(accts));
     };
 
-    const cachedAccts = peek<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts");
+    const cachedAccts = peek<{ accounts: NetWorthAccount[] }>("/api/accounts");
     if (cachedAccts?.accounts) updateNetWorth(cachedAccts.accounts);
+    const cachedDash = peek<{ budget?: { plannedCents?: number } }>(dashboardPath());
+    if (cachedDash) setHasPlan((cachedDash.budget?.plannedCents ?? 0) > 0);
 
     void load<{ unreviewed: number }>("/api/transactions?countOnly=1")
       .then((res) => setReviewCount(res.unreviewed))
@@ -532,8 +528,11 @@ export default function AppTabs() {
     void load<{ notifications: unknown[]; unread: number }>("/api/notifications")
       .then((res) => setUnread(res.unread))
       .catch(() => undefined);
-    void load<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts")
+    void load<{ accounts: NetWorthAccount[] }>("/api/accounts")
       .then((res) => updateNetWorth(res.accounts))
+      .catch(() => undefined);
+    void load<{ budget?: { plannedCents?: number } }>(dashboardPath())
+      .then((res) => setHasPlan((res.budget?.plannedCents ?? 0) > 0))
       .catch(() => undefined);
 
     const unsubCount = subscribeCache<{ unreviewed: number }>("/api/transactions?countOnly=1", (res) => {
@@ -542,13 +541,17 @@ export default function AppTabs() {
     const unsubNotes = subscribeCache<{ unread: number }>("/api/notifications", (res) => {
       if (res && typeof res.unread === "number") setUnread(res.unread);
     });
-    const unsubAccts = subscribeCache<{ accounts: { currentBalanceCents: number; type: string; isHidden: boolean; includeInNetWorth?: boolean }[] }>("/api/accounts", (res) => {
+    const unsubAccts = subscribeCache<{ accounts: NetWorthAccount[] }>("/api/accounts", (res) => {
       if (res?.accounts) updateNetWorth(res.accounts);
+    });
+    const unsubDash = subscribeCache<{ budget?: { plannedCents?: number } }>(dashboardPath(), (res) => {
+      if (res) setHasPlan((res.budget?.plannedCents ?? 0) > 0);
     });
     return () => {
       unsubCount();
       unsubNotes();
       unsubAccts();
+      unsubDash();
     };
   }, [path]);
 
@@ -560,6 +563,13 @@ export default function AppTabs() {
     void load("/api/transactions?countOnly=1").catch(() => undefined);
     void load("/api/accounts").catch(() => undefined);
   };
+
+  const onBudget = path.includes("budget");
+  const onActivity = path.includes("activity");
+  const onAccounts = path.includes("account");
+  const onToday = !onBudget && !onActivity && !onAccounts;
+  const showBar = onToday || onBudget || onActivity;
+  const showWorth = onBudget || onActivity || (onToday && hasPlan);
 
   return (
     <>
@@ -592,15 +602,30 @@ export default function AppTabs() {
           name="index"
           options={{
             title: "Today",
-            headerShown: true,
+            headerShown: showBar && onToday,
             headerTransparent: true,
-            header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={netWorth} />,
+            header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={showWorth ? netWorth : null} />,
           }}
         />
-        <Tabs.Screen name="budget" options={{ title: "Plan", headerShown: false }} />
-        <Tabs.Screen name="activity" options={{ title: "Activity", headerShown: false }} />
+        <Tabs.Screen
+          name="budget"
+          options={{
+            title: "Plan",
+            headerShown: showBar && onBudget,
+            headerTransparent: true,
+            header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={showWorth ? netWorth : null} />,
+          }}
+        />
+        <Tabs.Screen
+          name="activity"
+          options={{
+            title: "Activity",
+            headerShown: showBar && onActivity,
+            headerTransparent: true,
+            header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={showWorth ? netWorth : null} />,
+          }}
+        />
         <Tabs.Screen name="accounts" options={{ href: null, title: "Accounts" }} />
-        <Tabs.Screen name="more" options={{ href: null, title: "More" }} />
       </Tabs>
 
       {/* Global Frictionless Quick-Log Sheet */}

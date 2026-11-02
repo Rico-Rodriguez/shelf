@@ -4,7 +4,7 @@ import { api } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money } from "../src/format";
 import { celebrate } from "../src/toast";
-import { Back, Button, Card, colors, Field, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, Field, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
   id: string;
@@ -15,6 +15,7 @@ type Goal = {
   categoryId: string | null;
   progressCents: number;
   remainingCents: number;
+  createdAt?: string | null;
   monthlyCents?: number | null;
   accounts: { id: string; name: string }[];
 };
@@ -111,8 +112,8 @@ export default function GoalsScreen() {
   }
 
   return (
-    <Screen title="Goals" refresh={<Back />} action={<Button label="Add" onPress={openNew} />}>
-      {error ? <Note>{error}</Note> : null}
+    <Screen title="Goals" refresh={<Back />} onRefresh={load} action={<Button label="Add" onPress={openNew} />}>
+      {error ? <LoadError message={error} onRetry={load} /> : null}
       {goals === null && !error ? <Loading /> : null}
       {goals && goals.length === 0 ? <Note>No goals yet.</Note> : null}
       {goals && goals.length ? (
@@ -142,7 +143,7 @@ export default function GoalsScreen() {
                 <Progress
                   value={goal.kind === "pay_down" ? goal.progressCents : goal.progressCents}
                   max={goal.kind === "pay_down" ? goal.progressCents + goal.remainingCents || 1 : goal.targetCents || 1}
-                  color={goal.kind === "save_up" ? colors.positive : colors.danger}
+                  color={pace.tone === "behind" ? colors.danger : pace.tone === "muted" ? colors.tertiary : colors.positive}
                 />
                 {when || goal.monthlyCents ? (
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>

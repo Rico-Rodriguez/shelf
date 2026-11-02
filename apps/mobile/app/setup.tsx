@@ -1,7 +1,7 @@
 import { Redirect, router } from "expo-router";
 import { useState } from "react";
 import { api } from "../src/api";
-import { useSession } from "../src/session";
+import { clearLock, useSession } from "../src/session";
 import { Button, Field, Note, Screen } from "../src/ui";
 
 export default function SetupScreen() {
@@ -19,6 +19,7 @@ export default function SetupScreen() {
     setError(null);
     try {
       await api("/api/auth/setup", { method: "POST", body: JSON.stringify({ password }) });
+      await clearLock();
       await refresh();
       router.replace("/enroll");
     } catch (err) {
@@ -36,7 +37,7 @@ export default function SetupScreen() {
       subtitle="Choose a key of at least 12 characters to secure your data."
     >
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
-      {error ? <Note>{error}</Note> : null}
+      {error ? <Note tone="danger">{error}</Note> : null}
       <Button label="Create Shelf" onPress={() => void submit()} busy={busy} />
     </Screen>
   );

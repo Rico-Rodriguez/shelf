@@ -1,15 +1,17 @@
 import { Redirect } from "expo-router";
-import { Loading, Note, Screen } from "../src/ui";
+import { Button, Loading, Note, Screen } from "../src/ui";
 import { useSession } from "../src/session";
 
 export default function Gate() {
-  const { ready, state, error } = useSession();
+  const { ready, state, error, refresh } = useSession();
   if (!ready) return <Screen title="Shelf"><Loading label="Opening" /></Screen>;
-  if (error) {
+  const open = Boolean(state && state.unlocked && !state.needsTotp && !state.needsEnroll && !state.needsSetup && !state.needsGoogle);
+  if (open) return <Redirect href="/(app)" />;
+  if (error && !state) {
     return (
       <Screen title="Shelf">
-        <Note>{error}</Note>
-        <Note>Set EXPO_PUBLIC_API_URL to the server, and EXPO_PUBLIC_GATE_TOKEN when the server expects a gate.</Note>
+        <Note tone="danger">{error}</Note>
+        <Button label="Retry" tone="quiet" onPress={() => void refresh()} />
       </Screen>
     );
   }

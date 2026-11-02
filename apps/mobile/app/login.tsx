@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Pressable, Text } from "react-native";
 import { api } from "../src/api";
 import { googleRedirectHint, signInWithGoogle } from "../src/google";
-import { useSession } from "../src/session";
+import { clearLock, useSession } from "../src/session";
 import { Button, colors, Field, Note, Screen } from "../src/ui";
 
 export default function LoginScreen() {
@@ -24,6 +24,7 @@ export default function LoginScreen() {
         method: "POST",
         body: JSON.stringify({ password }),
       });
+      await clearLock();
       await refresh();
       if (res.needTotp) router.replace("/totp");
       else if (res.needEnroll) router.replace("/enroll");
@@ -52,7 +53,7 @@ export default function LoginScreen() {
   if (!state || state.needsGoogle) {
     return (
       <Screen title="Sign in">
-        {error ? <Note>{error}</Note> : null}
+        {error ? <Note tone="danger">{error}</Note> : null}
         {state ? <Button label="Sign in with Google" onPress={() => void google()} busy={busy} /> : null}
         {googleRedirectHint() ? (
           <Note>{`In Google Cloud, add this Authorized redirect URI, then try again: ${googleRedirectHint()}`}</Note>
@@ -66,7 +67,7 @@ export default function LoginScreen() {
   return (
     <Screen title="Unlock" subtitle={state.googleEmail ?? undefined}>
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
-      {error ? <Note>{error}</Note> : null}
+      {error ? <Note tone="danger">{error}</Note> : null}
       <Button label="Unlock" onPress={() => void submit()} busy={busy} />
       <Pressable onPress={() => router.push("/join")} hitSlop={8}>
         <Text style={{ color: colors.accentInk, fontSize: 15, fontWeight: "600" }}>Join with an invite</Text>

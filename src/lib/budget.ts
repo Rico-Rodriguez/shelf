@@ -38,6 +38,7 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
     id: nid(),
     year,
     month,
+    isSample: false,
     ...sealedBudgetMonthWrite(income, dek, flexPool),
   };
   await db.insert(budgetMonths).values(row);
@@ -67,7 +68,7 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
     });
   }
 
-  return openBudgetMonth({ ...row, plannedIncomeCents: income, secretEnc: row.secretEnc }, dek);
+  return openBudgetMonth({ ...row, plannedIncomeCents: income, secretEnc: row.secretEnc, isSample: false }, dek);
 }
 
 const TRANSFER_CATEGORIES = new Set(["cat-transfer", "cat-cc-payment", "cat-invest"]);

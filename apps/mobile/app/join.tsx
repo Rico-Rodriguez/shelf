@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { api } from "../src/api";
-import { useSession } from "../src/session";
+import { clearLock, useSession } from "../src/session";
 import { Button, Field, Note, Screen } from "../src/ui";
 
 export default function JoinScreen() {
@@ -24,6 +24,7 @@ export default function JoinScreen() {
         method: "POST",
         body: JSON.stringify({ code, password, name }),
       });
+      await clearLock();
       await refresh();
       router.replace("/enroll");
     } catch (err) {

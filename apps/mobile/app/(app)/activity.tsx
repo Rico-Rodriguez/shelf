@@ -17,6 +17,7 @@ import {
   colors,
   Field,
   GlassButton,
+  LoadError,
   Loading,
   MonthNav,
   Note,
@@ -461,7 +462,7 @@ export default function ActivityScreen() {
 
   const listHeader = (
     <View style={{ gap: 10, paddingBottom: 8 }}>
-      {error ? <Note>{error}</Note> : null}
+      {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
 
       {/* Search Bar + Filter Icon with indicator dot */}
       <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
