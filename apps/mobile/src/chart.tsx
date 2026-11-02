@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop, type GProps } from "react-native-svg";
 import { money, shortDate } from "./format";
 import { tapTick } from "./haptic";
 import { useScrollLock } from "./scroll";
-import { colors } from "./theme";
+import { colors, useReduceMotion } from "./theme";
 
 function smoothLine(coords: { x: number; y: number }[]) {
   if (coords.length === 0) return "";
@@ -45,10 +45,16 @@ export function SpendChart({
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
   const lineRef = useRef<Path>(null);
+  const clipRef = useRef<Rect>(null);
+  const tipRef = useRef<G<GProps>>(null);
+  const coordsRef = useRef<{ x: number; y: number }[]>([]);
   const lastIndex = useRef<number | null>(null);
   const setScrollLocked = useScrollLock();
+  const reduceMotion = useReduceMotion();
+  const [tipOn, setTipOn] = useState(false);
   const height = 160;
   const signature = series.map((point) => point.cents).join(",");
+  const clipId = `reveal-${useId().replace(/:/g, "")}`;
 
   const geometry = useMemo(() => {
     if (series.length < 2 || width <= 0) return null;
@@ -82,21 +88,50 @@ export function SpendChart({
   }, [series, width, reference, height]);
 
   const lineLength = geometry?.length ?? 0;
+  coordsRef.current = geometry?.coords ?? [];
 
   useEffect(() => {
-    if (!lineLength) return;
+    if (!lineLength || width <= 0) return;
+    if (reduceMotion) {
+      lineRef.current?.setNativeProps?.({ strokeDashoffset: 0 });
+      clipRef.current?.setNativeProps?.({ width });
+      setTipOn(true);
+      return;
+    }
+    setTipOn(false);
     let frame = 0;
     const started = Date.now();
     const tick = () => {
       const t = Math.min(1, (Date.now() - started) / 640);
       const eased = 1 - Math.pow(1 - t, 3);
       lineRef.current?.setNativeProps?.({ strokeDashoffset: lineLength * (1 - eased) });
+      const coords = coordsRef.current;
+      const index = coords.length > 1 ? Math.round(eased * (coords.length - 1)) : 0;
+      const reveal = coords[index]?.x ?? eased * width;
+      clipRef.current?.setNativeProps?.({ width: Math.max(reveal, 0) });
       if (t < 1) frame = requestAnimationFrame(tick);
+      else setTipOn(true);
     };
     lineRef.current?.setNativeProps?.({ strokeDashoffset: lineLength });
+    clipRef.current?.setNativeProps?.({ width: 0 });
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [lineLength, signature]);
+  }, [lineLength, signature, reduceMotion, width]);
+
+  useEffect(() => {
+    if (!tipOn || reduceMotion) return;
+    let frame = 0;
+    const started = Date.now();
+    const step = () => {
+      const t = Math.min(1, (Date.now() - started) / 720);
+      const dip = Math.sin(t * Math.PI);
+      tipRef.current?.setNativeProps?.({ opacity: 1 - dip * 0.55 });
+      if (t < 1) frame = requestAnimationFrame(step);
+      else tipRef.current?.setNativeProps?.({ opacity: 1 });
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [tipOn, reduceMotion]);
 
   useEffect(() => {
     return () => {
@@ -192,21 +227,27 @@ export function SpendChart({
               />
             ) : null}
 
-            {/* Gradient wash under curve */}
-            <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.9} />
+            <ClipPath id={clipId}>
+              <Rect ref={clipRef} x={0} y={0} width={tipOn || reduceMotion ? width : 0} height={height} />
+            </ClipPath>
 
-            {/* Main fluid spend curve */}
-            <Path
-              ref={lineRef}
-              d={geometry.line}
-              stroke={color}
-              strokeWidth={2.75}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={geometry.length}
-              strokeDashoffset={0}
-            />
+            <G clipPath={`url(#${clipId})`}>
+              {/* Gradient wash reveals with the stroke */}
+              <Path d={geometry.area} fill={`url(#${gradientId})`} opacity={0.9} />
+
+              {/* Main fluid spend curve */}
+              <Path
+                ref={lineRef}
+                d={geometry.line}
+                stroke={color}
+                strokeWidth={2.75}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={geometry.length}
+                strokeDashoffset={tipOn || reduceMotion ? 0 : geometry.length}
+              />
+            </G>
 
             {/* Interactive Vertical Crosshair when scrubbing */}
             {active != null && dot ? (
@@ -231,9 +272,9 @@ export function SpendChart({
               </>
             ) : null}
 
-            {/* Live endpoint pulsing beacon when idle */}
-            {active == null && geometry.coords.length > 0 ? (
-              <>
+            {/* Endpoint rests after one breath, once the line has finished */}
+            {active == null && tipOn && geometry.coords.length > 0 ? (
+              <G ref={tipRef} opacity={1}>
                 <Circle
                   cx={geometry.coords[geometry.coords.length - 1].x}
                   cy={geometry.coords[geometry.coords.length - 1].y}
@@ -253,7 +294,7 @@ export function SpendChart({
                   r={1.8}
                   fill={colors.card}
                 />
-              </>
+              </G>
             ) : null}
           </Svg>
         ) : null}

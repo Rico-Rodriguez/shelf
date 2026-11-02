@@ -167,6 +167,23 @@ export function useReduceTransparency(): boolean {
   return reduceTransparency;
 }
 
+/** Motion finishes on the first frame when Reduce Motion is on. Haptics stay. */
+export function useReduceMotion(): boolean {
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotion)
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", (enabled) => {
+      setReduceMotion(enabled);
+    });
+    return () => sub.remove();
+  }, []);
+
+  return reduceMotion;
+}
+
 type ThemeValue = {
   mode: ThemeMode;
   palette: Palette;

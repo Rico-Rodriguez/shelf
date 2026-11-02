@@ -1,6 +1,7 @@
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { Text, View } from "react-native";
 import { shelfColor } from "./format";
+import { useTheme } from "./theme";
 
 type Mark = { size: number; color: string; filled: boolean };
 
@@ -211,6 +212,7 @@ function Calendar({ size, color }: { size: number; color: string }) {
 }
 
 export function MerchantMark({ name, color }: { name: string; color?: string | null }) {
+  const { palette } = useTheme();
   const initials = (name || "?")
     .trim()
     .split(/\s+/)
@@ -227,10 +229,10 @@ export function MerchantMark({ name, color }: { name: string; color?: string | n
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: tint ? `${tint}22` : "#e8ecf0",
+        backgroundColor: tint ? `${tint}22` : palette.fill,
       }}
     >
-      <Text style={{ fontSize: 13, fontWeight: "700", letterSpacing: -0.2, color: tint || "#14181f" }}>{initials || "?"}</Text>
+      <Text style={{ fontSize: 13, fontWeight: "700", letterSpacing: -0.2, color: tint || palette.ink }}>{initials || "?"}</Text>
     </View>
   );
 }

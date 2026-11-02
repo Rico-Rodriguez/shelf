@@ -228,8 +228,10 @@ export function SwipeRow({
                 closeRow();
                 return;
               }
+              tapPress();
               onPress?.();
             }}
+            style={({ pressed }) => (pressed ? { backgroundColor: colors.fill } : null)}
           >
             {children}
             {peek ? <View pointerEvents="none" style={styles.peekIndicator} /> : null}

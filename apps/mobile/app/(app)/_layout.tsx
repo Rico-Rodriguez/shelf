@@ -9,8 +9,8 @@ import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, netWorthCents, type NetWorthAccount } from "../../src/format";
 import { subscribeOutbox } from "../../src/review-outbox";
-import { useReduceTransparency, useTheme } from "../../src/theme";
-import { colors, QuickLogModal, type QuickLogDraft } from "../../src/ui";
+import { useReduceMotion, useReduceTransparency, useTheme } from "../../src/theme";
+import { colors, QuickLogModal, RollingFigure, type QuickLogDraft } from "../../src/ui";
 
 const TABS = [
   { name: "index", title: "Today", icon: "home" },
@@ -151,7 +151,9 @@ function MobileBar({
               hitSlop={6}
             >
               <Icon name="wallet" size={13} color={palette.accentInk} filled />
-              <Text
+              <RollingFigure
+                text={money(netWorth)}
+                duration={360}
                 style={{
                   fontSize: 13,
                   fontWeight: "700",
@@ -159,9 +161,7 @@ function MobileBar({
                   fontVariant: ["tabular-nums"],
                   letterSpacing: -0.2,
                 }}
-              >
-                {money(netWorth)}
-              </Text>
+              />
             </Pressable>
           ) : null}
 
@@ -195,23 +195,64 @@ function MobileBar({
   );
 }
 
+function CrossfadeLabel({
+  focused,
+  title,
+}: {
+  focused: boolean;
+  title: string;
+}) {
+  const { palette } = useTheme();
+  const reduceMotion = useReduceMotion();
+  const fade = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      fade.setValue(focused ? 1 : 0);
+      return;
+    }
+    Animated.timing(fade, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
+  }, [focused, reduceMotion, fade]);
+  const idle = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const label = { fontSize: 11, letterSpacing: -0.1, marginTop: 2 } as const;
+  return (
+    <View style={{ alignItems: "center", marginTop: 2 }}>
+      <Animated.View style={{ opacity: idle }}>
+        <Text style={{ ...label, marginTop: 0, fontWeight: "500", color: palette.tertiary }}>{title}</Text>
+      </Animated.View>
+      <Animated.View style={{ opacity: fade, position: "absolute", left: 0, right: 0, top: 0, alignItems: "center" }}>
+        <Text style={{ ...label, marginTop: 0, fontWeight: "700", color: palette.accentInk }}>{title}</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 function ShelfTabBarItem({
   route,
   focused,
   reviewCount,
   spec,
   onPress,
+  onLayout,
 }: {
   route: { key: string; name: string };
   focused: boolean;
   reviewCount: number;
   spec?: { name: string; title: string; icon: string };
   onPress: () => void;
+  onLayout: (event: { nativeEvent: { layout: { x: number; width: number } } }) => void;
 }) {
   const { palette } = useTheme();
-  const isDark = palette.scheme === "dark";
-  const color = focused ? palette.accentInk : palette.tertiary;
+  const reduceMotion = useReduceMotion();
   const scale = useRef(new Animated.Value(1)).current;
+  const iconFade = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      iconFade.setValue(focused ? 1 : 0);
+      return;
+    }
+    Animated.timing(iconFade, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
+  }, [focused, reduceMotion, iconFade]);
+  const iconIdle = iconFade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   return (
     <Pressable
@@ -222,10 +263,13 @@ function ShelfTabBarItem({
           ? `Activity, ${reviewCount} to categorize`
           : spec?.title
       }
+      onLayout={onLayout}
       onPressIn={() => {
+        if (reduceMotion) return;
         Animated.spring(scale, { toValue: 0.90, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPressOut={() => {
+        if (reduceMotion) return;
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPress={() => {
@@ -240,15 +284,17 @@ function ShelfTabBarItem({
         paddingHorizontal: 4,
         borderRadius: 22,
         borderCurve: "continuous",
-        backgroundColor: focused
-          ? isDark
-            ? "rgba(255, 255, 255, 0.12)"
-            : "rgba(0, 0, 0, 0.05)"
-          : "transparent",
       }}
     >
       <Animated.View style={{ position: "relative", alignItems: "center", transform: [{ scale }] }}>
-        <Icon name={spec?.icon ?? "more"} size={21} color={color} filled={focused} />
+        <View style={{ width: 21, height: 21 }}>
+          <Animated.View style={{ opacity: iconIdle, position: "absolute" }}>
+            <Icon name={spec?.icon ?? "more"} size={21} color={palette.tertiary} />
+          </Animated.View>
+          <Animated.View style={{ opacity: iconFade }}>
+            <Icon name={spec?.icon ?? "more"} size={21} color={palette.accentInk} filled />
+          </Animated.View>
+        </View>
         {route.name === "activity" && reviewCount > 0 ? (
           <View style={[badge, { backgroundColor: palette.danger }]}>
             <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
@@ -256,9 +302,7 @@ function ShelfTabBarItem({
             </Text>
           </View>
         ) : null}
-        <Text style={{ fontSize: 11, fontWeight: focused ? "700" : "500", letterSpacing: -0.1, color, marginTop: 2 }}>
-          {spec?.title}
-        </Text>
+        <CrossfadeLabel focused={focused} title={spec?.title ?? ""} />
       </Animated.View>
     </Pressable>
   );
@@ -327,12 +371,58 @@ function ShelfTabBar({
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
+  const reduceMotion = useReduceMotion();
   const isDark = palette.scheme === "dark";
+  const capsuleX = useRef(new Animated.Value(0)).current;
+  const capsuleW = useRef(new Animated.Value(0)).current;
+  const layouts = useRef<Record<string, { x: number; width: number }>>({});
+  const capsuleReady = useRef(false);
+  const activeName = state.routes[state.index]?.name ?? "index";
+
+  function placeCapsule(name: string, animate: boolean) {
+    const layout = layouts.current[name];
+    if (!layout) return;
+    if (!animate || reduceMotion || !capsuleReady.current) {
+      capsuleX.setValue(layout.x);
+      capsuleW.setValue(layout.width);
+      capsuleReady.current = true;
+      return;
+    }
+    Animated.parallel([
+      Animated.spring(capsuleX, { toValue: layout.x, useNativeDriver: false, stiffness: 420, damping: 34, mass: 0.7 }),
+      Animated.spring(capsuleW, { toValue: layout.width, useNativeDriver: false, stiffness: 420, damping: 34, mass: 0.7 }),
+    ]).start();
+  }
+
+  useEffect(() => {
+    placeCapsule(activeName, true);
+  }, [activeName, reduceMotion]);
 
   // Filter routes to primary tabs only
   const visibleRoutes = state.routes.filter((route) =>
     TABS.some((tab) => tab.name === route.name),
   );
+
+  function tabItem(name: (typeof TABS)[number]["name"]) {
+    const route = visibleRoutes.find((item) => item.name === name);
+    if (!route) return null;
+    const focused = activeName === name;
+    const spec = TABS.find((tab) => tab.name === name);
+    return (
+      <ShelfTabBarItem
+        key={route.key}
+        route={route}
+        focused={focused}
+        reviewCount={reviewCount}
+        spec={spec}
+        onPress={() => onPress(route, focused)}
+        onLayout={(event) => {
+          layouts.current[name] = { x: event.nativeEvent.layout.x, width: event.nativeEvent.layout.width };
+          if (focused) placeCapsule(name, false);
+        }}
+      />
+    );
+  }
 
   return (
     <View
@@ -381,62 +471,24 @@ function ShelfTabBar({
           />
         ) : null}
 
-        {/* Tab 1: Today */}
-        {(() => {
-          const route = visibleRoutes.find((r) => r.name === "index");
-          if (!route) return null;
-          const focused = state.routes[state.index]?.name === "index";
-          const spec = TABS.find((t) => t.name === "index");
-          return (
-            <ShelfTabBarItem
-              key={route.key}
-              route={route}
-              focused={focused}
-              reviewCount={reviewCount}
-              spec={spec}
-              onPress={() => onPress(route, focused)}
-            />
-          );
-        })()}
-
-        {/* Tab 2: Plan */}
-        {(() => {
-          const route = visibleRoutes.find((r) => r.name === "budget");
-          if (!route) return null;
-          const focused = state.routes[state.index]?.name === "budget";
-          const spec = TABS.find((t) => t.name === "budget");
-          return (
-            <ShelfTabBarItem
-              key={route.key}
-              route={route}
-              focused={focused}
-              reviewCount={reviewCount}
-              spec={spec}
-              onPress={() => onPress(route, focused)}
-            />
-          );
-        })()}
-
-        {/* Ergonomic Center Liquid Glass (+) Quick-Log Button */}
-        <ShelfQuickLogButton onPress={onQuickLog} />
-
-        {/* Tab 3: Activity (with live unreviewed counter badge) */}
-        {(() => {
-          const route = visibleRoutes.find((r) => r.name === "activity");
-          if (!route) return null;
-          const focused = state.routes[state.index]?.name === "activity";
-          const spec = TABS.find((t) => t.name === "activity");
-          return (
-            <ShelfTabBarItem
-              key={route.key}
-              route={route}
-              focused={focused}
-              reviewCount={reviewCount}
-              spec={spec}
-              onPress={() => onPress(route, focused)}
-            />
-          );
-        })()}
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: capsuleX,
+              width: capsuleW,
+              borderRadius: 22,
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.05)",
+            }}
+          />
+          {tabItem("index")}
+          {tabItem("budget")}
+          <ShelfQuickLogButton onPress={onQuickLog} />
+          {tabItem("activity")}
+        </View>
       </View>
     </View>
   );

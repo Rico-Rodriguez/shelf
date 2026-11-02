@@ -237,10 +237,7 @@ export default function HomeScreen() {
               title="Your money"
               subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} left` : undefined}
               icon="wallet"
-              onPress={() => {
-                tapPress();
-                setMoneyOpen(true);
-              }}
+              onPress={() => setMoneyOpen(true)}
             />
           </Card>
 
@@ -249,7 +246,6 @@ export default function HomeScreen() {
             <ReviewBanner
               count={shownDash.unreviewed.count}
               onPress={() => {
-                tapPress();
                 router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
               }}
             />
@@ -297,7 +293,6 @@ export default function HomeScreen() {
                           amount={flow.text}
                           amountColor={tx.pending ? colors.tertiary : flow.color}
                           onPress={() => {
-                            tapPress();
                             router.push({ pathname: "/merchant", params: { name: label } });
                           }}
                         />
@@ -326,10 +321,7 @@ export default function HomeScreen() {
                         name={bill.merchantName}
                         meta={inDaysPhrase(bill.nextDate)}
                         amount={money(bill.amountCents)}
-                        onPress={() => {
-                          tapPress();
-                          router.push("/bills");
-                        }}
+                        onPress={() => router.push("/bills")}
                       />
                     ))}
                     {suggestions > 0 ? (

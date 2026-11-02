@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import { api, load as read, peek } from "../../src/api";
@@ -31,7 +31,7 @@ import {
   Segment,
   Sheet,
 } from "../../src/ui";
-import { useReduceTransparency, useTheme, type Palette } from "../../src/theme";
+import { useReduceMotion, useReduceTransparency, useTheme, type Palette } from "../../src/theme";
 
 type Tx = Charge;
 type TxPayload = {
@@ -65,6 +65,7 @@ function txPath(
 export default function ActivityScreen() {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
+  const reduceMotion = useReduceMotion();
   const reduceTransparency = useReduceTransparency();
   const styles = useMemo(() => makeStyles(palette), [palette]);
   const params = useLocalSearchParams<{
@@ -77,8 +78,10 @@ export default function ActivityScreen() {
     reviewed?: string;
     focus?: string;
   }>();
+  const opensInReview = params.focus === "1" && params.reviewed === "false";
+  const reviewRise = useRef(new Animated.Value(opensInReview ? 0 : 1)).current;
 
-  const [focusMode, setFocusMode] = useState(params.focus === "1" && params.reviewed === "false");
+  const [focusMode, setFocusMode] = useState(opensInReview);
   const [query, setQuery] = useState(typeof params.q === "string" ? params.q : "");
   const [search, setSearch] = useState(query);
   const [unreviewedOnly, setUnreviewedOnly] = useState(params.reviewed === "false");
@@ -520,6 +523,53 @@ export default function ActivityScreen() {
     return list;
   }, [grouped]);
 
+  const stickyHeaderIndices = useMemo(
+    () => flatData.map((item, index) => (item.type === "header" ? index : -1)).filter((index) => index >= 0),
+    [flatData],
+  );
+
+  const reviewOpen = focusMode && unreviewedOnly;
+  const reviewEntered = useRef(opensInReview);
+  if (reviewOpen && !reviewEntered.current) {
+    reviewEntered.current = true;
+    if (!reduceMotion) reviewRise.setValue(0);
+  } else if (!reviewOpen) {
+    reviewEntered.current = false;
+  }
+
+  useEffect(() => {
+    if (!(focusMode && unreviewedOnly)) return;
+    if (reduceMotion) {
+      reviewRise.setValue(1);
+      return;
+    }
+    reviewRise.setValue(0);
+    Animated.spring(reviewRise, { toValue: 1, useNativeDriver: true, stiffness: 280, damping: 24, mass: 0.75 }).start();
+  }, [focusMode, unreviewedOnly, reduceMotion, reviewRise]);
+
+  function closeReview() {
+    const finish = () => {
+      setFocusMode(false);
+      setUnreviewedOnly(false);
+    };
+    if (reduceMotion) {
+      finish();
+      return;
+    }
+    Animated.timing(reviewRise, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (finished) finish();
+    });
+  }
+
+  const reviewStyle = {
+    flex: 1,
+    opacity: reviewRise,
+    transform: [
+      { translateY: reviewRise.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) },
+      { scale: reviewRise.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+    ],
+  };
+
   // Review mode view (when focused into review deck)
   if (focusMode && unreviewedOnly) {
     return (
@@ -530,17 +580,13 @@ export default function ActivityScreen() {
         action={
           <GlassButton
             label="Done"
-            onPress={() => {
-              tapPress();
-              setFocusMode(false);
-              setUnreviewedOnly(false);
-            }}
+            onPress={closeReview}
             compact
             tone="accent"
           />
         }
       >
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }}>
+        <Animated.View style={[reviewStyle, { paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }]}>
           {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
           {outboxTick >= 0 && outboxStalled() ? <ReviewHold /> : null}
           {unreviewedRows.length > 0 ? (
@@ -588,8 +634,7 @@ export default function ActivityScreen() {
               <Pressable
                 onPress={() => {
                   tapPress();
-                  setFocusMode(false);
-                  setUnreviewedOnly(false);
+                  closeReview();
                 }}
                 style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 16 }}
               >
@@ -599,7 +644,7 @@ export default function ActivityScreen() {
               </Pressable>
             </View>
           )}
-        </View>
+        </Animated.View>
         <UndoHost bottomOffset={Math.max(insets.bottom + 160, 180)} />
       </Screen>
     );
@@ -799,10 +844,7 @@ export default function ActivityScreen() {
         <GlassButton
           label="Add"
           icon="plus"
-          onPress={() => {
-            tapPress();
-            setAdding(true);
-          }}
+          onPress={() => setAdding(true)}
           compact
         />
       }
@@ -811,6 +853,7 @@ export default function ActivityScreen() {
         data={flatData}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={listHeader}
+        stickyHeaderIndices={stickyHeaderIndices}
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews
         maxToRenderPerBatch={14}
@@ -821,7 +864,7 @@ export default function ActivityScreen() {
         renderItem={({ item }) => {
           if (item.type === "header") {
             return (
-              <View style={{ paddingTop: 16, paddingBottom: 8 }}>
+              <View style={{ backgroundColor: colors.bg, paddingTop: 10, paddingBottom: 6 }}>
                 <Section title={item.title} trailing={item.flowText} />
               </View>
             );
@@ -1376,7 +1419,6 @@ function makeStyles(colors: Palette) {
     paddingHorizontal: 14,
     paddingVertical: 10,
     gap: 12,
-    backgroundColor: colors.card,
   },
   txName: {
     fontSize: 15,
