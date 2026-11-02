@@ -10,15 +10,33 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = "Rico-Rodriguez/shelf";
 const SOURCE_URL = `https://github.com/${REPO}/releases/download/ipa/altstore.json`;
-const IPA_URL = `https://github.com/${REPO}/releases/download/ipa/Shelf.ipa`;
-const ICON_URL = "https://shelf-xi-hazel.vercel.app/apple-touch-icon.png";
-const TINT = "1B7A62";
+const ICON_URL = "https://raw.githubusercontent.com/Rico-Rodriguez/shelf/master/apps/mobile/assets/icon.png";
+const TINT = "111111";
+const BUNDLE_ID = "app.shelf.mobile";
+const SOURCE_ID = "app.shelf.source";
+const DEVELOPER = "Rico Rodriguez";
+// Feather rejects the whole source unless category is in AltStore's fixed list.
+// "finance" is not on that list. "utilities" is.
+const CATEGORIES = new Set([
+  "developer",
+  "entertainment",
+  "games",
+  "lifestyle",
+  "other",
+  "photo-video",
+  "social",
+  "utilities",
+]);
+
+function ipaDownloadUrl(version, buildVersion) {
+  return `https://github.com/${REPO}/releases/download/ipa/Shelf-${version}-${buildVersion}.ipa`;
+}
 
 function flag(name, required = false) {
   const index = process.argv.indexOf(name);
   if (index === -1) {
     if (required) {
-      console.error("Usage: node scripts/altstore-source.mjs --ipa <file> --out <file> [--min-os <version>] [--date <iso>]");
+      console.error("Usage: node scripts/altstore-source.mjs --ipa <file> --out <file> --min-os <version> [--date <iso>]");
       console.error("       node scripts/altstore-source.mjs --validate <file>");
       process.exit(1);
     }
@@ -53,28 +71,42 @@ function validate(src) {
   need(src, "sourceURL", "string", "source");
   need(src, "apps", "array", "source");
   if (src.apps.length === 0) throw new Error("source: apps is empty");
+  if (src.identifier !== SOURCE_ID) throw new Error(`identifier must be ${SOURCE_ID}`);
   if (src.sourceURL !== SOURCE_URL) throw new Error(`sourceURL must be ${SOURCE_URL}`);
+  if (src.tintColor !== TINT) throw new Error(`source tintColor must be ${TINT}`);
+  if (src.iconURL !== ICON_URL) throw new Error(`source iconURL must be ${ICON_URL}`);
   for (const app of src.apps) {
     const where = `app ${app.name}`;
     for (const key of ["name", "bundleIdentifier", "developerName", "localizedDescription", "iconURL"]) {
       need(app, key, "string", where);
     }
+    if (app.bundleIdentifier !== BUNDLE_ID) throw new Error(`${where}: bundleIdentifier must be ${BUNDLE_ID}`);
+    if (app.developerName !== DEVELOPER) throw new Error(`${where}: developerName must be ${DEVELOPER}`);
+    if (app.tintColor !== TINT) throw new Error(`${where}: tintColor must be ${TINT}`);
+    if (app.iconURL !== ICON_URL) throw new Error(`${where}: iconURL must be ${ICON_URL}`);
+    if (!CATEGORIES.has(app.category)) {
+      throw new Error(`${where}: category '${app.category}' is not in AltStore's list`);
+    }
+    if (app.category !== "utilities") throw new Error(`${where}: category must be utilities`);
     need(app, "versions", "array", where);
     need(app, "appPermissions", "object", where);
     if (app.versions.length === 0) throw new Error(`${where}: versions is empty`);
     for (const version of app.versions) {
       const at = `${where} version`;
-      for (const key of ["version", "buildVersion", "date", "downloadURL"]) need(version, key, "string", at);
+      for (const key of ["version", "buildVersion", "date", "downloadURL", "minOSVersion"]) {
+        need(version, key, "string", at);
+      }
       need(version, "size", "number", at);
       if (version.size <= 0) throw new Error(`${where}: version size must be positive`);
       if (Number.isNaN(Date.parse(version.date))) throw new Error(`${where}: date is not ISO 8601`);
-      if (!version.downloadURL.startsWith("https://")) throw new Error(`${where}: downloadURL must be https`);
-      if (version.downloadURL !== IPA_URL) throw new Error(`${where}: downloadURL must be ${IPA_URL}`);
+      const expected = ipaDownloadUrl(version.version, version.buildVersion);
+      if (version.downloadURL !== expected) throw new Error(`${where}: downloadURL must be ${expected}`);
     }
     for (const key of ["version", "versionDate", "downloadURL"]) need(app, key, "string", `${where} (legacy)`);
     need(app, "size", "number", `${where} (legacy)`);
     if (app.version !== app.versions[0].version) throw new Error(`${where}: legacy version does not match versions[0]`);
     if (app.downloadURL !== app.versions[0].downloadURL) throw new Error(`${where}: legacy downloadURL does not match versions[0]`);
+    if (app.size !== app.versions[0].size) throw new Error(`${where}: legacy size does not match versions[0]`);
   }
   if (/github\.com\/[^/\s]+\/shelf\/releases\/download\/(?!ipa\/)/i.test(JSON.stringify(src))) {
     throw new Error("source points at an unexpected GitHub release");
@@ -91,8 +123,11 @@ function build(ipaPath, minOs, date) {
   if (!version || !buildVersion || !name || !bundle) {
     throw new Error("app.json is missing name, version, ios.buildNumber, or ios.bundleIdentifier");
   }
+  if (bundle !== BUNDLE_ID) throw new Error(`ios.bundleIdentifier must be ${BUNDLE_ID}`);
+  if (!minOs) throw new Error("minOSVersion is required (--min-os). Feather needs it on versions[0].");
   const size = statSync(ipaPath).size;
   const when = date || new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const downloadURL = ipaDownloadUrl(version, buildVersion);
   const notes = `${name} ${version} (${buildVersion}), runtime ${runtime}. Screen updates arrive over the air. Install this when the runtime changes.`;
   const description = "Shelf is a private money app. Accounts, a monthly plan, bills, goals, and insights. Most screen changes arrive over the air. Install a new build here when the runtime changes.";
   const versionEntry = {
@@ -100,14 +135,14 @@ function build(ipaPath, minOs, date) {
     buildVersion,
     date: when,
     localizedDescription: notes,
-    downloadURL: IPA_URL,
+    downloadURL,
     size,
+    minOSVersion: minOs,
   };
-  if (minOs) versionEntry.minOSVersion = minOs;
   const listing = {
     name,
     bundleIdentifier: bundle,
-    developerName: "Rico Rodriguez",
+    developerName: DEVELOPER,
     subtitle: "Accounts, a monthly plan, bills, goals, and insights.",
     localizedDescription: description,
     iconURL: ICON_URL,
@@ -118,12 +153,12 @@ function build(ipaPath, minOs, date) {
     version,
     versionDate: when,
     versionDescription: notes,
-    downloadURL: IPA_URL,
+    downloadURL,
     size,
   };
   return {
     name,
-    identifier: "app.shelf.source",
+    identifier: SOURCE_ID,
     subtitle: "Sideload builds of Shelf",
     description: "Shelf builds for Feather, AltStore, and SideStore.",
     iconURL: ICON_URL,
