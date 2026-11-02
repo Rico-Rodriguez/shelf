@@ -289,19 +289,29 @@ export default function BudgetScreen() {
     const barFrom = anchorRect(`plan.bar.${row.category.id}`);
     setRowOrigin(origin);
     const pacedRow = row.availableCents > 0;
+    const rowPace = pacedRow ? budgetPace(row.spentCents, row.availableCents) : null;
     const rowOver = pacedRow && row.remainingCents < 0;
-    const figure = pacedRow ? Math.abs(row.remainingCents) : row.spentCents;
+    const figure = rowPace ? rowPace.gapCents : row.spentCents;
+    const figureColor = rowPace
+      ? rowPace.tone === "bad"
+        ? colors.danger
+        : rowPace.tone === "warn"
+          ? colors.warn
+          : colors.positive
+      : rowOver
+        ? colors.danger
+        : colors.ink;
     const carry: FlightPiece[] = [];
     if (figureFrom) {
       carry.push({
         key: "figure",
         text: money(figure),
-        color: rowOver ? colors.danger : colors.ink,
+        color: figureColor,
         fontSize: 16,
         fontWeight: "700",
         from: figureFrom,
         toAnchor: "plan.sheet.figure",
-        toFontSize: 32,
+        toFontSize: 13,
       });
     }
     if (barFrom) {
@@ -494,19 +504,21 @@ export default function BudgetScreen() {
                 ) : null}
               </View>
 
-              {/* Primary Value */}
-              <View ref={planLeft.ref} onLayout={planLeft.onLayout} collapsable={false} style={{ flexDirection: "row", alignItems: "baseline", gap: 6, opacity: planLeftHidden }}>
-                <RollingFigure
-                  text={figureSeed ?? tileText}
-                  style={{
-                    fontSize: 38,
-                    fontWeight: "700",
-                    letterSpacing: -1.4,
-                    color: over ? colors.danger : colors.ink,
-                    fontVariant: ["tabular-nums"],
-                  }}
-                />
-                <Text style={{ fontSize: 16, fontWeight: "500", color: colors.muted }}>
+              {/* Amount stays whole. The caption sits under it and can wrap. */}
+              <View style={{ alignSelf: "stretch" }}>
+                <View ref={planLeft.ref} onLayout={planLeft.onLayout} collapsable={false} style={{ alignSelf: "flex-start", flexShrink: 0, opacity: planLeftHidden }}>
+                  <RollingFigure
+                    text={figureSeed ?? tileText}
+                    style={{
+                      fontSize: 38,
+                      fontWeight: "700",
+                      letterSpacing: -1.4,
+                      color: over ? colors.danger : colors.ink,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  />
+                </View>
+                <Text style={{ marginTop: 2, fontSize: 16, fontWeight: "500", color: colors.muted }}>
                   {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
                 </Text>
               </View>
@@ -569,7 +581,7 @@ export default function BudgetScreen() {
                         const rowPace = paced ? budgetPace(row.spentCents, row.availableCents) : null;
                         const rowPaceColor = rowPace?.tone === "bad" ? colors.danger : rowPace?.tone === "warn" ? colors.warn : colors.positive;
                         const rowOver = paced && row.remainingCents < 0;
-                        const figure = paced ? Math.abs(row.remainingCents) : row.spentCents;
+                        const figure = rowPace ? rowPace.gapCents : row.spentCents;
 
                         return (
                           <AnchorBox key={row.category.id} id={`plan.row.${row.category.id}`}>
@@ -595,14 +607,14 @@ export default function BudgetScreen() {
                                   </Text>
                                 ) : null}
                               </View>
-                              <View style={{ alignItems: "flex-end", gap: 2 }}>
+                              <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
                                 {rowPace ? (
                                   <Text style={{ fontSize: 12, fontWeight: "700", color: rowPaceColor }}>
                                     {rowPace.label}
                                   </Text>
                                 ) : null}
                                 <AnchorBox id={`plan.figure.${row.category.id}`}>
-                                  <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink }}>{money(figure)}</Text>
+                                  <Text style={{ fontSize: 16, fontWeight: "600", color: rowPace ? rowPaceColor : colors.ink }}>{money(figure)}</Text>
                                 </AnchorBox>
                               </View>
                             </View>
@@ -749,6 +761,7 @@ export default function BudgetScreen() {
           const rowPace = paced ? budgetPace(editing.spentCents, editing.availableCents) : null;
           const rowPaceColor = rowPace?.tone === "bad" ? colors.danger : rowPace?.tone === "warn" ? colors.warn : colors.positive;
           const rowOver = paced && editing.remainingCents < 0;
+          const paceGap = rowPace ? rowPace.gapCents : 0;
           const figure = paced ? Math.abs(editing.remainingCents) : editing.spentCents;
           const color = shelfColor(editing.group?.color ?? "#8B939E");
           const txCount = txs ? txs.length : 0;
@@ -790,12 +803,17 @@ export default function BudgetScreen() {
                           paddingHorizontal: 10,
                           paddingVertical: 6,
                           borderRadius: 8,
-                          backgroundColor: rowOver ? "rgba(217, 74, 46, 0.12)" : "rgba(27, 122, 98, 0.12)",
+                          backgroundColor:
+                            rowPace?.tone === "bad"
+                              ? "rgba(217, 74, 46, 0.12)"
+                              : rowPace?.tone === "warn"
+                                ? "rgba(196, 122, 26, 0.12)"
+                                : "rgba(27, 122, 98, 0.12)",
                         }}
                       >
                         <AnchorBox id="plan.sheet.figure">
-                          <Text style={{ fontSize: 13, fontWeight: "700", color: rowOver ? colors.danger : colors.positive }}>
-                            {rowOver ? `${money(figure)} over` : `${money(figure)} left`}
+                          <Text style={{ fontSize: 13, fontWeight: "700", color: rowPace ? rowPaceColor : colors.ink }}>
+                            {rowPace ? money(paceGap) : money(figure)}
                           </Text>
                         </AnchorBox>
                       </View>

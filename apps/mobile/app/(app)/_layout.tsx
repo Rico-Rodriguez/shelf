@@ -16,9 +16,7 @@ import {
   launchPlanToToday,
   peekCategoryReturn,
   playFlight,
-  recallAnchor,
   setFlightSurface,
-  stageFlight,
   takeCategoryReturn,
   useMeasuredAnchor,
 } from "../../src/flight";
@@ -51,9 +49,6 @@ function MobileBar({
     color: palette.muted,
     fontSize: 10,
   });
-  const worthMeasure = useMeasuredAnchor(netWorth === null ? null : "worth.pill", netWorth === null ? null : { text: money(netWorth), color: palette.ink, fontSize: 13 });
-  const reduceMotion = useReduceMotion();
-
   return (
     <View
       style={{
@@ -155,30 +150,7 @@ function MobileBar({
               accessibilityLabel={`Net worth ${money(netWorth)}, view accounts`}
               onPress={() => {
                 tapPress();
-                const from = anchorRect("worth.pill");
-                const remembered = recallAnchor("worth.pill");
-                if (from && remembered) {
-                  stageFlight(
-                    {
-                      id: "worth-open",
-                      hide: ["worth.hero"],
-                      pieces: [
-                        {
-                          key: "worth",
-                          text: remembered.text,
-                          color: remembered.color,
-                          fontSize: remembered.fontSize,
-                          fontWeight: "700",
-                          from,
-                          toAnchor: "worth.hero",
-                          toFontSize: 46,
-                        },
-                      ],
-                    },
-                    reduceMotion,
-                  );
-                }
-                router.push("/(app)/accounts");
+                router.push("/accounts");
               }}
               style={({ pressed }) => [
                 {
@@ -198,7 +170,6 @@ function MobileBar({
               hitSlop={6}
             >
               <Icon name="wallet" size={13} color={palette.accentInk} filled />
-              <View ref={worthMeasure.ref} onLayout={worthMeasure.onLayout} collapsable={false}>
               <RollingFigure
                 text={money(netWorth)}
                 duration={360}
@@ -210,7 +181,6 @@ function MobileBar({
                   letterSpacing: -0.2,
                 }}
               />
-              </View>
             </Pressable>
           ) : null}
 
@@ -262,14 +232,21 @@ function CrossfadeLabel({
     Animated.timing(fade, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
   }, [focused, reduceMotion, fade]);
   const idle = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-  const label = { fontSize: 11, letterSpacing: -0.1, marginTop: 2 } as const;
+  const label = { fontSize: 11, letterSpacing: -0.1, marginTop: 0 } as const;
   return (
-    <View style={{ alignItems: "center", marginTop: 2 }}>
-      <Animated.View style={{ opacity: idle }}>
-        <Text style={{ ...label, marginTop: 0, fontWeight: "500", color: palette.tertiary }}>{title}</Text>
+    <View style={{ alignItems: "center", marginTop: 2, flexShrink: 0 }}>
+      <Text style={{ ...label, fontWeight: "700", opacity: 0 }} numberOfLines={1}>
+        {title}
+      </Text>
+      <Animated.View style={{ opacity: idle, position: "absolute", left: 0, right: 0, top: 0, alignItems: "center" }}>
+        <Text style={{ ...label, fontWeight: "500", color: palette.tertiary }} numberOfLines={1}>
+          {title}
+        </Text>
       </Animated.View>
       <Animated.View style={{ opacity: fade, position: "absolute", left: 0, right: 0, top: 0, alignItems: "center" }}>
-        <Text style={{ ...label, marginTop: 0, fontWeight: "700", color: palette.accentInk }}>{title}</Text>
+        <Text style={{ ...label, fontWeight: "700", color: palette.accentInk }} numberOfLines={1}>
+          {title}
+        </Text>
       </Animated.View>
     </View>
   );
@@ -326,7 +303,8 @@ function ShelfTabBarItem({
         onPress();
       }}
       style={{
-        flex: 1,
+        flexGrow: 1,
+        flexShrink: 0,
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 6,
@@ -750,7 +728,7 @@ export default function AppTabs() {
 
   const onBudget = path.includes("budget");
   const onActivity = path.includes("activity");
-  const onAccounts = path.includes("account");
+  const onAccounts = path.startsWith("/account/");
   const onToday = !onBudget && !onActivity && !onAccounts;
   useEffect(() => {
     if (onToday) setFlightSurface("today");
@@ -844,7 +822,6 @@ export default function AppTabs() {
             header: () => <MobileBar unread={unread} syncLabel={syncLabel} netWorth={showWorth ? netWorth : null} />,
           }}
         />
-        <Tabs.Screen name="accounts" options={{ href: null, title: "Accounts" }} />
       </Tabs>
 
       {/* Global Frictionless Quick-Log Sheet */}

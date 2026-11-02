@@ -8,7 +8,7 @@ const PAGES = [
   ["/(app)", "Home"],
   ["/(app)/activity", "Activity"],
   ["/(app)/budget", "Budget"],
-  ["/(app)/accounts", "Accounts"],
+  ["/accounts", "Accounts"],
   ["/bills", "Bills"],
   ["/goals", "Goals"],
   ["/insights", "Insights"],

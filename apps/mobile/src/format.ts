@@ -154,21 +154,22 @@ export function expectedPaceCents(plannedCents: number, date = new Date()): numb
 }
 
 /**
- * Pace versus today.
- * Under the straight-line pace is Ahead (room left).
- * Over that pace but still inside the plan is Behind.
- * Over the plan is Over.
- * Spending less than the pace is never Behind.
+ * Pace versus today, on a straight line through the month.
+ * Under that line is Ahead (calm). The gap is how far under the line.
+ * Over that line is Over (warning), including once the plan itself is gone.
+ * The gap is how far over the line. Budget pace never says Behind.
  */
 export function budgetPace(
   spentCents: number,
   plannedCents: number,
   date = new Date(),
-): { label: "Ahead" | "Behind" | "Over"; tone: "good" | "warn" | "bad" } {
+): { label: "Ahead" | "Over"; tone: "good" | "warn" | "bad"; gapCents: number } {
   const expected = expectedPaceCents(plannedCents, date);
-  if (plannedCents > 0 && spentCents > plannedCents) return { label: "Over", tone: "bad" };
-  if (spentCents > expected) return { label: "Behind", tone: "warn" };
-  return { label: "Ahead", tone: "good" };
+  if (spentCents > expected) {
+    const overPlan = plannedCents > 0 && spentCents > plannedCents;
+    return { label: "Over", tone: overPlan ? "bad" : "warn", gapCents: spentCents - expected };
+  }
+  return { label: "Ahead", tone: "good", gapCents: expected - spentCents };
 }
 
 /**

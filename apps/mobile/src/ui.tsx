@@ -189,37 +189,36 @@ export function Screen({
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View
-        style={{
-          minHeight: 46,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: 16,
-        }}
-      >
-        <View style={{ minWidth: 60, alignItems: "flex-start", justifyContent: "center" }}>
+      <View style={{ minHeight: 46, justifyContent: "center", alignItems: "center" }}>
+        {title ? (
+          <View
+            pointerEvents="none"
+            ref={titleMeasure.ref}
+            onLayout={titleMeasure.onLayout}
+            collapsable={false}
+            style={{ opacity: titleOpacity, maxWidth: "52%", alignItems: "center" }}
+          >
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={{
+                textAlign: "center",
+                fontSize: 17,
+                fontWeight: "600",
+                color: palette.ink,
+                letterSpacing: -0.3,
+                fontFamily: title === "Shelf" ? wordmark : undefined,
+              }}
+            >
+              {title}
+            </Text>
+          </View>
+        ) : null}
+        <View style={{ position: "absolute", left: 8, top: 0, bottom: 0, justifyContent: "center", maxWidth: "42%" }}>
           {refresh}
         </View>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}>
-          {title ? (
-            <View ref={titleMeasure.ref} onLayout={titleMeasure.onLayout} collapsable={false} style={{ opacity: titleOpacity }}>
-              <Text
-                numberOfLines={1}
-                style={{
-                  fontSize: 17,
-                  fontWeight: "600",
-                  color: palette.ink,
-                  letterSpacing: -0.3,
-                  fontFamily: title === "Shelf" ? wordmark : undefined,
-                }}
-              >
-                {title}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={{ minWidth: 60, alignItems: "flex-end", justifyContent: "center", flexShrink: 1 }}>
+        <View style={{ position: "absolute", right: 12, top: 0, bottom: 0, justifyContent: "center", maxWidth: "42%", alignItems: "flex-end" }}>
           {action}
         </View>
       </View>
