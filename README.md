@@ -51,7 +51,7 @@ Install Shelf from Feather with this source, the same kind of release asset Crit
 
 [https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/altstore.json](https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/altstore.json)
 
-The source lists the version, build number, byte size, date, bundle id, and display name from `apps/mobile/app.json`. Its download is [Shelf.ipa](https://github.com/Rico-Rodriguez/shelf/releases/download/ipa/Shelf.ipa) on that release. The September 2026 asset was runtime `1.2.0` with the same version and build number (`1.2.0`, build `2`). This source replaces it when the manual build finishes. If Feather treats that as already installed, delete Shelf and install it again.
+The source lists the version, build number, byte size, date, minimum iOS version, bundle id, and display name from the IPA that run just uploaded. Its download is the versioned file on that release, `Shelf-<version>-<build>.ipa` (for example `Shelf-1.3.0-3.ipa`). Category is `utilities`. The September 2026 asset was runtime `1.2.0` with marketing version `1.2.0`, build `2`. The next manual build replaces `altstore.json` at the same URL. If Feather treats an older build as already installed, delete Shelf and install it again.
 
 > [!IMPORTANT]
 > **AI Assistant Rule**: Whenever making changes that touch native modules, iOS native code, `apps/mobile/app.json` permissions/plugins/icon/splash, or bumping `runtimeVersion`, you **MUST explicitly alert the user** that an OTA update is insufficient and they need to trigger the **Shelf IPA** workflow manually. For everyday UI, styling, screens, and copy changes, inform them that the automatic OTA pipeline (`publish-ota.yml`) handles it seamlessly hands-off on push without needing a manual build.
