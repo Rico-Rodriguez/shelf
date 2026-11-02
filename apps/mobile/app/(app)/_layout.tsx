@@ -8,6 +8,7 @@ import { tapPress, tapSelect } from "../../src/haptic";
 import { useWordmark } from "../../src/brand";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, netWorthCents, sameMerchant, type NetWorthAccount } from "../../src/format";
+import { islandChargeId, syncIsland, type IslandTx } from "../../src/island";
 import {
   anchorRect,
   emitShelfRefresh,
@@ -594,6 +595,10 @@ export default function AppTabs() {
           ]);
           if (!alive) return;
           emitShelfRefresh();
+          const listed = peek<{ transactions?: IslandTx[] }>("/api/transactions?")?.transactions ?? [];
+          syncIsland(listed);
+          const onIsland = islandChargeId();
+          const islandFrom = { x: 80, y: 6, width: 210, height: 32 };
           const after = peek<{ transactions?: { id: string; name: string; merchantName?: string | null; amountCents: number; pending?: boolean }[] }>(dashboardPath());
           const rows = after?.transactions ?? [];
           const hadBaseline = known.size > 0;
@@ -616,7 +621,7 @@ export default function AppTabs() {
               color: tx.pending ? colors.tertiary : colors.ink,
               fontSize: 13,
               fontWeight: "600" as const,
-              from: fromChip,
+              from: tx.id === onIsland ? islandFrom : fromChip,
               toAnchor: `today.tx.${tx.id}`,
               toFontSize: 16,
               delay,

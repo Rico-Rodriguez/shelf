@@ -36,6 +36,7 @@ import {
   useMeasuredAnchor,
 } from "../../src/flight";
 import { tapPress } from "../../src/haptic";
+import { markIslandSat, onIslandSit } from "../../src/island";
 import { useReduceMotion } from "../../src/theme";
 import { mergeDashboard, subscribeLive } from "../../src/live-edits";
 import {
@@ -205,6 +206,43 @@ export default function HomeScreen() {
       setTimeout(() => setFigureSeed(null), 32);
     };
   });
+  useFlightArrival("island-sit", reduceMotion);
+  useEffect(() => {
+    return onIslandSit((arrival) => {
+      markIslandSat();
+      const from = { x: 80, y: 6, width: 210, height: 32 };
+      playFlight(
+        {
+          id: "island-sit",
+          hide: [`today.tx.${arrival.id}`, `today.tx.${arrival.id}.amount`],
+          pieces: [
+            {
+              key: "merchant",
+              text: arrival.merchant,
+              meta: "Posts later",
+              color: colors.tertiary,
+              fontSize: 15,
+              fontWeight: "600",
+              from,
+              toAnchor: `today.tx.${arrival.id}`,
+              toFontSize: 16,
+            },
+            {
+              key: "amount",
+              text: arrival.amount,
+              color: colors.tertiary,
+              fontSize: 15,
+              fontWeight: "700",
+              from: { x: from.x + 120, y: from.y, width: 88, height: 28 },
+              toAnchor: `today.tx.${arrival.id}.amount`,
+              toFontSize: 16,
+            },
+          ],
+        },
+        reduceMotion,
+      );
+    });
+  }, [reduceMotion]);
 
   useEffect(() => {
     const txs = shownDash?.transactions ?? [];
