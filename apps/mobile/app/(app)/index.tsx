@@ -166,10 +166,7 @@ export default function HomeScreen() {
             <MenuRow
               title="Your money"
               icon="wallet"
-              onPress={() => {
-                tapPress();
-                setMoneyOpen(true);
-              }}
+              onPress={() => setMoneyOpen(true)}
             />
           </Card>
 
@@ -178,7 +175,6 @@ export default function HomeScreen() {
             <ReviewBanner
               count={shownDash.unreviewed.count}
               onPress={() => {
-                tapPress();
                 router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
               }}
             />
@@ -226,7 +222,6 @@ export default function HomeScreen() {
                           amount={flow.text}
                           amountColor={flow.color}
                           onPress={() => {
-                            tapPress();
                             router.push({ pathname: "/(app)/activity", params: { q: label } });
                           }}
                         />
@@ -255,10 +250,7 @@ export default function HomeScreen() {
                         name={bill.merchantName}
                         meta={inDaysPhrase(bill.nextDate)}
                         amount={money(bill.amountCents)}
-                        onPress={() => {
-                          tapPress();
-                          router.push("/bills");
-                        }}
+                        onPress={() => router.push("/bills")}
                       />
                     ))}
                     {suggestions > 0 ? (

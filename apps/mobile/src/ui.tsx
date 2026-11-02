@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Reanimated, {
@@ -14,7 +14,7 @@ import { flowMoney, money, monthLabel, shiftMonth, shortMonthLabel, todayISO, sh
 import { tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
 import { BlurView } from "expo-blur";
-import { colors, useReduceTransparency, useTheme, type Palette } from "./theme";
+import { colors, useReduceMotion, useReduceTransparency, useTheme, type Palette } from "./theme";
 import { api, load, peek } from "./api";
 import * as SecureStore from "expo-secure-store";
 import { celebrate } from "./toast";
@@ -109,8 +109,26 @@ export function Screen({
   const wordmark = useWordmark();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
+  const reduceMotion = useReduceMotion();
   const isDark = palette.scheme === "dark";
   const [refreshing, setRefreshing] = useState(false);
+  const bodyFade = useRef(new Animated.Value(1)).current;
+  const sawFocus = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!framed) return;
+      if (!sawFocus.current) {
+        sawFocus.current = true;
+        return;
+      }
+      if (reduceMotion) {
+        bodyFade.setValue(1);
+        return;
+      }
+      bodyFade.setValue(0);
+      Animated.timing(bodyFade, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    }, [framed, reduceMotion, bodyFade]),
+  );
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const setScrollLocked = useCallback((locked: boolean) => {
     setScrollEnabled(!locked);
@@ -192,7 +210,7 @@ export function Screen({
 
   if (!scrollable) {
     return (
-      <View style={styles.safe}>
+      <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
         {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
         {pinnedNav}
         <ScrollLockProvider value={setScrollLocked}>
@@ -213,12 +231,12 @@ export function Screen({
           </View>
         </ScrollLockProvider>
         {footer}
-      </View>
+      </Animated.View>
     );
   }
 
   const body = (
-    <View style={styles.safe}>
+    <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
       {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
       {pinnedNav}
       <ScrollLockProvider value={setScrollLocked}>
@@ -256,7 +274,7 @@ export function Screen({
         </ScrollView>
       </ScrollLockProvider>
       {footer}
-    </View>
+    </Animated.View>
   );
   return body;
 }
@@ -618,18 +636,15 @@ export function LedgerRow({
 }
 
 function PressScale({ children, onPress, pressedStyle }: { children: ReactNode; onPress: () => void; pressedStyle?: object }) {
-  const scale = useRef(new Animated.Value(1)).current;
   return (
     <Pressable
       onPress={() => {
         tapPress();
         onPress();
       }}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 28, mass: 0.6 }).start()}
       style={({ pressed }) => (pressed ? pressedStyle : null)}
     >
-      <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>
+      {children}
     </Pressable>
   );
 }
@@ -762,11 +777,15 @@ export function Loading({ label = "Loading" }: { label?: string }) {
 
 function Skeleton() {
   const styles = useStyles();
-  const opacity = useSharedValue(0.35);
+  const reduceMotion = useReduceMotion();
+  const opacity = useSharedValue(reduceMotion ? 1 : 0.35);
 
   useEffect(() => {
+    if (reduceMotion) {
+      opacity.value = 1;
+      return;
+    }
     opacity.value = withTiming(0.85, { duration: 750 }, () => {
-      // Loop with sinusoidal pulse
       const pulse = () => {
         opacity.value = withTiming(0.35, { duration: 750 }, () => {
           opacity.value = withTiming(0.85, { duration: 750 }, pulse);
@@ -774,7 +793,7 @@ function Skeleton() {
       };
       pulse();
     });
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   const shimmerStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -794,11 +813,13 @@ function Skeleton() {
         </View>
       </View>
 
-      {/* Pill Actions Strip Skeleton */}
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <View style={{ width: 100, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
-        <View style={{ width: 120, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
-        <View style={{ width: 90, height: 38, borderRadius: 99, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }} />
+      {/* One destination row, matching Your money */}
+      <View style={styles.card}>
+        <View style={[styles.ledger, { alignItems: "center", gap: 12 }]}>
+          <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: colors.fillStrong }} />
+          <View style={{ flex: 1, height: 14, borderRadius: 5, backgroundColor: colors.fillStrong }} />
+          <View style={{ width: 8, height: 12, borderRadius: 2, backgroundColor: colors.fill }} />
+        </View>
       </View>
 
       {/* Rows Card Skeleton */}
@@ -869,6 +890,104 @@ export function Segment({
   );
 }
 
+function moneyValue(value: string) {
+  const n = Number(value.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function moneySlots(from: string, to: string) {
+  const anchorOf = (value: string) => {
+    const dot = value.indexOf(".");
+    return dot === -1 ? value.length : dot;
+  };
+  const fromAnchor = anchorOf(from);
+  const toAnchor = anchorOf(to);
+  const offsets = new Set<number>();
+  [...from].forEach((_, index) => offsets.add(fromAnchor - index));
+  [...to].forEach((_, index) => offsets.add(toAnchor - index));
+  return [...offsets]
+    .sort((a, b) => b - a)
+    .map((offset) => ({
+      offset,
+      from: from[fromAnchor - offset] ?? "",
+      to: to[toAnchor - offset] ?? "",
+    }));
+}
+
+/** Digits travel when the formatted amount changes. The first paint holds still. */
+export function RollingFigure({
+  text,
+  live = false,
+  style,
+  duration = 320,
+}: {
+  text: string;
+  live?: boolean;
+  style?: StyleProp<TextStyle>;
+  duration?: number;
+}) {
+  const reduceMotion = useReduceMotion();
+  const shown = useRef(text);
+  const progress = useRef(new Animated.Value(1)).current;
+  const run = useRef(0);
+  const [tick, setTick] = useState<{ from: string; to: string; rising: boolean } | null>(null);
+
+  useEffect(() => {
+    if (text === shown.current) return;
+    const previous = shown.current;
+    shown.current = text;
+    if (live || reduceMotion) {
+      setTick(null);
+      progress.setValue(1);
+      return;
+    }
+    const id = ++run.current;
+    setTick({ from: previous, to: text, rising: moneyValue(text) >= moneyValue(previous) });
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished && run.current === id) setTick(null);
+    });
+  }, [text, live, reduceMotion, duration, progress]);
+
+  if (!tick) return <Text style={style}>{text}</Text>;
+
+  const fontSize = (StyleSheet.flatten(style)?.fontSize as number | undefined) ?? 16;
+  const travel = fontSize * 0.62;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+      {moneySlots(tick.from, tick.to).map((slot) => {
+        if (!slot.from || !slot.to || slot.from === slot.to) {
+          return (
+            <Text key={slot.offset} style={style}>
+              {slot.to || slot.from}
+            </Text>
+          );
+        }
+        const outY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, tick.rising ? -travel : travel] });
+        const inY = progress.interpolate({ inputRange: [0, 1], outputRange: [tick.rising ? travel : -travel, 0] });
+        const outOpacity = progress.interpolate({ inputRange: [0, 0.55], outputRange: [1, 0], extrapolate: "clamp" });
+        const inOpacity = progress.interpolate({ inputRange: [0.25, 1], outputRange: [0, 1], extrapolate: "clamp" });
+        return (
+          <View key={slot.offset} style={{ height: fontSize * 1.15, justifyContent: "center", overflow: "hidden" }}>
+            <Text style={[style, { opacity: 0 }]}>{slot.to}</Text>
+            <Animated.View style={{ position: "absolute", left: 0, right: 0, opacity: outOpacity, transform: [{ translateY: outY }] }}>
+              <Text style={[style, { textAlign: "center" }]}>{slot.from}</Text>
+            </Animated.View>
+            <Animated.View style={{ position: "absolute", left: 0, right: 0, opacity: inOpacity, transform: [{ translateY: inY }] }}>
+              <Text style={[style, { textAlign: "center" }]}>{slot.to}</Text>
+            </Animated.View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function Hero({
   label,
   cents,
@@ -925,6 +1044,17 @@ export function Hero({
       : signed && cents > 0
         ? `+${money(cents)}`
         : money(cents);
+  const figureStyle = [
+    styles.heroFigure,
+    empty ? styles.heroEmpty : null,
+    tone === "bad" ? { color: colors.danger } : null,
+    tone === "good" ? { color: colors.positive } : null,
+  ];
+  const figure = empty ? (
+    <Text style={figureStyle}>{figureText}</Text>
+  ) : (
+    <RollingFigure text={figureText} live={live} style={figureStyle} />
+  );
 
   return (
     <View style={[styles.hero, glass ? styles.heroGlass : null]}>
@@ -948,28 +1078,10 @@ export function Hero({
       </View>
       {onPressFigure ? (
         <Pressable onPress={onPressFigure} hitSlop={8}>
-          <Text
-            style={[
-              styles.heroFigure,
-              empty ? styles.heroEmpty : null,
-              tone === "bad" ? { color: colors.danger } : null,
-              tone === "good" ? { color: colors.positive } : null,
-            ]}
-          >
-            {figureText}
-          </Text>
+          {figure}
         </Pressable>
       ) : (
-        <Text
-          style={[
-            styles.heroFigure,
-            empty ? styles.heroEmpty : null,
-            tone === "bad" ? { color: colors.danger } : null,
-            tone === "good" ? { color: colors.positive } : null,
-          ]}
-        >
-          {figureText}
-        </Text>
+        figure
       )}
       {subtitle ? <View style={{ marginTop: 4 }}>{subtitle}</View> : null}
       {charting && points ? (
@@ -1428,6 +1540,7 @@ export function SheetContainer({
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
+  const reduceMotion = useReduceMotion();
   const isDark = palette.scheme === "dark";
   const screenHeight = Dimensions.get("window").height;
   const translateY = useRef(new Animated.Value(screenHeight)).current;
@@ -1449,6 +1562,10 @@ export function SheetContainer({
       hasClosedRef.current = false;
       setClosing(false);
       translateY.setValue(screenHeight);
+      if (reduceMotion) {
+        translateY.setValue(0);
+        return;
+      }
       Animated.spring(translateY, {
         toValue: 0,
         damping: 28,
@@ -1457,27 +1574,35 @@ export function SheetContainer({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible, screenHeight, translateY]);
+  }, [visible, screenHeight, translateY, reduceMotion]);
 
-  const dismiss = useCallback(() => {
+  const dismiss = useCallback((velocity = 0) => {
     if (isClosing.current) return;
     isClosing.current = true;
     setClosing(true);
     Keyboard.dismiss();
     tapPress();
 
-    const fallbackTimer = setTimeout(handleClose, 240);
+    if (reduceMotion) {
+      translateY.setValue(screenHeight);
+      handleClose();
+      return;
+    }
 
-    Animated.timing(translateY, {
+    const fallbackTimer = setTimeout(handleClose, 700);
+    Animated.spring(translateY, {
       toValue: screenHeight,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+      velocity,
+      damping: 32,
+      stiffness: 280,
+      mass: 0.8,
+      overshootClamping: true,
       useNativeDriver: true,
     }).start(() => {
       clearTimeout(fallbackTimer);
       handleClose();
     });
-  }, [handleClose, screenHeight, translateY]);
+  }, [handleClose, reduceMotion, screenHeight, translateY]);
 
   const panResponder = useMemo(
     () =>
@@ -1489,22 +1614,27 @@ export function SheetContainer({
         },
         onPanResponderMove: (_, gestureState) => {
           if (isClosing.current) return;
-          if (gestureState.dy > 0) {
+          if (gestureState.dy < 0) {
+            translateY.setValue(-Math.min(42, Math.pow(Math.abs(gestureState.dy), 0.72)));
+          } else {
             translateY.setValue(gestureState.dy);
           }
         },
         onPanResponderRelease: (_, gestureState) => {
           if (isClosing.current) return;
-          if (gestureState.dy > 70 || gestureState.vy > 0.5) {
-            dismiss();
-          } else {
-            Animated.spring(translateY, {
-              toValue: 0,
-              damping: 28,
-              stiffness: 420,
-              useNativeDriver: true,
-            }).start();
-          }
+          const perSecond = Math.abs(gestureState.vy) > 40 ? gestureState.vy : gestureState.vy * 1000;
+          translateY.stopAnimation((current) => {
+            if (current > 72 || perSecond > 900) dismiss(Math.max(perSecond, 0));
+            else {
+              Animated.spring(translateY, {
+                toValue: 0,
+                velocity: perSecond,
+                damping: 26,
+                stiffness: 380,
+                useNativeDriver: true,
+              }).start();
+            }
+          });
         },
       }),
     [dismiss, translateY],
@@ -1523,7 +1653,7 @@ export function SheetContainer({
       visible
       animationType="none"
       transparent
-      onRequestClose={dismiss}
+      onRequestClose={() => dismiss()}
     >
       <View style={styles.sheetWrap} pointerEvents={closing ? "none" : "auto"}>
         <Animated.View style={[styles.sheetBackdrop, { opacity: backdropOpacity }]}>
@@ -1534,7 +1664,7 @@ export function SheetContainer({
               style={StyleSheet.absoluteFill}
             />
           ) : null}
-          <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => dismiss()} />
         </Animated.View>
         <Animated.View
           style={[
@@ -1575,10 +1705,7 @@ export function SheetContainer({
                 ) : (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => {
-                      tapPress();
-                      dismiss();
-                    }}
+                    onPress={() => dismiss()}
                     hitSlop={16}
                     style={({ pressed }) => [
                       styles.sheetDoneBtn,
@@ -1938,6 +2065,73 @@ export function SpendCard({
   );
 }
 
+function FlowToggle({ isIncome, onChange }: { isIncome: boolean; onChange: (income: boolean) => void }) {
+  const { palette } = useTheme();
+  const reduceMotion = useReduceMotion();
+  const isDark = palette.scheme === "dark";
+  const [width, setWidth] = useState(0);
+  const x = useRef(new Animated.Value(0)).current;
+  const inner = Math.max(0, width - 6);
+  const item = inner / 2;
+  useEffect(() => {
+    const to = isIncome ? item : 0;
+    if (reduceMotion || item <= 0) {
+      x.setValue(to);
+      return;
+    }
+    Animated.spring(x, { toValue: to, useNativeDriver: true, stiffness: 460, damping: 34, mass: 0.7 }).start();
+  }, [isIncome, item, reduceMotion, x]);
+  return (
+    <View
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={{
+        position: "relative",
+        minHeight: 42,
+        padding: 3,
+        borderRadius: 999,
+        borderCurve: "continuous",
+        backgroundColor: isDark ? "rgba(38, 43, 52, 0.7)" : "rgba(224, 229, 235, 0.75)",
+        flexDirection: "row",
+      }}
+    >
+      {item > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 3,
+            bottom: 3,
+            left: 3,
+            width: item,
+            borderRadius: 999,
+            backgroundColor: isIncome ? palette.positive : palette.control,
+            transform: [{ translateX: x }],
+          }}
+        />
+      ) : null}
+      {(["Expense", "Income"] as const).map((label) => {
+        const selected = label === "Income" ? isIncome : !isIncome;
+        const ink = !selected ? palette.muted : label === "Income" ? "#ffffff" : palette.controlInk;
+        return (
+          <Pressable
+            key={label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            style={{ flex: 1, minHeight: 36, alignItems: "center", justifyContent: "center" }}
+            onPress={() => {
+              if ((label === "Income") === isIncome) return;
+              tapSelect();
+              onChange(label === "Income");
+            }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: "600", color: ink }}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const QUICK_ACCOUNT_KEY = "shelf.quickadd.account";
 
 function amountToCents(raw: string): number {
@@ -2137,57 +2331,29 @@ export function QuickLogModal({
         )
       ) : (
         <>
-          <View style={{ flexDirection: "row", alignSelf: "center", backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)", borderRadius: 99, padding: 3 }}>
-            <Pressable
-              onPress={() => {
-                tapSelect();
-                incomeMode.current = false;
-                setIsIncome(false);
-                setSelectedCatId(pickQuickCategory(categories, false)?.id ?? null);
-              }}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 5,
-                borderRadius: 99,
-                backgroundColor: !isIncome ? palette.control : "transparent",
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: "600", color: !isIncome ? palette.controlInk : palette.muted }}>
-                Expense
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                tapSelect();
-                incomeMode.current = true;
-                setIsIncome(true);
-                setSelectedCatId(pickQuickCategory(categories, true)?.id ?? null);
-              }}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 5,
-                borderRadius: 99,
-                backgroundColor: isIncome ? palette.positive : "transparent",
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: "600", color: isIncome ? "#ffffff" : palette.muted }}>
-                Income
-              </Text>
-            </Pressable>
-          </View>
-
-          <Text
-            style={{
-              fontSize: 48,
-              fontWeight: "700",
-              letterSpacing: -2,
-              textAlign: "center",
-              color: isIncome ? palette.positive : palette.ink,
-              fontVariant: ["tabular-nums"],
+          <FlowToggle
+            isIncome={isIncome}
+            onChange={(income) => {
+              incomeMode.current = income;
+              setIsIncome(income);
+              setSelectedCatId(pickQuickCategory(categories, income)?.id ?? null);
             }}
-          >
-            {isIncome && cents > 0 ? "+" : ""}{money(cents)}
-          </Text>
+          />
+
+          <View style={{ alignItems: "center" }}>
+            <RollingFigure
+              text={`${isIncome && cents > 0 ? "+" : ""}${money(cents)}`}
+              duration={160}
+              style={{
+                fontSize: 48,
+                fontWeight: "700",
+                letterSpacing: -2,
+                textAlign: "center",
+                color: isIncome ? palette.positive : palette.ink,
+                fontVariant: ["tabular-nums"],
+              }}
+            />
+          </View>
 
           <Pressable
             onPress={() => setPickingAccount(true)}

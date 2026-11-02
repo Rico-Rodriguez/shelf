@@ -1,12 +1,13 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { budgetPace, dayLabel, flowMoney, money, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { mergeBudget, subscribeLive } from "../../src/live-edits";
 import { celebrate } from "../../src/toast";
-import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, LoadError, Loading, MonthNav, Progress, ProgressRing, Screen, Section, Sheet } from "../../src/ui";
+import { Button, Card, colors, Facts, Field, GlassIconButton, Hero, InlineLoading, LoadError, Loading, MonthNav, Progress, ProgressRing, RollingFigure, Screen, Section, Sheet } from "../../src/ui";
+import { useReduceMotion } from "../../src/theme";
 import { Icon } from "../../src/icons";
 
 type BudgetRow = {
@@ -64,6 +65,34 @@ export default function BudgetScreen() {
   const [overlayTick, setOverlayTick] = useState(0);
   const planEpoch = useRef(0);
   const overlay = useRef<Budget | null>(null);
+  const reduceMotion = useReduceMotion();
+  const monthSlide = useRef(new Animated.Value(0)).current;
+  const monthFade = useRef(new Animated.Value(1)).current;
+  const monthDir = useRef(0);
+
+  function changeMonth(year: number, month: number) {
+    const next = year * 12 + month;
+    const prev = cursor.year * 12 + cursor.month;
+    monthDir.current = next === prev ? 0 : next > prev ? 1 : -1;
+    setCursor({ year, month });
+  }
+
+  useEffect(() => {
+    const dir = monthDir.current;
+    if (!dir) return;
+    monthDir.current = 0;
+    if (reduceMotion) {
+      monthSlide.setValue(0);
+      monthFade.setValue(1);
+      return;
+    }
+    monthSlide.setValue(dir * 36);
+    monthFade.setValue(0.35);
+    Animated.parallel([
+      Animated.spring(monthSlide, { toValue: 0, useNativeDriver: true, stiffness: 320, damping: 28, mass: 0.72 }),
+      Animated.timing(monthFade, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [cursor.year, cursor.month, reduceMotion, monthSlide, monthFade]);
 
   const budgetPath = `/api/budget?year=${cursor.year}&month=${cursor.month}`;
 
@@ -289,7 +318,7 @@ export default function BudgetScreen() {
               year={cursor.year}
               month={cursor.month}
               compact
-              onChange={(year, month) => setCursor({ year, month })}
+              onChange={changeMonth}
             />
             <GlassIconButton
               icon="flag"
@@ -312,7 +341,7 @@ export default function BudgetScreen() {
         {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
         {!plan && !error ? <Loading /> : null}
         {plan ? (
-          <>
+          <Animated.View style={{ gap: 20, opacity: monthFade, transform: [{ translateX: monthSlide }] }}>
             {/* iOS Health Style Monthly Budget Tile */}
             <Pressable
               onPress={() => {
@@ -393,7 +422,8 @@ export default function BudgetScreen() {
 
               {/* Primary Value */}
               <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-                <Text
+                <RollingFigure
+                  text={hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan.expenseSpentCents ?? 0)}
                   style={{
                     fontSize: 38,
                     fontWeight: "700",
@@ -401,9 +431,7 @@ export default function BudgetScreen() {
                     color: over ? colors.danger : colors.ink,
                     fontVariant: ["tabular-nums"],
                   }}
-                >
-                  {hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan.expenseSpentCents ?? 0)}
-                </Text>
+                />
                 <Text style={{ fontSize: 16, fontWeight: "500", color: colors.muted }}>
                   {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
                 </Text>
@@ -546,7 +574,7 @@ export default function BudgetScreen() {
                 </Text>
               </Pressable>
             ) : null}
-          </>
+          </Animated.View>
         ) : null}
       </Screen>
 

@@ -22,7 +22,7 @@ import { dayLabel, flowMoney, money } from "./format";
 import { matchesMerchantRule } from "./review-flow";
 import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
-import { useReduceTransparency, useTheme } from "./theme";
+import { useReduceMotion, useReduceTransparency, useTheme } from "./theme";
 import { ConfirmMark } from "./toast";
 import { colors, Sheet, Switch } from "./ui";
 
@@ -358,8 +358,25 @@ export function ReviewDeck({
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const cardScale = useSharedValue(1);
+  const holdRise = useSharedValue(0);
+  const frontOpacity = useSharedValue(1);
   const hasTriggeredRightHaptic = useSharedValue(false);
   const hasTriggeredLeftHaptic = useSharedValue(false);
+  const reduceMotion = useReduceMotion();
+  const reduceRef = useRef(reduceMotion);
+  reduceRef.current = reduceMotion;
+  // Parent review updates land in the same turn as setDeparting, so the risen
+  // card must drop back to a sliver before paint. Waiting for an effect shows
+  // the card after the new front one at full size for a frame.
+  const risenFor = useRef<string | null>(currentId);
+  if (risenFor.current !== currentId) {
+    risenFor.current = currentId;
+    holdRise.value = 0;
+    frontOpacity.value = 1;
+    translateX.value = 0;
+    translateY.value = 0;
+    cardScale.value = 1;
+  }
 
   const pool = useMemo(
     () =>
@@ -401,10 +418,11 @@ export function ReviewDeck({
     return rest.filter((row) => !matchesMerchantRule(row, merchantKey));
   }, [rows, current, always, merchantKey]);
   const nextCard = upcoming[0];
-  const thirdCard = upcoming[1];
 
   // Reset top card position and inputs when active card changes
   useEffect(() => {
+    holdRise.value = 0;
+    frontOpacity.value = 1;
     translateX.value = 0;
     translateY.value = 0;
     cardScale.value = 1;
@@ -420,7 +438,12 @@ export function ReviewDeck({
   const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
-  const clearDeparting = useCallback(() => setDeparting(null), []);
+  const clearDeparting = useCallback(() => {
+    setDeparting(null);
+    // A skip that does not advance the queue, or a spring that ends on the same card, has to bring the front card back.
+    frontOpacity.value = 1;
+    holdRise.value = 0;
+  }, [frontOpacity, holdRise]);
 
   const commit = useCallback(
     (dir: "approve" | "skip") => {
@@ -430,14 +453,22 @@ export function ReviewDeck({
       const chosenId = categoryRef.current;
       const rule = alwaysRef.current && Boolean(chosenId);
       const category = chosenId ? byId.get(chosenId) ?? tx.category : tx.category;
+      holdRise.value = 1;
+      frontOpacity.value = 0;
       departX.value = translateX.value;
       translateX.value = 0;
       translateY.value = 0;
       cardScale.value = 1;
       setDeparting({ tx, dir, category: category ?? null, categoryId: chosenId, always: rule });
-      departX.value = withSpring(dir === "approve" ? windowWidth * 1.5 : -windowWidth * 1.5, SPRING_DISMISS, (finished) => {
-        if (finished) runOnJS(clearDeparting)();
-      });
+      const end = dir === "approve" ? windowWidth * 1.5 : -windowWidth * 1.5;
+      if (reduceRef.current) {
+        departX.value = end;
+        clearDeparting();
+      } else {
+        departX.value = withSpring(end, SPRING_DISMISS, (finished) => {
+          if (finished) runOnJS(clearDeparting)();
+        });
+      }
       if (dir === "approve") {
         tapSuccess();
         void onConfirm(tx, chosenId || null, rule);
@@ -446,7 +477,7 @@ export function ReviewDeck({
         onSkip(tx);
       }
     },
-    [byId, windowWidth, onConfirm, onSkip, departX, translateX, translateY, cardScale, clearDeparting],
+    [byId, windowWidth, onConfirm, onSkip, departX, translateX, translateY, cardScale, holdRise, frontOpacity, clearDeparting],
   );
 
   const handleButtonApprove = useCallback(() => commit("approve"), [commit]);
@@ -533,40 +564,23 @@ export function ReviewDeck({
         { rotate: `${rotate}deg` },
         { scale: cardScale.value },
       ],
+      opacity: frontOpacity.value,
     };
   });
 
-  // Next Card (Card #2) Animated Style
+  // Next card stays risen after a commit, instead of snapping back under the card that is leaving.
   const animatedNextCardStyle = useAnimatedStyle(() => {
-    const progressVal = interpolate(
+    const dragged = interpolate(
       Math.abs(translateX.value),
       [0, SWIPE_THRESHOLD],
       [0, 1],
       Extrapolation.CLAMP,
     );
-    const scale = interpolate(progressVal, [0, 1], [0.93, 1]);
-    const transY = interpolate(progressVal, [0, 1], [14, 0]);
-    const opacity = interpolate(progressVal, [0, 1], [0.85, 1]);
+    const progressVal = holdRise.value === 1 ? 1 : dragged;
+    const scale = interpolate(progressVal, [0, 1], [0.985, 1]);
+    const transY = interpolate(progressVal, [0, 1], [-14, 0]);
     return {
       transform: [{ translateY: transY }, { scale }],
-      opacity,
-    };
-  });
-
-  // Third Card (Card #3) Animated Style
-  const animatedThirdCardStyle = useAnimatedStyle(() => {
-    const progressVal = interpolate(
-      Math.abs(translateX.value),
-      [0, SWIPE_THRESHOLD],
-      [0, 1],
-      Extrapolation.CLAMP,
-    );
-    const scale = interpolate(progressVal, [0, 1], [0.86, 0.93]);
-    const transY = interpolate(progressVal, [0, 1], [26, 14]);
-    const opacity = interpolate(progressVal, [0, 1], [0.55, 0.85]);
-    return {
-      transform: [{ translateY: transY }, { scale }],
-      opacity,
     };
   });
 
@@ -610,26 +624,21 @@ export function ReviewDeck({
     };
   });
 
-  // Dynamic Reactive Glow Border
-  const animatedGlowStyle = useAnimatedStyle(() => {
-    const approveGlow = interpolate(
-      translateX.value,
-      [15, SWIPE_THRESHOLD],
-      [0, 0.45],
-      Extrapolation.CLAMP,
-    );
-    const denyGlow = interpolate(
-      translateX.value,
-      [-15, -SWIPE_THRESHOLD],
-      [0, 0.45],
-      Extrapolation.CLAMP,
-    );
-    const active = Math.abs(translateX.value) > 15;
-    return {
-      opacity: active ? (translateX.value > 0 ? approveGlow : denyGlow) : 0,
-      borderColor: translateX.value > 0 ? "#10b981" : "#f43f5e",
-    };
-  });
+  const approveGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [15, SWIPE_THRESHOLD], [0, 0.45], Extrapolation.CLAMP),
+  }));
+
+  const skipGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-15, -SWIPE_THRESHOLD], [0, 0.45], Extrapolation.CLAMP),
+  }));
+
+  const meterWidth = useSharedValue(0);
+  const [meterTrack, setMeterTrack] = useState(0);
+  useEffect(() => {
+    const target = meterTrack * (progress / 100);
+    meterWidth.value = reduceMotion ? target : withTiming(target, { duration: 320 });
+  }, [progress, meterTrack, reduceMotion, meterWidth]);
+  const meterStyle = useAnimatedStyle(() => ({ width: meterWidth.value }));
 
   if (!current) {
     return (
@@ -662,8 +671,8 @@ export function ReviewDeck({
     <View style={styles.container}>
       {/* Top Progress & Queue Header */}
       <View style={styles.meterWrapper}>
-        <View style={styles.meterContainer}>
-          <View style={[styles.meterFill, { width: `${progress}%` }]} />
+        <View style={styles.meterContainer} onLayout={(event) => setMeterTrack(event.nativeEvent.layout.width)}>
+          <Animated.View style={[styles.meterFill, meterStyle]} />
         </View>
         <View style={styles.metaRow}>
           <Text style={styles.metaText}>
@@ -679,50 +688,8 @@ export function ReviewDeck({
 
       {/* Card Stack Area */}
       <View style={styles.cardArea}>
-        {/* Card 3 (if exists) */}
-        {thirdCard ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.cardSurface,
-              styles.stackedCard,
-              {
-                width: cardWidth,
-                borderTopColor: palette.specularTop,
-                borderBottomColor: palette.specularBottom,
-                borderLeftColor: palette.specularSides,
-                borderRightColor: palette.specularSides,
-                backgroundColor: reduceTransparency
-                  ? isDark
-                    ? "#171a21"
-                    : "#ffffff"
-                  : palette.glassProminent,
-              },
-              animatedThirdCardStyle,
-            ]}
-          >
-            {!reduceTransparency ? (
-              <BlurView
-                intensity={isDark ? 50 : 75}
-                tint={palette.blurTint}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
-            <CardContent
-              tx={thirdCard}
-              currentCategory={thirdCard.categoryId ? byId.get(thirdCard.categoryId) : thirdCard.category}
-              face={faces[thirdCard.merchantName || thirdCard.name]}
-              flow={flowMoney(thirdCard.amountCents)}
-              quick={quick}
-              selectedCategoryId={thirdCard.categoryId ?? undefined}
-              isInteractive={false}
-              palette={palette}
-              isDark={isDark}
-            />
-          </Animated.View>
-        ) : null}
-
-        {/* Card 2 (if exists) */}
+        <View style={{ width: cardWidth }}>
+        {/* The next card shares the front card's box and rests as a top-edge sliver. */}
         {nextCard ? (
           <Animated.View
             pointerEvents="none"
@@ -730,7 +697,9 @@ export function ReviewDeck({
               styles.cardSurface,
               styles.stackedCard,
               {
-                width: cardWidth,
+                left: 0,
+                right: 0,
+                top: 0,
                 borderTopColor: palette.specularTop,
                 borderBottomColor: palette.specularBottom,
                 borderLeftColor: palette.specularSides,
@@ -765,7 +734,6 @@ export function ReviewDeck({
           </Animated.View>
         ) : null}
 
-        {/* Card 1 (Top / Interactive) */}
         <GestureDetector gesture={panGesture}>
           <Animated.View
             style={[
@@ -794,8 +762,8 @@ export function ReviewDeck({
               />
             ) : null}
 
-            {/* Reactive Glow Highlight */}
-            <Animated.View pointerEvents="none" style={[styles.glowBorder, animatedGlowStyle]} />
+            <Animated.View pointerEvents="none" style={[styles.glowBorder, { borderColor: palette.positive }, approveGlowStyle]} />
+            <Animated.View pointerEvents="none" style={[styles.glowBorder, { borderColor: palette.danger }, skipGlowStyle]} />
 
             {/* Reactive Overlay: APPROVE */}
             <Animated.View
@@ -806,11 +774,11 @@ export function ReviewDeck({
                 animatedApproveOverlayStyle,
               ]}
             >
-              <View style={[styles.overlayPill, styles.approveOverlayPill, isDark && { backgroundColor: "rgba(12, 32, 24, 0.94)" }]}>
-                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(16, 185, 129, 0.22)" : "rgba(16, 185, 129, 0.15)" }]}>
-                  <Icon name="check" size={20} color="#10b981" />
+              <View style={[styles.overlayPill, { backgroundColor: isDark ? "rgba(12, 32, 24, 0.94)" : palette.card, borderColor: palette.positive }]}>
+                <View style={[styles.overlayIconCircle, { backgroundColor: palette.accentSoft }]}>
+                  <Icon name="check" size={20} color={palette.positive} />
                 </View>
-                <Text style={styles.approveOverlayText}>Approved</Text>
+                <Text style={[styles.approveOverlayText, { color: palette.positive }]}>Approved</Text>
               </View>
             </Animated.View>
 
@@ -823,11 +791,11 @@ export function ReviewDeck({
                 animatedSkipOverlayStyle,
               ]}
             >
-              <View style={[styles.overlayPill, styles.skipOverlayPill, isDark && { backgroundColor: "rgba(36, 14, 20, 0.94)" }]}>
-                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(244, 63, 94, 0.22)" : "rgba(244, 63, 94, 0.15)" }]}>
-                  <Icon name="close" size={20} color="#f43f5e" />
+              <View style={[styles.overlayPill, { backgroundColor: isDark ? "rgba(36, 14, 20, 0.94)" : palette.card, borderColor: palette.danger }]}>
+                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(255, 107, 74, 0.22)" : "rgba(217, 74, 46, 0.12)" }]}>
+                  <Icon name="close" size={20} color={palette.danger} />
                 </View>
-                <Text style={styles.skipOverlayText}>Skipped</Text>
+                <Text style={[styles.skipOverlayText, { color: palette.danger }]}>Skipped</Text>
               </View>
             </Animated.View>
 
@@ -866,7 +834,9 @@ export function ReviewDeck({
               styles.topCard,
               {
                 position: "absolute",
-                width: cardWidth,
+                left: 0,
+                right: 0,
+                top: 0,
                 borderTopColor: palette.specularTop,
                 borderBottomColor: palette.specularBottom,
                 borderLeftColor: palette.specularSides,
@@ -891,6 +861,7 @@ export function ReviewDeck({
             />
           </Animated.View>
         ) : null}
+        </View>
       </View>
 
       {/* Cohesive Liquid-Glass Action Dock */}
@@ -1106,10 +1077,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   approveOverlay: {
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    backgroundColor: "rgba(27, 122, 98, 0.12)",
   },
   skipOverlay: {
-    backgroundColor: "rgba(244, 63, 94, 0.12)",
+    backgroundColor: "rgba(217, 74, 46, 0.12)",
   },
   overlayPill: {
     flexDirection: "row",
@@ -1126,14 +1097,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  approveOverlayPill: {
-    backgroundColor: "#ffffff",
-    borderColor: "#10b981",
-  },
-  skipOverlayPill: {
-    backgroundColor: "#ffffff",
-    borderColor: "#f43f5e",
-  },
   overlayIconCircle: {
     width: 30,
     height: 30,
@@ -1143,15 +1106,15 @@ const styles = StyleSheet.create({
   },
   approveOverlayText: {
     fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    color: "#10b981",
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    color: colors.positive,
   },
   skipOverlayText: {
     fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    color: "#f43f5e",
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    color: colors.danger,
   },
   merchantRow: {
     flexDirection: "row",
