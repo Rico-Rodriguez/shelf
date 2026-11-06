@@ -635,12 +635,18 @@ export function LedgerRow({
       {divided ? <View style={[styles.hairline, { left: bare ? 52 : 68 }]} /> : null}
       <MerchantMark name={name} color={color} round={bare} />
       <View style={styles.ledgerCopy}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Text numberOfLines={1} style={[styles.rowTitle, { flexGrow: 0, flexShrink: 1, flexBasis: "auto" }]}>
+        {flag ? (
+          <View style={{ flexDirection: "row", alignItems: "center", alignSelf: "stretch", gap: 6 }}>
+            <Text numberOfLines={1} style={[styles.rowName, { flexShrink: 1 }]}>
+              {name}
+            </Text>
+            <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.warn }} />
+          </View>
+        ) : (
+          <Text numberOfLines={1} style={styles.rowName}>
             {name}
           </Text>
-          {flag ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.warn }} /> : null}
-        </View>
+        )}
         {meta ? (
           <Text numberOfLines={1} style={styles.meta}>
             {meta}
@@ -3146,6 +3152,7 @@ function makeStyles(colors: Palette) {
     ledgerCopy: { flex: 1, gap: 2 },
     meta: { fontSize: 13, lineHeight: 17, color: colors.muted, letterSpacing: -0.1 },
     amount: { fontSize: 16, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
+    rowName: { fontSize: 16, lineHeight: 21, fontWeight: "500", color: colors.ink, letterSpacing: -0.3 },
     rowTitle: { flex: 1, fontSize: 16, lineHeight: 21, fontWeight: "500", color: colors.ink, letterSpacing: -0.3 },
     rowDetail: { fontSize: 15, color: colors.muted, letterSpacing: -0.1 },
     note: { color: colors.muted, fontSize: 15, lineHeight: 21, letterSpacing: -0.1 },
