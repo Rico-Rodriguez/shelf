@@ -11,6 +11,7 @@ const PAGES = [
   ["/accounts", "Accounts"],
   ["/bills", "Bills"],
   ["/goals", "Goals"],
+  ["/flow", "Money flow"],
   ["/insights", "Merchants"],
   ["/settings", "Settings"],
   ["/rules", "Rules"],
