@@ -286,6 +286,12 @@ CREATE TABLE IF NOT EXISTS suppressed_merchants (
 );
 ALTER TABLE goals ADD COLUMN IF NOT EXISTS category_id TEXT;
 
+CREATE TABLE IF NOT EXISTS merchant_logos (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  secret_enc TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_idx ON notifications (dedupe_key);
 CREATE INDEX IF NOT EXISTS tx_date_idx ON transactions (date);
 CREATE INDEX IF NOT EXISTS tx_account_idx ON transactions (account_id);

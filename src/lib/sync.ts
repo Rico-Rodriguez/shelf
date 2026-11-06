@@ -14,6 +14,7 @@ import { nid } from "./ids";
 import { dollarsFromPlaid, getPlaidClient } from "./plaid";
 import { applyRulesToNewTx } from "./rules";
 import { snapshotNetWorth } from "./networth";
+import { backfillLogos, collectLogo, readLogoStore, saveLogos } from "./merchant-logos";
 import {
   openTx,
   prepareVault,
@@ -56,6 +57,7 @@ export async function syncItem(localItemId: string, dek: Buffer) {
   let modified = 0;
   let removed = 0;
   let hasMore = true;
+  const logos = new Map<string, string>();
   while (hasMore) {
     const res = await client.transactionsSync({
       access_token: access,
@@ -63,10 +65,12 @@ export async function syncItem(localItemId: string, dek: Buffer) {
     });
     for (const tx of res.data.added) {
       await upsertTransaction(tx, dek);
+      collectLogo(logos, tx);
       added += 1;
     }
     for (const tx of res.data.modified) {
       await upsertTransaction(tx, dek);
+      collectLogo(logos, tx);
       modified += 1;
     }
     for (const tx of res.data.removed) {
@@ -85,6 +89,11 @@ export async function syncItem(localItemId: string, dek: Buffer) {
     .where(eq(plaidItems.id, localItemId));
 
   try {
+    await syncLogos(localItemId, client, access, logos, dek);
+  } catch {
+    // Logos are decoration; a failed lookup never fails the sync
+  }
+  try {
     await syncInvestments(localItemId, access, dek);
   } catch {
     // Item may not have investment accounts
@@ -97,6 +106,28 @@ export async function syncItem(localItemId: string, dek: Buffer) {
 
   await prepareVault(dek);
   return { itemId: localItemId, added, modified, removed };
+}
+
+async function syncLogos(
+  localItemId: string,
+  client: ReturnType<typeof getPlaidClient>,
+  access: string,
+  logos: Map<string, string>,
+  dek: Buffer,
+) {
+  const store = await readLogoStore(dek);
+  if (store.backfilled.includes(localItemId)) {
+    await saveLogos(logos, dek);
+    return;
+  }
+  try {
+    await backfillLogos(client, access, logos);
+  } catch {
+    // Keep what this sync found; the history pass retries next sync
+    await saveLogos(logos, dek);
+    return;
+  }
+  await saveLogos(logos, dek, localItemId);
 }
 
 async function refreshAccounts(localItemId: string, access: string, dek: Buffer) {
