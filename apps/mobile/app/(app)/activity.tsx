@@ -110,6 +110,8 @@ export default function ActivityScreen() {
     );
   });
   const [unreviewed, setUnreviewed] = useState(0);
+  const unreviewedRef = useRef(0);
+  unreviewedRef.current = unreviewed;
   const [reviewBaseline, setReviewBaseline] = useState<number | null>(null);
   const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
   const [frequentCategoryIds, setFrequentCategoryIds] = useState<string[]>([]);
@@ -264,11 +266,12 @@ export default function ActivityScreen() {
   }
 
   function shiftCount(delta: number) {
-    setUnreviewed((count) => {
-      const next = Math.max(0, count + delta);
-      pinUnreviewed(next);
-      return next;
-    });
+    // Pin outside the state updater: the pin tells the tab bar, and React will not
+    // let one component update another while it is rendering.
+    const next = Math.max(0, unreviewedRef.current + delta);
+    unreviewedRef.current = next;
+    setUnreviewed(next);
+    pinUnreviewed(next);
   }
 
   function paintReviewed(ids: string[], nextCategoryId: string | null, snapshots: Tx[], keepCategory = false, goalId?: string | null) {
@@ -323,7 +326,13 @@ export default function ActivityScreen() {
       previous: snapshots.map((row) => ({ id: row.id, categoryId: row.categoryId, reviewed: row.reviewed })),
       categoryName: categoryFace(nextCategoryId)?.name ?? null,
       categoryColor: categoryFace(nextCategoryId)?.color ?? null,
-      label: goal ? `${goal.name} · ${money(goal.remainingCents)} left` : ids.length > 1 ? `Categorized ${ids.length}` : "Reviewed",
+      label: goal
+        ? `${goal.name} · ${money(goal.remainingCents)} left`
+        : ids.length > 1
+          ? `Filed ${ids.length}`
+          : categoryFace(nextCategoryId)
+            ? `Filed as ${categoryFace(nextCategoryId)?.name}`
+            : "Reviewed",
       apply: () => paintReviewed(ids, nextCategoryId, primaryFirst, false, goal?.id ?? null),
       restore: () => {
         reviewEpoch.current += 1;
@@ -344,6 +353,40 @@ export default function ActivityScreen() {
     });
   }
 
+  /** Files every waiting purchase with its suggested category. */
+  function acceptAll() {
+    const snapshots = unreviewedRows.filter((tx) => tx.categoryId);
+    const ids = snapshots.map((tx) => tx.id);
+    const affected: HeldReview[] = snapshots.map((row) => ({
+      id: row.id,
+      categoryId: row.categoryId,
+      categoryName: row.category?.name ?? null,
+      categoryColor: row.category?.color ?? null,
+      keepCategory: true,
+      wasUnreviewed: !row.reviewed,
+    }));
+    setActionError(null);
+    reviewEpoch.current += 1;
+    const job = enqueueBulk({
+      ids,
+      categoryId: null,
+      keepCategory: true,
+      affected,
+      snapshots: snapshots.map((tx) => ({ id: tx.id, categoryId: tx.categoryId, reviewed: tx.reviewed, hidden: tx.hidden })),
+    });
+    paintReviewed(ids, null, snapshots, true);
+    offerUndo("Accepted all", async () => {
+      reviewEpoch.current += 1;
+      unpaintReviewed(ids, snapshots);
+      try {
+        await cancelJob(job);
+      } catch {
+        paintReviewed(ids, null, snapshots, true);
+        setActionError({ message: "Could not undo accepting those.", retry: () => undefined });
+      }
+    });
+  }
+
   function handleReviewSkip(tx: Charge) {
     const undoFn = async () => {
       setRows((current) => {
@@ -353,6 +396,10 @@ export default function ActivityScreen() {
       });
     };
     setReviewUndoHistory((prev) => [{ tx, undoFn }, ...prev]);
+    offerUndo("Moved to later", async () => {
+      setReviewUndoHistory((prev) => prev.filter((item) => item.tx.id !== tx.id));
+      await undoFn();
+    });
 
     setRows((current) => {
       if (!current || current.length < 2) return current;
@@ -617,6 +664,7 @@ export default function ActivityScreen() {
               onSkip={handleReviewSkip}
               onUndo={handleReviewUndo}
               canUndo={reviewUndoHistory.length > 0}
+              onFileAll={unreviewedRows.every((tx) => tx.categoryId) ? { count: Math.min(unreviewedRows.length, unreviewed || unreviewedRows.length), run: acceptAll } : undefined}
             />
           ) : (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 }}>
@@ -1191,37 +1239,8 @@ export default function ActivityScreen() {
             <Button
               label={`Accept ${unreviewedRows.length}`}
               onPress={() => {
-                const snapshots = unreviewedRows.filter((tx) => tx.categoryId);
-                const ids = snapshots.map((tx) => tx.id);
-                const affected: HeldReview[] = snapshots.map((row) => ({
-                  id: row.id,
-                  categoryId: row.categoryId,
-                  categoryName: row.category?.name ?? null,
-                  categoryColor: row.category?.color ?? null,
-                  keepCategory: true,
-                  wasUnreviewed: !row.reviewed,
-                }));
                 setFilters(false);
-                setActionError(null);
-                reviewEpoch.current += 1;
-                const job = enqueueBulk({
-                  ids,
-                  categoryId: null,
-                  keepCategory: true,
-                  affected,
-                  snapshots: snapshots.map((tx) => ({ id: tx.id, categoryId: tx.categoryId, reviewed: tx.reviewed, hidden: tx.hidden })),
-                });
-                paintReviewed(ids, null, snapshots, true);
-                offerUndo("Accepted all", async () => {
-                  reviewEpoch.current += 1;
-                  unpaintReviewed(ids, snapshots);
-                  try {
-                    await cancelJob(job);
-                  } catch {
-                    paintReviewed(ids, null, snapshots, true);
-                    setActionError({ message: "Could not undo accepting those.", retry: () => undefined });
-                  }
-                });
+                acceptAll();
               }}
             />
           ) : null}

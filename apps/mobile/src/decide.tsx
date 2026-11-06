@@ -18,21 +18,19 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { BlurView } from "expo-blur";
 import { api, peek } from "./api";
 import { CategoryPicker, Charge, ChargeGroup, getCategoryColor } from "./charge";
 import { dayLabel, flowMoney, fundedRemaining, money, saveUpGoalForCategory } from "./format";
 import { anchorRect, playFlight, previewGoalRemaining, useFlightHidden, useMeasuredAnchor, type FlightPiece } from "./flight";
 import { matchesMerchantRule } from "./review-flow";
-import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
+import { tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
-import { useReduceMotion, useReduceTransparency, useTheme, themedStyles } from "./theme";
+import { useReduceMotion, useTheme, themedStyles } from "./theme";
 import { ConfirmMark } from "./toast";
-import { colors, Sheet, Switch } from "./ui";
+import { Sheet } from "./ui";
 
 export type { ChargeGroup };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const SWIPE_THRESHOLD = 110;
 const SWIPE_VELOCITY = 650;
@@ -75,50 +73,47 @@ function ReviewAmount({
 
 function CardContent({
   tx,
-  currentCategory,
   face,
   flow,
-  quick,
+  choices,
   selectedCategoryId,
   always = false,
   onAlwaysToggle,
-  onCategoryPress,
-  onQuickCategorySelect,
+  onFile,
+  onMore,
   isInteractive = false,
   palette,
-  isDark,
   similar,
   goalLine,
   amountAnchor,
 }: {
   tx: Charge;
-  currentCategory?: { id?: string; name: string; color?: string | null } | null;
   face?: { monthCents: number; count: number };
   flow: { text: string; color: string };
-  quick: { id: string; name: string; color?: string | null }[];
+  /** The guess first, then the likeliest others. */
+  choices: { id: string; name: string; color?: string | null }[];
   selectedCategoryId?: string;
   always?: boolean;
   onAlwaysToggle?: () => void;
-  onCategoryPress?: () => void;
-  onQuickCategorySelect?: (id: string) => void;
+  onFile?: (id: string) => void;
+  onMore?: () => void;
   isInteractive?: boolean;
   palette: ReturnType<typeof useTheme>["palette"];
-  isDark: boolean;
   similar?: number | null;
   goalLine?: string | null;
   amountAnchor?: string;
 }) {
   const styles = useStyles();
   const merchant = tx.merchantName || tx.name;
+  const guess = choices.find((choice) => choice.id === selectedCategoryId) ?? null;
 
   return (
     <>
-      {/* Header */}
       <View style={styles.merchantRow}>
-        <MerchantMark name={merchant} color={currentCategory?.color ?? undefined} />
+        <MerchantMark name={merchant} color={guess?.color ?? tx.category?.color ?? undefined} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} style={styles.merchantName}>
-            {tx.name}
+            {merchant}
           </Text>
           <Text numberOfLines={1} style={styles.categorySub}>
             {dayLabel(tx.date)}
@@ -128,210 +123,75 @@ function CardContent({
         </View>
       </View>
 
-      {/* Big Flow Amount */}
       <View style={styles.heroAmountRow}>
         <ReviewAmount anchor={amountAnchor} text={flow.text} color={flow.color} style={styles.heroAmount} />
         {face && face.monthCents > 0 ? (
           <View style={styles.contextBadge}>
-            <Text style={styles.contextBadgeText}>
-              {money(face.monthCents)} this month
-            </Text>
+            <Text style={styles.contextBadgeText}>{money(face.monthCents)} here this month</Text>
           </View>
         ) : null}
       </View>
 
-      {/* Category selector / preview pill */}
-      {isInteractive ? (
+      {/* One tap files it: the guess is filled, the others are outlined. */}
+      <View style={{ gap: 8 }}>
+        {choices.map((category) => {
+          const on = category.id === selectedCategoryId;
+          const tint = getCategoryColor(category);
+          const body = (
+            <>
+              <View style={[styles.choiceDot, { backgroundColor: on ? "#ffffff" : tint }]} />
+              <Text numberOfLines={1} style={[styles.choiceLabel, on && { color: "#ffffff" }]}>
+                {category.name}
+              </Text>
+              {on ? <Icon name="check" size={16} color="#ffffff" /> : null}
+            </>
+          );
+          const look = [styles.choice, on ? { backgroundColor: tint, borderColor: tint } : { borderColor: palette.line }];
+          return isInteractive ? (
+            <Pressable
+              key={category.id}
+              accessibilityRole="button"
+              accessibilityLabel={`File as ${category.name}`}
+              onPress={() => onFile?.(category.id)}
+              style={({ pressed }) => [look, pressed && { transform: [{ scale: 0.98 }], opacity: 0.85 }]}
+            >
+              {body}
+            </Pressable>
+          ) : (
+            <View key={category.id} style={look}>
+              {body}
+            </View>
+          );
+        })}
         <Pressable
-          onPress={onCategoryPress}
-          style={[
-            styles.selectedCategoryPill,
-            {
-              backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
-              borderColor: currentCategory ? getCategoryColor(currentCategory) : palette.line,
-            },
-          ]}
+          accessibilityRole="button"
+          disabled={!isInteractive}
+          onPress={onMore}
+          style={({ pressed }) => [styles.choice, styles.choiceMore, { borderColor: palette.line }, pressed && { opacity: 0.7 }]}
         >
-          <View style={styles.selectedCategoryLeft}>
-            <View
-              style={[
-                styles.categoryDotLarge,
-                { backgroundColor: currentCategory ? getCategoryColor(currentCategory) : colors.muted },
-              ]}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.categoryPillSub}>Category</Text>
-              <Text numberOfLines={1} style={styles.categoryPillName}>
-                {currentCategory?.name ?? "Choose a category"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.changeBadge}>
-            <Text style={styles.changeBadgeText}>Change</Text>
-            <Icon name="chevron" size={14} color={palette.tertiary} />
-          </View>
+          <Icon name="tag" size={15} color={palette.muted} />
+          <Text style={[styles.choiceLabel, { color: palette.muted }]}>Other category</Text>
+          <Icon name="chevron" size={14} color={palette.tertiary} />
         </Pressable>
-      ) : (
-        <View
-          style={[
-            styles.selectedCategoryPill,
-            {
-              backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : palette.fill,
-              borderColor: currentCategory ? getCategoryColor(currentCategory) : palette.line,
-            },
-          ]}
-        >
-          <View style={styles.selectedCategoryLeft}>
-            <View
-              style={[
-                styles.categoryDotLarge,
-                { backgroundColor: currentCategory ? getCategoryColor(currentCategory) : colors.muted },
-              ]}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.categoryPillSub}>Category</Text>
-              <Text numberOfLines={1} style={styles.categoryPillName}>
-                {currentCategory?.name ?? "Choose a category"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.changeBadge}>
-            <Text style={styles.changeBadgeText}>Change</Text>
-            <Icon name="chevron" size={14} color={palette.tertiary} />
-          </View>
-        </View>
-      )}
-
-      {goalLine ? (
-        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.muted, paddingHorizontal: 2 }}>{goalLine}</Text>
-      ) : null}
-
-      {/* Quick Category Chips */}
-      <View style={styles.chipsSection}>
-        <Text style={styles.sectionHeader}>Quick suggestions</Text>
-        <View style={styles.chipGrid}>
-          {quick.map((category) => {
-            const isSelected = selectedCategoryId === category.id;
-            const catColor = category.color
-              ? getCategoryColor(category)
-              : colors.accent;
-            if (isInteractive) {
-              return (
-                <Pressable
-                  key={category.id}
-                  onPress={() => onQuickCategorySelect?.(category.id)}
-                  style={[
-                    styles.chip,
-                    isSelected && [
-                      styles.chipSelected,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(27, 122, 98, 0.28)"
-                          : colors.accentSoft,
-                        borderColor: catColor,
-                      },
-                    ],
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.chipDot,
-                      { backgroundColor: catColor },
-                    ]}
-                  />
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.chipLabel,
-                      isSelected && styles.chipLabelSelected,
-                    ]}
-                  >
-                    {category.name}
-                  </Text>
-                </Pressable>
-              );
-            }
-            return (
-              <View
-                key={category.id}
-                style={[
-                  styles.chip,
-                  isSelected && [
-                    styles.chipSelected,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(27, 122, 98, 0.28)"
-                        : colors.accentSoft,
-                      borderColor: catColor,
-                    },
-                  ],
-                ]}
-              >
-                <View
-                  style={[
-                    styles.chipDot,
-                    { backgroundColor: catColor },
-                  ]}
-                />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.chipLabel,
-                    isSelected && styles.chipLabelSelected,
-                  ]}
-                >
-                  {category.name}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
       </View>
 
-      {/* Always Categorize Rule Switch */}
-      {isInteractive ? (
-        <Pressable
-          onPress={onAlwaysToggle}
-          style={styles.switchRow}
-        >
-          <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.switchTitle}>
-              Always categorize {merchant}
-            </Text>
-            {always ? (
-              <View style={styles.ruleChip}>
-                <Text style={styles.ruleChipText}>
-                  {similar && similar > 0 ? `Clears ${similar} other` : "Just this one"}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.switchSubtitle}>Remember this rule for future activity</Text>
-            )}
-          </View>
-          <Switch on={always} />
-        </Pressable>
-      ) : (
-        <View style={styles.switchRow}>
-          <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.switchTitle}>
-              Always categorize {merchant}
-            </Text>
-            <Text style={styles.switchSubtitle}>
-              Remember this rule for future activity
-            </Text>
-          </View>
-          <Switch on={false} />
-        </View>
-      )}
+      {goalLine ? <Text style={{ fontSize: 13, fontWeight: "600", color: palette.muted, paddingHorizontal: 2 }}>{goalLine}</Text> : null}
 
-      {/* Swipe hint */}
-      <View style={styles.gestureHintRow}>
-        <Icon name="chevron-left" size={12} color={colors.tertiary} />
-        <Text style={styles.gestureHintText}>
-          Swipe left to skip · right to approve
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: always }}
+        disabled={!isInteractive}
+        onPress={onAlwaysToggle}
+        hitSlop={6}
+        style={styles.alwaysRow}
+      >
+        <View style={[styles.checkBox, always ? { backgroundColor: palette.ink, borderColor: palette.ink } : { borderColor: palette.tertiary }]}>
+          {always ? <Icon name="check" size={12} color={palette.bg} /> : null}
+        </View>
+        <Text numberOfLines={1} style={styles.alwaysText}>
+          Always file {merchant} this way{always && similar ? ` · ${similar} more` : ""}
         </Text>
-        <Icon name="chevron" size={12} color={colors.tertiary} />
-      </View>
+      </Pressable>
     </>
   );
 }
@@ -347,6 +207,7 @@ export function ReviewDeck({
   onSkip,
   onUndo,
   canUndo = false,
+  onFileAll,
 }: {
   rows: Charge[];
   remaining: number;
@@ -363,6 +224,8 @@ export function ReviewDeck({
   onSkip: (tx: Charge) => void;
   onUndo?: () => void;
   canUndo?: boolean;
+  /** Files every card left with its guess; only offered when each one has a guess. */
+  onFileAll?: { count: number; run: () => void };
 }) {
   const styles = useStyles();
   const { width: windowWidth } = useWindowDimensions();
@@ -442,8 +305,15 @@ export function ReviewDeck({
       .map((id) => byId.get(id))
       .filter((cat): cat is { id: string; name: string; color?: string | null } => Boolean(cat));
   }, [pool, frequentCategoryIds, byId]);
+  const choicesFor = useCallback(
+    (selected: string | null | undefined) => {
+      const first = selected ? byId.get(selected) : undefined;
+      const rest = quick.filter((cat) => cat.id !== selected);
+      return (first ? [first, ...rest] : rest).slice(0, 3);
+    },
+    [byId, quick],
+  );
 
-  const merchant = current ? current.merchantName || current.name : "";
   const face = current ? faces[current.merchantName || current.name] : undefined;
   const done = total > 0 ? Math.max(0, total - remaining) : 0;
   const progress = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
@@ -483,7 +353,6 @@ export function ReviewDeck({
   }, [currentId]);
 
   const { palette } = useTheme();
-  const reduceTransparency = useReduceTransparency();
   const isDark = palette.scheme === "dark";
 
   const clearDeparting = useCallback(() => {
@@ -494,9 +363,20 @@ export function ReviewDeck({
   }, [frontOpacity, holdRise]);
 
   const commit = useCallback(
-    (dir: "approve" | "skip") => {
+    (dir: "approve" | "skip", chosen?: string) => {
       const tx = currentRef.current;
       if (!tx || taken.current === tx.id) return;
+      if (chosen) {
+        categoryRef.current = chosen;
+        setCategoryId(chosen);
+      }
+      // Accepting needs a category; with no guess, ask for one instead.
+      if (dir === "approve" && !categoryRef.current) {
+        translateX.value = withSpring(0, SPRING_SNAP);
+        translateY.value = withSpring(0, SPRING_SNAP);
+        setPicking(true);
+        return;
+      }
       taken.current = tx.id;
       const chosenId = categoryRef.current;
       const rule = alwaysRef.current && Boolean(chosenId);
@@ -585,7 +465,6 @@ export function ReviewDeck({
     [byId, windowWidth, onConfirm, onSkip, departX, translateX, translateY, cardScale, holdRise, frontOpacity, clearDeparting],
   );
 
-  const handleButtonApprove = useCallback(() => commit("approve"), [commit]);
   const handleButtonDeny = useCallback(() => commit("skip"), [commit]);
 
   // Swipe gesture configuration
@@ -786,10 +665,7 @@ export function ReviewDeck({
             <Text style={styles.metaHighlight}>{remaining}</Text> remaining
             {total > remaining ? ` · ${done} done` : ""}
           </Text>
-          <Text style={styles.metaText}>
-            {dayLabel(current.date)}
-            {current.account?.name ? ` · ${current.account.name}` : ""}
-          </Text>
+
         </View>
       </View>
 
@@ -811,32 +687,19 @@ export function ReviewDeck({
                 borderBottomColor: palette.specularBottom,
                 borderLeftColor: palette.specularSides,
                 borderRightColor: palette.specularSides,
-                backgroundColor: reduceTransparency
-                  ? isDark
-                    ? "#171a21"
-                    : "#ffffff"
-                  : palette.glassProminent,
+                backgroundColor: palette.bg,
               },
               animatedNextCardStyle,
             ]}
           >
-            {!reduceTransparency ? (
-              <BlurView
-                intensity={isDark ? 50 : 75}
-                tint={palette.blurTint}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
-            <CardContent
+                        <CardContent
               tx={nextCard}
-              currentCategory={nextCard.categoryId ? byId.get(nextCard.categoryId) : nextCard.category}
               face={faces[nextCard.merchantName || nextCard.name]}
               flow={flowMoney(nextCard.amountCents)}
-              quick={quick}
+              choices={choicesFor(nextCard.categoryId)}
               selectedCategoryId={nextCard.categoryId ?? undefined}
               isInteractive={false}
               palette={palette}
-              isDark={isDark}
             />
           </Animated.View>
         ) : null}
@@ -852,25 +715,14 @@ export function ReviewDeck({
                 borderBottomColor: palette.specularBottom,
                 borderLeftColor: palette.specularSides,
                 borderRightColor: palette.specularSides,
-                backgroundColor: reduceTransparency
-                  ? isDark
-                    ? "#171a21"
-                    : "#ffffff"
-                  : palette.glassProminent,
+                backgroundColor: palette.bg,
               },
               animatedTopCardStyle,
             ]}
           >
-            {!reduceTransparency ? (
-              <BlurView
-                intensity={isDark ? 50 : 75}
-                tint={palette.blurTint}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
-
+            
             <Animated.View pointerEvents="none" style={[styles.glowBorder, { borderColor: palette.positive }, approveGlowStyle]} />
-            <Animated.View pointerEvents="none" style={[styles.glowBorder, { borderColor: palette.danger }, skipGlowStyle]} />
+            <Animated.View pointerEvents="none" style={[styles.glowBorder, { borderColor: palette.tertiary }, skipGlowStyle]} />
 
             {/* Reactive Overlay: APPROVE */}
             <Animated.View
@@ -885,7 +737,7 @@ export function ReviewDeck({
                 <View style={[styles.overlayIconCircle, { backgroundColor: palette.accentSoft }]}>
                   <Icon name="check" size={20} color={palette.positive} />
                 </View>
-                <Text style={[styles.approveOverlayText, { color: palette.positive }]}>Approved</Text>
+                <Text style={[styles.approveOverlayText, { color: palette.positive }]}>{currentCategory ? currentCategory.name : "Pick a category"}</Text>
               </View>
             </Animated.View>
 
@@ -898,20 +750,19 @@ export function ReviewDeck({
                 animatedSkipOverlayStyle,
               ]}
             >
-              <View style={[styles.overlayPill, { backgroundColor: isDark ? "rgba(36, 14, 20, 0.94)" : palette.card, borderColor: palette.danger }]}>
-                <View style={[styles.overlayIconCircle, { backgroundColor: isDark ? "rgba(255, 107, 74, 0.22)" : "rgba(217, 74, 46, 0.12)" }]}>
-                  <Icon name="close" size={20} color={palette.danger} />
+              <View style={[styles.overlayPill, { backgroundColor: palette.card, borderColor: palette.tertiary }]}>
+                <View style={[styles.overlayIconCircle, { backgroundColor: palette.fill }]}>
+                  <Icon name="skip" size={20} color={palette.muted} />
                 </View>
-                <Text style={[styles.skipOverlayText, { color: palette.danger }]}>Skipped</Text>
+                <Text style={[styles.skipOverlayText, { color: palette.muted }]}>Later</Text>
               </View>
             </Animated.View>
 
             <CardContent
               tx={current}
-              currentCategory={currentCategory}
               face={face}
               flow={flow}
-              quick={quick}
+              choices={choicesFor(current.categoryId)}
               selectedCategoryId={categoryId}
               amountAnchor="review.amount"
               always={always}
@@ -919,17 +770,13 @@ export function ReviewDeck({
                 tapSelect();
                 setAlways((value) => !value);
               }}
-              onCategoryPress={() => {
+              onMore={() => {
                 tapPress();
                 setPicking(true);
               }}
-              onQuickCategorySelect={(id) => {
-                tapSelect();
-                setCategoryId(id);
-              }}
+              onFile={(id) => commit("approve", id)}
               isInteractive={true}
               palette={palette}
-              isDark={isDark}
               similar={similar}
               goalLine={goalLine}
             />
@@ -950,22 +797,20 @@ export function ReviewDeck({
                 borderBottomColor: palette.specularBottom,
                 borderLeftColor: palette.specularSides,
                 borderRightColor: palette.specularSides,
-                backgroundColor: reduceTransparency ? (isDark ? "#171a21" : "#ffffff") : palette.glassProminent,
+                backgroundColor: palette.bg,
               },
               animatedDepartStyle,
             ]}
           >
             <CardContent
               tx={departing.tx}
-              currentCategory={departing.category}
               face={faces[departing.tx.merchantName || departing.tx.name]}
               flow={flowMoney(departing.tx.amountCents)}
-              quick={quick}
+              choices={choicesFor(departing.categoryId || departing.tx.categoryId)}
               selectedCategoryId={departing.categoryId}
               always={departing.always}
               isInteractive={false}
               palette={palette}
-              isDark={isDark}
               similar={departing.always ? similar : 0}
               goalLine={saveUpGoalForCategory(goals, departing.categoryId || null) ? `Count toward ${saveUpGoalForCategory(goals, departing.categoryId || null)?.name}` : null}
             />
@@ -974,115 +819,47 @@ export function ReviewDeck({
         </View>
       </View>
 
-      {/* Cohesive Liquid-Glass Action Dock */}
-      <View
-        style={[
-          styles.actionDock,
-          {
-            width: cardWidth,
-            borderTopColor: palette.specularTop,
-            borderBottomColor: palette.specularBottom,
-            borderLeftColor: palette.specularSides,
-            borderRightColor: palette.specularSides,
-            backgroundColor: reduceTransparency
-              ? isDark
-                ? "#171a21"
-                : "#ffffff"
-              : palette.dockBg,
-          },
-        ]}
-      >
-        {!reduceTransparency ? (
-          <BlurView
-            intensity={isDark ? 55 : 75}
-            tint={palette.blurTint}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-
-        {/* Left Utility Actions: Undo & Category */}
-        <View style={styles.dockUtilityGroup}>
+      {/* Under the card: Later on the left, and a way through a backlog of guesses on the right. */}
+      <View style={[styles.footRow, { width: cardWidth }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Later"
+          onPress={handleButtonDeny}
+          hitSlop={8}
+          style={({ pressed }) => [styles.footBtn, { backgroundColor: palette.fill }, pressed && { opacity: 0.7 }]}
+        >
+          <Icon name="skip" size={14} color={palette.muted} />
+          <Text style={[styles.footLabel, { color: palette.ink }]}>Later</Text>
+        </Pressable>
+        {onFileAll && onFileAll.count >= 3 ? (
           <Pressable
-            accessibilityLabel="Undo last review"
-            disabled={!canUndo}
+            accessibilityRole="button"
             onPress={() => {
-              if (onUndo) onUndo();
+              tapSuccess();
+              onFileAll.run();
             }}
             hitSlop={8}
-            style={({ pressed }) => [
-              styles.dockIconBtn,
-              {
-                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
-                borderColor: palette.line,
-              },
-              !canUndo && { opacity: 0.3 },
-              pressed && canUndo ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
-            ]}
+            style={({ pressed }) => [styles.footBtn, { backgroundColor: palette.ink }, pressed && { opacity: 0.85 }]}
           >
-            <Icon name="undo" size={17} color={canUndo ? palette.ink : palette.quaternaryLabel} />
+            <Icon name="check" size={14} color={palette.bg} />
+            <Text style={[styles.footLabel, { color: palette.bg }]}>File all {onFileAll.count} as suggested</Text>
           </Pressable>
-
+        ) : canUndo && onUndo ? (
           <Pressable
-            accessibilityLabel="Choose category"
+            accessibilityRole="button"
             onPress={() => {
               tapPress();
-              setPicking(true);
+              onUndo();
             }}
             hitSlop={8}
-            style={({ pressed }) => [
-              styles.dockIconBtn,
-              {
-                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
-                borderColor: palette.line,
-              },
-              pressed ? { transform: [{ scale: 0.92 }], opacity: 0.75 } : null,
-            ]}
+            style={({ pressed }) => [styles.footBtn, { backgroundColor: palette.fill }, pressed && { opacity: 0.7 }]}
           >
-            <Icon name="tag" size={16} color={palette.ink} />
+            <Icon name="undo" size={14} color={palette.muted} />
+            <Text style={[styles.footLabel, { color: palette.ink }]}>Undo</Text>
           </Pressable>
-        </View>
-
-        {/* Subtle Divider */}
-        <View style={[styles.dockDivider, { backgroundColor: palette.line }]} />
-
-        {/* Right Primary Decision Actions: Skip & Approve */}
-        <View style={styles.dockDecisionGroup}>
-          {/* Skip Action */}
-          <Pressable
-            accessibilityLabel="Skip transaction"
-            onPress={handleButtonDeny}
-            style={({ pressed }) => [
-              styles.dockPillBtn,
-              styles.dockSkipBtn,
-              {
-                backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : palette.fill,
-                borderColor: palette.line,
-              },
-              pressed ? { transform: [{ scale: 0.96 }], opacity: 0.75 } : null,
-            ]}
-          >
-            <Icon name="close" size={14} color={palette.muted} />
-            <Text style={[styles.dockBtnLabel, { color: palette.ink }]}>Skip</Text>
-          </Pressable>
-
-          {/* Approve Action */}
-          <Pressable
-            accessibilityLabel="Approve transaction"
-            onPress={handleButtonApprove}
-            style={({ pressed }) => [
-              styles.dockPillBtn,
-              styles.dockApproveBtn,
-              {
-                backgroundColor: palette.accent,
-                borderColor: palette.specularTop,
-              },
-              pressed ? { transform: [{ scale: 0.96 }], opacity: 0.88 } : null,
-            ]}
-          >
-            <Icon name="check" size={16} color="#ffffff" />
-            <Text style={[styles.dockBtnLabel, styles.dockApproveText]}>Approve</Text>
-          </Pressable>
-        </View>
+        ) : (
+          <Text style={styles.footHint}>Swipe right to accept</Text>
+        )}
       </View>
 
       {/* Category Picker Sheet Modal */}
@@ -1092,8 +869,8 @@ export function ReviewDeck({
             groups={groups}
             selected={categoryId}
             onSelect={(id) => {
-              setCategoryId(id);
               setPicking(false);
+              commit("approve", id);
             }}
             onClose={() => setPicking(false)}
           />
@@ -1105,6 +882,26 @@ export function ReviewDeck({
 
 const useStyles = themedStyles((colors) =>
   StyleSheet.create({
+  choice: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  choiceMore: { borderStyle: "dashed" },
+  footRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingTop: 12 },
+  footBtn: { minHeight: 44, paddingHorizontal: 16, borderRadius: 22, flexDirection: "row", alignItems: "center", gap: 8 },
+  footLabel: { fontSize: 15, fontWeight: "600", letterSpacing: -0.2 },
+  footHint: { fontSize: 13, color: colors.tertiary },
+  choiceDot: { width: 10, height: 10, borderRadius: 5 },
+  choiceLabel: { flex: 1, fontSize: 16, fontWeight: "600", color: colors.ink, letterSpacing: -0.3 },
+  alwaysRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 },
+  checkBox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  alwaysText: { flex: 1, fontSize: 14, fontWeight: "500", color: colors.muted },
   container: {
     flex: 1,
     justifyContent: "space-between",
