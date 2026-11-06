@@ -22,7 +22,9 @@ async function createDb(): Promise<AppDb> {
     const postgres = (await import("postgres")).default;
     const pooled = url.includes("-pooler");
     const client = postgres(url, {
-      max: pooled ? 1 : 4,
+      // The pooler hands out connections cheaply. One connection made every request wait in line
+      // behind a slow one, such as a bank sync, so the whole app looked stuck.
+      max: pooled ? 5 : 4,
       prepare: !pooled,
       ...(pooled ? { idle_timeout: 20, connect_timeout: 30 } : {}),
     });

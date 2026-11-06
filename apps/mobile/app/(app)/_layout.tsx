@@ -421,8 +421,6 @@ export default function AppTabs() {
         `/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`,
         "/api/transactions?countOnly=1",
         "/api/notifications",
-        "/api/goals",
-        "/api/investments",
       ].map((path) => load(path).catch(() => undefined)),
     );
     const gate = Promise.race([firstPaint, new Promise((resolve) => setTimeout(resolve, 4000))]);
