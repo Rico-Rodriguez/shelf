@@ -98,11 +98,11 @@ export function LimitSheet({ row, year, month, onClose, onSaved }: { row: Pick<B
 
   return (
     <Sheet title={row.category.name} subtitle={`Spent ${money(row.spentCents)} so far`} onClose={onClose} fit>
-      <View style={{ gap: 14 }}>
+      <View style={{ gap: 12 }}>
         <Text style={{ fontSize: 15, lineHeight: 21, color: palette.muted }}>
-          A limit adds a thin bar to this category that turns orange near the end. It carries into next month.
+          The bar turns orange near the end. It carries into next month.
         </Text>
-        <Field label="Monthly limit" value={value} onChangeText={setValue} keyboardType="decimal-pad" placeholder="$0" />
+        <Field label="Monthly limit" value={value} onChangeText={setValue} keyboardType="decimal-pad" placeholder="$0" onSubmit={() => (cents > 0 && !busy ? void save(cents) : undefined)} />
         {error ? <Note tone="danger">{error}</Note> : null}
         <Button label="Save limit" busy={busy} block onPress={() => (cents > 0 && !busy ? void save(cents) : undefined)} />
         {row.plannedCents > 0 ? <Button label="Remove limit" tone="quiet" block onPress={() => (!busy ? void save(0) : undefined)} /> : null}
