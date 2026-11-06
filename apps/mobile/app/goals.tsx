@@ -5,7 +5,7 @@ import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money, monthlyNeedCents } from "../src/format";
 import { goalPreview, useFlightClock, useFlightHidden, useMeasuredAnchor } from "../src/flight";
 import { celebrate } from "../src/toast";
-import { Back, Button, Card, colors, Field, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, Field, GlassButton, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
   id: string;
@@ -166,7 +166,7 @@ export default function GoalsScreen() {
   }
 
   return (
-    <Screen title="Goals" refresh={<Back />} onRefresh={load} action={<Button label="Add" onPress={openNew} />}>
+    <Screen title="Goals" refresh={<Back />} onRefresh={load} action={<GlassButton label="Add" icon="plus" onPress={openNew} compact />}>
       {error ? <LoadError message={error} onRetry={load} /> : null}
       {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {goals === null && !error ? <Loading /> : null}
