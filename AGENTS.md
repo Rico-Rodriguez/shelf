@@ -35,5 +35,5 @@ Whenever making or committing changes to `apps/mobile/**`, `scripts/publish-ota.
 - Install dependencies with `npm ci` at the repo root. In `apps/mobile`, `npm ci` fails on the checked-in lockfile unless peer conflicts are ignored: `npm ci --legacy-peer-deps` (root `react@19.2.3` vs locked `react-dom@19.3.0`).
 - If `.env` is missing, copy `.env.example` to `.env`. Plaid keys can stay empty. Sample data does not need them.
 - Start the API with `npm run dev` (port 3000, hostname `0.0.0.0`). `GET /api/health` returns `{"ok":true}` after the database opens.
-- `npm run lint` and `npx tsc --noEmit` are the server checks. `npm run smoke` is the end-to-end check against that server: it creates the lock, enrolls TOTP, seeds demo data, and reads the main API routes. Run it only against a local server.
+- `npm run lint`, `npx tsc --noEmit`, and `npm test` (vitest unit tests in `src/**/*.test.ts`) are the server checks. `npm run smoke` is the end-to-end check against that server: it creates the lock, enrolls TOTP, seeds demo data, and reads the main API routes. Run it only against a local server.
 - The phone app typechecks with `npx tsc --noEmit` inside `apps/mobile`. It is not a browser app (Expo web dependencies are not installed). iOS and Android need a device or simulator, which this environment does not provide.
