@@ -159,6 +159,7 @@ const paths = [
   "/api/goals",
   "/api/categories",
   "/api/rules",
+  "/api/merchants/logos",
 ];
 
 for (const path of paths) {

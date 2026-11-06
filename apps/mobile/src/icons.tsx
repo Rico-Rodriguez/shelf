@@ -1,5 +1,7 @@
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { Text, View } from "react-native";
+import { useState } from "react";
+import { Image, Text, View } from "react-native";
+import { useMerchantLogo } from "./merchant-logos";
 import { shelfColor } from "./format";
 import { useTheme } from "./theme";
 
@@ -222,23 +224,50 @@ function markTint(name: string) {
   return MARK_TINTS[hash % MARK_TINTS.length];
 }
 
-/** A solid merchant tile with one initial. The tint comes from the name, so a merchant keeps its color everywhere. */
+/** Logo URLs that failed to load this launch, so a broken one is not retried on every row. */
+const brokenLogos = new Set<string>();
+
+/**
+ * A merchant tile: the merchant's real logo from Plaid when there is one, otherwise a solid
+ * tile with one initial. The tint comes from the name, so a merchant keeps its color everywhere.
+ */
 export function MerchantMark({ name, color, size = 40, round = false }: { name: string; color?: string | null; size?: number; round?: boolean }) {
   const initial = (name || "?").trim().replace(/^the\s+/i, "")[0]?.toUpperCase() ?? "?";
   const tint = name ? markTint(name) : color ? shelfColor(color) : MARK_TINTS[MARK_TINTS.length - 1];
+  const logo = useMerchantLogo(name);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const showLogo = logo != null && failed !== logo && !brokenLogos.has(logo);
+  const radius = round ? size / 2 : size * 0.3;
   return (
     <View
       style={{
         width: size,
         height: size,
-        borderRadius: round ? size / 2 : size * 0.3,
+        borderRadius: radius,
         borderCurve: "continuous",
+        overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: tint,
+        backgroundColor: showLogo && loaded === logo ? "#ffffff" : tint,
       }}
     >
-      <Text style={{ fontSize: size * 0.42, fontWeight: "700", letterSpacing: -0.4, color: "#ffffff" }}>{initial}</Text>
+      {showLogo && loaded === logo ? null : (
+        <Text style={{ fontSize: size * 0.42, fontWeight: "700", letterSpacing: -0.4, color: "#ffffff" }}>{initial}</Text>
+      )}
+      {showLogo ? (
+        <Image
+          source={{ uri: logo, cache: "force-cache" }}
+          accessibilityIgnoresInvertColors
+          resizeMode="cover"
+          onLoad={() => setLoaded(logo)}
+          onError={() => {
+            brokenLogos.add(logo);
+            setFailed(logo);
+          }}
+          style={{ position: "absolute", top: 0, left: 0, width: size, height: size, opacity: loaded === logo ? 1 : 0 }}
+        />
+      ) : null}
     </View>
   );
 }

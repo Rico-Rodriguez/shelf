@@ -46,6 +46,7 @@ const PERSISTED_PREFIXES = [
   "/api/investments",
   "/api/rules",
   "/api/notifications",
+  "/api/merchants",
 ];
 /** Saved pages beyond this drop the oldest, so one-off searches do not pile up in the keychain. */
 const PERSIST_LIMIT = 48;

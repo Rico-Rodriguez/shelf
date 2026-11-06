@@ -4,6 +4,7 @@ import { Animated, AppState, Pressable, StyleSheet, Text, View } from "react-nat
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, api, load, peek, subscribeCache } from "../../src/api";
+import { refreshMerchantLogos } from "../../src/merchant-logos";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { Icon } from "../../src/icons";
 import { dashboardPath, money, sameMerchant } from "../../src/format";
@@ -354,6 +355,7 @@ export default function AppTabs() {
             load("/api/transactions?").catch(() => undefined),
             load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined),
           ]);
+          refreshMerchantLogos();
           if (!alive) return;
           emitShelfRefresh();
           const listed = peek<{ transactions?: IslandTx[] }>("/api/transactions?")?.transactions ?? [];

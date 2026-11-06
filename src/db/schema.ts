@@ -237,6 +237,13 @@ export const suppressedMerchants = pgTable("suppressed_merchants", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** One sealed row: merchant key -> Plaid logo URL, plus which items were backfilled. */
+export const merchantLogos = pgTable("merchant_logos", {
+  id: text("id").primaryKey().default("default"),
+  secretEnc: text("secret_enc").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const goals = pgTable("goals", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
