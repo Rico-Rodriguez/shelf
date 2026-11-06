@@ -147,7 +147,7 @@ export async function GET(request: Request) {
       byMerchant: [...byMerchant.entries()]
         .map(([name, cents]) => ({ name, cents }))
         .sort((a, b) => b.cents - a.cents)
-        .slice(0, 8),
+        .slice(0, 25),
       byCategory: compared,
       byGroup: Object.entries(groupSpend).map(([name, cents]) => ({ name, cents })),
       sankey: { nodes, links },

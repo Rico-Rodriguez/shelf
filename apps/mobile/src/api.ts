@@ -41,7 +41,14 @@ const PERSISTED_PREFIXES = [
   "/api/transactions",
   "/api/recurring",
   "/api/reports",
+  "/api/cash-flow",
+  "/api/goals",
+  "/api/investments",
+  "/api/rules",
+  "/api/notifications",
 ];
+/** Saved pages beyond this drop the oldest, so one-off searches do not pile up in the keychain. */
+const PERSIST_LIMIT = 48;
 
 function persistKey(path: string): string {
   return `${PERSIST_PREFIX}${path.replace(/[^a-zA-Z0-9]/g, "_")}`.slice(0, 64);
@@ -58,6 +65,11 @@ async function persistItem(path: string, data: unknown) {
       await SecureStore.setItemAsync(key, raw);
       if (!knownPersistedKeys.has(path)) {
         knownPersistedKeys.add(path);
+        while (knownPersistedKeys.size > PERSIST_LIMIT) {
+          const oldest = knownPersistedKeys.values().next().value as string;
+          knownPersistedKeys.delete(oldest);
+          SecureStore.deleteItemAsync(persistKey(oldest)).catch(() => undefined);
+        }
         await SecureStore.setItemAsync(
           PERSIST_INDEX_KEY,
           JSON.stringify(Array.from(knownPersistedKeys)),
@@ -80,20 +92,23 @@ export const cacheHydrationPromise = (async () => {
       "/api/transactions?countOnly=1",
     ];
     knownPersistedKeys = new Set(paths);
-    for (const path of paths) {
-      try {
-        const raw = await SecureStore.getItemAsync(persistKey(path));
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (!memory.has(path)) {
-            memory.set(path, parsed);
-            notifyCache(path, parsed);
+    // Read every saved page at once; one at a time made the first screen wait.
+    await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const raw = await SecureStore.getItemAsync(persistKey(path));
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (!memory.has(path)) {
+              memory.set(path, parsed);
+              notifyCache(path, parsed);
+            }
           }
+        } catch {
+          // Ignore single key error
         }
-      } catch {
-        // Ignore single key error
-      }
-    }
+      }),
+    );
   } catch {
     // Ignore index hydration error
   }

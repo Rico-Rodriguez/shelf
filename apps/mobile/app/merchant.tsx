@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../src/api";
+import { api, load as read, peek } from "../src/api";
+import { useCached } from "../src/cached";
 import { Charge, ChargeGroup, ChargeSheet } from "../src/charge";
 import { dayLabel, flowMoney, merchantMatchKey, sameMerchant, shortDate } from "../src/format";
 import { Back, Button, Card, Hero, LedgerRow, Loading, Note, Screen } from "../src/ui";
@@ -18,26 +19,24 @@ function whenLabel(iso: string) {
 export default function MerchantScreen() {
   const params = useLocalSearchParams<{ name?: string }>();
   const name = params.name ?? "";
-  const [rows, setRows] = useState<MerchantCharge[] | null>(null);
-  const [groups, setGroups] = useState<ChargeGroup[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const txs = useCached<{ transactions: MerchantCharge[] }>(name ? `/api/transactions?merchant=${encodeURIComponent(name)}` : null, {
+    fallback: "Could not load this merchant",
+  });
+  const rows = txs.data?.transactions ?? null;
+  const [groups, setGroups] = useState<ChargeGroup[]>(() => peek<{ groups: ChargeGroup[] }>("/api/categories")?.groups ?? []);
+  const categories = useMemo(() => groups.flatMap((group) => group.categories), [groups]);
   const [selected, setSelected] = useState<MerchantCharge | null>(null);
   const [rule, setRule] = useState<Rule | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setError] = useState<string | null>(null);
+  const error = saveError ?? txs.error;
   const [busy, setBusy] = useState(false);
 
   function load() {
     if (!name) return;
-    void api<{ transactions: MerchantCharge[] }>(`/api/transactions?merchant=${encodeURIComponent(name)}`)
-      .then((res) => setRows(res.transactions))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load this merchant"));
-    void api<{ groups: ChargeGroup[] }>("/api/categories")
-      .then((res) => {
-        setGroups(res.groups);
-        setCategories(res.groups.flatMap((group) => group.categories));
-      })
+    void read<{ groups: ChargeGroup[] }>("/api/categories")
+      .then((res) => setGroups(res.groups))
       .catch(() => undefined);
-    void api<{ rules: Rule[] }>("/api/rules")
+    void read<{ rules: Rule[] }>("/api/rules")
       .then((res) => {
         const match = res.rules.find((item) => item.matchMerchant && sameMerchant(name, item.matchMerchant));
         setRule(match ?? null);
@@ -99,7 +98,7 @@ export default function MerchantScreen() {
   }
 
   return (
-    <Screen title={name} refresh={<Back />}>
+    <Screen title={name} refresh={<Back />} onRefresh={() => txs.reload()}>
       {error ? <Note>{error}</Note> : null}
       {rows === null && !error ? <Loading /> : null}
       {rows ? (
@@ -146,6 +145,7 @@ export default function MerchantScreen() {
           onClose={() => setSelected(null)}
           onSaved={() => {
             setSelected(null);
+            void txs.reload();
             load();
           }}
         />

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../src/api";
+import { useEffect, useMemo, useState } from "react";
+import { useCached } from "../src/cached";
 import { money, shelfColor } from "../src/format";
 import { anchorRect, playFlight, useFlightArrival } from "../src/flight";
 import { HoldingRow, type HoldingRowData } from "../src/holding";
@@ -22,28 +22,12 @@ const TONES = ["#14181f", "#5c6570", "#1b7a62", "#8fb9ad"];
 
 export default function InvestmentsScreen() {
   const reduceMotion = useReduceMotion();
-  const [rows, setRows] = useState<Holding[] | null>(null);
+  const { data, error, reload: load } = useCached<Payload>("/api/investments", { fallback: "Could not load investments" });
   const [splitQueued, setSplitQueued] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [gain, setGain] = useState<number | null>(null);
-  const [series, setSeries] = useState<{ date: string; cents: number }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    return api<Payload>("/api/investments")
-      .then((res) => {
-        setRows(res.holdings);
-        setTotal(res.totalCents ?? res.holdings.reduce((sum, row) => sum + row.institutionValueCents, 0));
-        setGain(res.gainCents ?? null);
-        setSeries(res.series ?? []);
-        setError(null);
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load investments"));
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rows = data?.holdings ?? null;
+  const total = data ? (data.totalCents ?? data.holdings.reduce((sum, row) => sum + row.institutionValueCents, 0)) : 0;
+  const gain = data?.gainCents ?? null;
+  const series = data?.series ?? [];
 
   const shares = useMemo(() => {
     const map = new Map<string, number>();

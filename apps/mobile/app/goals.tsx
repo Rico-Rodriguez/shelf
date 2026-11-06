@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api, peek } from "../src/api";
+import { api, load as read, peek } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money, monthlyNeedCents } from "../src/format";
 import { goalPreview, useFlightClock, useFlightHidden, useMeasuredAnchor } from "../src/flight";
@@ -34,10 +34,10 @@ const empty: Form = { name: "", kind: "save_up", target: "", targetDate: "", acc
 
 export default function GoalsScreen() {
   useFlightClock();
-  const [goals, setGoals] = useState<Goal[] | null>(null);
-  const [accounts, setAccounts] = useState<{ id: string; name: string; currentBalanceCents?: number }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-  const [groups, setGroups] = useState<ChargeGroup[]>([]);
+  const [goals, setGoals] = useState<Goal[] | null>(() => peek<{ goals: Goal[] }>("/api/goals")?.goals ?? null);
+  const [accounts, setAccounts] = useState<{ id: string; name: string; currentBalanceCents?: number }[]>(() => peek<{ accounts: { id: string; name: string; currentBalanceCents?: number }[] }>("/api/goals")?.accounts ?? []);
+  const [groups, setGroups] = useState<ChargeGroup[]>(() => peek<{ groups: ChargeGroup[] }>("/api/categories")?.groups ?? []);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>(() => groups.flatMap((group) => group.categories));
   const [pickingCategory, setPickingCategory] = useState(false);
   const [form, setForm] = useState<Form>(empty);
   const [editing, setEditing] = useState<Goal | "new" | null>(null);
@@ -46,14 +46,14 @@ export default function GoalsScreen() {
   const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
 
   function load() {
-    void api<{ goals: Goal[]; accounts: { id: string; name: string; currentBalanceCents?: number }[] }>("/api/goals")
+    void read<{ goals: Goal[]; accounts: { id: string; name: string; currentBalanceCents?: number }[] }>("/api/goals")
       .then((res) => {
         setGoals(res.goals);
         setAccounts(res.accounts);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load goals"));
-    void api<{ groups: ChargeGroup[] }>("/api/categories")
+    void read<{ groups: ChargeGroup[] }>("/api/categories")
       .then((res) => {
         setGroups(res.groups);
         setCategories(res.groups.flatMap((group) => group.categories));

@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Reanimated, {
@@ -90,26 +90,8 @@ export function Screen({
   const wordmark = useWordmark();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
-  const reduceMotion = useReduceMotion();
   const isDark = palette.scheme === "dark";
   const [refreshing, setRefreshing] = useState(false);
-  const bodyFade = useRef(new Animated.Value(1)).current;
-  const sawFocus = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (!framed) return;
-      if (!sawFocus.current) {
-        sawFocus.current = true;
-        return;
-      }
-      if (reduceMotion) {
-        bodyFade.setValue(1);
-        return;
-      }
-      bodyFade.setValue(0);
-      Animated.timing(bodyFade, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    }, [framed, reduceMotion, bodyFade]),
-  );
   const titleMeasure = useMeasuredAnchor(titleAnchor, title ? { text: title, color: palette.ink, fontSize: 17 } : null);
   const titleOpacity = useFlightHidden(titleAnchor);
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -197,7 +179,7 @@ export function Screen({
 
   if (!scrollable) {
     return (
-      <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
+      <Animated.View style={styles.safe}>
         {pinnedNav}
         <ScrollLockProvider value={setScrollLocked}>
           <View style={{ flex: 1, paddingTop: topPadding }}>
@@ -223,7 +205,7 @@ export function Screen({
   }
 
   const body = (
-    <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
+    <Animated.View style={styles.safe}>
       {pinnedNav}
       <ScrollLockProvider value={setScrollLocked}>
         <ScrollView
