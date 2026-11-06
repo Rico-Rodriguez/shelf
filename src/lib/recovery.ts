@@ -17,9 +17,12 @@ export function generateRecoveryCodes(count = 8): string[] {
   return codes;
 }
 
+function normalizeRecoveryCode(code: string) {
+  return code.toUpperCase().replace(/[^A-Z2-9]/g, "");
+}
+
 export function hashRecoveryCode(code: string) {
-  const norm = code.toUpperCase().replace(/[^A-Z2-9]/g, "");
-  return createHash("sha256").update(norm).digest("hex");
+  return createHash("sha256").update(normalizeRecoveryCode(code)).digest("hex");
 }
 
 export async function storeRecoveryCodes(userId: string, codes: string[]) {
@@ -37,8 +40,7 @@ export async function storeRecoveryCodes(userId: string, codes: string[]) {
 
 /** Returns true when the code matched an unused recovery code, and consumes it. */
 export async function consumeRecoveryCode(userId: string, code: string): Promise<boolean> {
-  const norm = code.toUpperCase().replace(/[^A-Z2-9]/g, "");
-  if (norm.length < 8) return false;
+  if (normalizeRecoveryCode(code).length < 8) return false;
   const db = await getDb();
   const rows = await db
     .select()
@@ -47,6 +49,11 @@ export async function consumeRecoveryCode(userId: string, code: string): Promise
   const hash = hashRecoveryCode(code);
   const hit = rows.find((row) => row.codeHash === hash);
   if (!hit) return false;
-  await db.update(recoveryCodes).set({ usedAt: new Date() }).where(eq(recoveryCodes.id, hit.id));
-  return true;
+  // Claim the code only if it is still unused, so two requests racing with one code cannot both pass.
+  const claimed = await db
+    .update(recoveryCodes)
+    .set({ usedAt: new Date() })
+    .where(and(eq(recoveryCodes.id, hit.id), isNull(recoveryCodes.usedAt)))
+    .returning();
+  return claimed.length > 0;
 }

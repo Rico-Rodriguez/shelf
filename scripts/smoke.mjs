@@ -79,6 +79,7 @@ if (!bearer.res.ok || !sessionOpen) {
 }
 console.log("ok bearer");
 
+let recoveryCode = "";
 if (bearer.json?.needsEnroll) {
   const enroll = await authed("/api/auth/totp/setup");
   if (!enroll.res.ok || !enroll.json?.secret) {
@@ -95,6 +96,11 @@ if (bearer.json?.needsEnroll) {
     console.error("totp confirm failed", confirm.text);
     process.exit(1);
   }
+  if (!Array.isArray(confirm.json.recoveryCodes) || confirm.json.recoveryCodes.length !== 8) {
+    console.error("enroll returned no recovery codes", confirm.text);
+    process.exit(1);
+  }
+  recoveryCode = confirm.json.recoveryCodes[0];
   token = confirm.json.token;
   remember(confirm.res);
   console.log("ok enroll");
@@ -170,5 +176,29 @@ if (home.res.status >= 400) {
   process.exit(1);
 }
 console.log("ok page /");
+
+if (recoveryCode) {
+  // A fresh login can pass two-factor once with a recovery code, and not twice.
+  const tryRecovery = async () => {
+    const login = await req("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+    const cookies = (login.res.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
+    return req("/api/auth/totp", {
+      method: "POST",
+      headers: { cookie: cookies },
+      body: JSON.stringify({ code: recoveryCode.toLowerCase() }),
+    });
+  };
+  const first = await tryRecovery();
+  if (!first.res.ok) {
+    console.error("recovery code was refused", first.text);
+    process.exit(1);
+  }
+  const second = await tryRecovery();
+  if (second.res.ok) {
+    console.error("recovery code worked twice");
+    process.exit(1);
+  }
+  console.log("ok recovery code");
+}
 
 console.log("smoke passed");
