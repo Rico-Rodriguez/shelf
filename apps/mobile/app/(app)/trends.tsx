@@ -139,7 +139,7 @@ export default function InsightsScreen() {
       </View>
 
       <View style={{ gap: 10 }}>
-        <Section title="Your money" action="More" onAction={() => router.push("/money")} />
+        <Section title="Your money" />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
           <Tile title="Net worth" value={worth == null ? "—" : money(worth)} onPress={() => router.push("/accounts")} />
           <Tile
@@ -149,9 +149,9 @@ export default function InsightsScreen() {
             onPress={() => router.push("/bills")}
           />
           <Tile title="Goals" value={goalCount == null ? "—" : goalCount === 0 ? "Add one" : `${goalCount} active`} onPress={() => router.push("/goals")} />
-          <Tile title="Cash flow" value="Income vs. spending" small onPress={() => router.push("/cash-flow")} />
+          <Tile title="Money flow" value="Where it went" small onPress={() => router.push("/flow")} />
           <Tile title="Investments" value="Holdings" small onPress={() => router.push("/investments")} />
-          <Tile title="Merchants" value="Where it went" small onPress={() => router.push("/insights")} />
+          <Tile title="Merchants" value="By store" small onPress={() => router.push("/insights")} />
         </View>
       </View>
 
