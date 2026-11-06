@@ -292,7 +292,7 @@ export default function BillsScreen() {
 
   return (
     <Screen
-      title="Bills"
+      title="Bills and subscriptions"
       refresh={<Back />}
       onRefresh={load}
       action={

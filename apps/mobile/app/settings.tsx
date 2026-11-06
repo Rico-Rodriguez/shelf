@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Share, Text, View } from "react-native";
 import { api, apiText } from "../src/api";
 import { Icon } from "../src/icons";
-import { Back, Button, Card, colors, Field, LoadError, MenuRow, Note, Screen, Section, Segment, SmallSections, ToggleRow } from "../src/ui";
+import { Back, Button, Card, colors, Field, LoadError, MenuRow, Note, Screen, Section, Segment, Sheet, SmallSections, ToggleRow } from "../src/ui";
 import { useSession } from "../src/session";
 import { setMotionMode, useMotionMode, useTheme } from "../src/theme";
 
@@ -19,6 +19,7 @@ export default function SettingsScreen() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [csv, setCsv] = useState("");
+  const [importing, setImporting] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [home, setHome] = useState<Household | null>(null);
@@ -137,6 +138,10 @@ export default function SettingsScreen() {
       <Section title="Data" />
       <Card>
         <MenuRow title="Rules" subtitle="File new purchases automatically" icon="list" onPress={() => router.push("/rules")} />
+        <MenuRow title="Import a CSV" subtitle="Add rows from a bank export" icon="add" divided onPress={() => {
+          setMessage(null);
+          setImporting(true);
+        }} />
         <MenuRow title="Export as JSON" icon="flow" divided onPress={() => void shareExport("json")} />
         <MenuRow title="Export as CSV" icon="flow" divided onPress={() => void shareExport("csv")} />
         {demo ? (
@@ -156,24 +161,6 @@ export default function SettingsScreen() {
         )}
       </Card>
 
-      <Section title="Import a CSV" />
-      <Card>
-        {accounts.map((account, index) => (
-          <MenuRow
-            key={account.id}
-            divided={index > 0}
-            title={account.name}
-            plain
-            trailing={accountId === account.id ? <Icon name="check" size={18} color={colors.accentInk} /> : undefined}
-            onPress={() => setAccountId(account.id)}
-          />
-        ))}
-        <View style={{ padding: 16, gap: 12 }}>
-          <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
-          <Note>{`Positive amounts are money out. Importing into ${importName}.`}</Note>
-          <Button label="Import CSV" block onPress={() => void api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId, csv }) }).then((res) => setMessage(`Imported ${res.created} rows.`))} />
-        </View>
-      </Card>
 
       <Section title="Shelf key" />
       <Card>
@@ -201,6 +188,38 @@ export default function SettingsScreen() {
         <MenuRow title="Sign out" danger divided onPress={() => void signOut().then(() => router.replace("/"))} />
       </Card>
       </SmallSections>
+      {importing ? (
+        <Sheet title="Import a CSV" onClose={() => setImporting(false)}>
+          <Card>
+            {accounts.map((account, index) => (
+              <MenuRow
+                key={account.id}
+                divided={index > 0}
+                title={account.name}
+                plain
+                trailing={accountId === account.id ? <Icon name="check" size={18} color={colors.accentInk} /> : undefined}
+                onPress={() => setAccountId(account.id)}
+              />
+            ))}
+            <View style={{ padding: 16, gap: 12 }}>
+              <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
+              <Note>{`Positive amounts are money out. Importing into ${importName}.`}</Note>
+              {message ? <Note>{message}</Note> : null}
+              <Button
+                label="Import CSV"
+                block
+                onPress={() =>
+                  void api<{ created: number }>("/api/import", { method: "POST", body: JSON.stringify({ accountId, csv }) }).then((res) => {
+                    setMessage(`Imported ${res.created} rows.`);
+                    setCsv("");
+                    setImporting(false);
+                  }).catch((err: unknown) => setMessage(err instanceof Error ? err.message : "Could not import that file."))
+                }
+              />
+            </View>
+          </Card>
+        </Sheet>
+      ) : null}
     </Screen>
   );
 }

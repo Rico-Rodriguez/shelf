@@ -150,7 +150,6 @@ export default function InsightsScreen() {
           />
           <Tile title="Goals" value={goalCount == null ? "—" : goalCount === 0 ? "Add one" : `${goalCount} active`} onPress={() => router.push("/goals")} />
           <Tile title="Money flow" value="Where it went" small onPress={() => router.push("/flow")} />
-          <Tile title="Investments" value="Holdings" small onPress={() => router.push("/investments")} />
           <Tile title="Merchants" value="By store" small onPress={() => router.push("/insights")} />
         </View>
       </View>
