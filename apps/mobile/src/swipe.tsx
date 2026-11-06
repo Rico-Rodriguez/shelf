@@ -11,7 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { tapMedium, tapPress } from "./haptic";
 import { Icon } from "./icons";
-import { colors } from "./theme";
+import { colors, themedStyles } from "./theme";
 
 const BUTTON_WIDTH = 76;
 const SPRING_CONFIG = { stiffness: 420, damping: 32, mass: 0.8 };
@@ -49,6 +49,7 @@ export function SwipeRow({
   onSwipeRight?: () => void;
   swipeRightLabel?: string;
 }) {
+  const styles = useStyles();
   const totalActionsWidth = Math.max(BUTTON_WIDTH, actions.length * BUTTON_WIDTH);
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
@@ -242,7 +243,8 @@ export function SwipeRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((colors) =>
+  StyleSheet.create({
   wrapper: {
     overflow: "hidden",
     position: "relative",
@@ -317,4 +319,5 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: colors.accent,
   },
-});
+  }),
+);

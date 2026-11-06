@@ -2,7 +2,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import { load as read, peek } from "../src/api";
-import { dashboardPath, money, monthSaved, nearestOpenGoal } from "../src/format";
+import { signed, dashboardPath, money, monthSaved, nearestOpenGoal } from "../src/format";
 import { anchorRect, goalPreview, recallAnchor, stageFlight, useFlightHidden, useMeasuredAnchor } from "../src/flight";
 import { useReduceMotion } from "../src/theme";
 import { Back, Card, colors, MenuRow, Screen } from "../src/ui";
@@ -141,7 +141,7 @@ function MarketValue({ cents, gainCents }: { cents: number; gainCents: number | 
       <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", fontVariant: ["tabular-nums"] }}>
         <Text style={{ color: colors.ink }}>{text}</Text>
         {gainCents != null ? (
-          <Text style={{ color: gainCents >= 0 ? colors.positive : colors.danger }}>{`  ${money(Math.abs(gainCents))}`}</Text>
+          <Text style={{ color: gainCents >= 0 ? colors.positive : colors.danger }}>{`  ${signed(gainCents)}`}</Text>
         ) : null}
       </Text>
     </View>

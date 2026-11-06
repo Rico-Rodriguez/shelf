@@ -19,7 +19,7 @@ import { getOrCreateBudgetMonth } from "./budget";
 import { nid } from "./ids";
 import { addDays, addMonths, todayISO, yearMonth } from "./dates";
 import { snapshotNetWorth } from "./networth";
-import { openBudgetItem, openBudgetMonth, prepareVault, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "./secrets";
+import { openBudgetMonth, prepareVault, sealedBudgetItemWrite, sealedBudgetMonthWrite, sealedSettingsIncome } from "./secrets";
 
 export async function seedDemoHouse(dek: Buffer) {
   const db = await getDb();
@@ -202,7 +202,8 @@ export async function clearDemoHouse(dek: Buffer) {
   }
 
   const months = await db.select().from(budgetMonths);
-  const keptIncome = months.some((month) => !month.isSample);
+  // Keep the saved income only when a month the person planned themselves has one.
+  const keptIncome = months.some((month) => !month.isSample && openBudgetMonth(month, dek).plannedIncomeCents > 0);
   for (const month of months) {
     if (!month.isSample) continue;
     const opened = openBudgetMonth(month, dek);
@@ -213,10 +214,10 @@ export async function clearDemoHouse(dek: Buffer) {
   }
   const sampleItems = await db.select().from(budgetItems).where(eq(budgetItems.isSample, true));
   for (const item of sampleItems) {
-    const opened = openBudgetItem(item, dek);
+    // Rollover on a sample item came from sample spending against a sample plan.
     await db
       .update(budgetItems)
-      .set({ ...sealedBudgetItemWrite(0, opened.rolloverInCents, dek), isSample: false })
+      .set({ ...sealedBudgetItemWrite(0, 0, dek), isSample: false })
       .where(eq(budgetItems.id, item.id));
   }
 

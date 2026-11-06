@@ -5,7 +5,15 @@ import { nid } from "./ids";
 import { sameMerchant } from "./plan";
 import { openRule, openTx, sealedSplitWrite, sealTxPatch } from "./secrets";
 
-export type AppliedReview = { id: string; categoryId: string | null };
+/** What a charge looked like before a rule touched it, so undo can put it back. */
+export type AppliedReview = {
+  id: string;
+  categoryId: string | null;
+  reviewed: boolean;
+  hidden: boolean;
+  name?: string;
+  merchantName?: string | null;
+};
 
 export type RuleRow = typeof rules.$inferSelect;
 export type TxPatch = {
@@ -124,8 +132,8 @@ async function applyRuleSideEffects(db: AppDb, txId: string, rule: RuleRow, dek:
   }
 }
 
-/** Apply a merchant rule to every matching charge, on screen or not, reviewed or still open. */
-export async function applyRuleToUnreviewed(db: AppDb, rule: RuleRow, dek: Buffer) {
+/** Apply a new rule to every matching charge, on screen or not, reviewed or still open. */
+export async function applyRuleToMatches(db: AppDb, rule: RuleRow, dek: Buffer) {
   const openedRule = openRule(rule, dek);
   if (!openedRule.actionCategoryId && !openedRule.actionRename && !openedRule.actionHide) {
     return { applied: 0, ids: [] as string[], previous: [] as AppliedReview[] };
@@ -141,7 +149,13 @@ export async function applyRuleToUnreviewed(db: AppDb, rule: RuleRow, dek: Buffe
       .set({ ...patch, reviewed: true, updatedAt: new Date() })
       .where(eq(transactions.id, tx.id));
     await applyRuleSideEffects(db, tx.id, openedRule, dek);
-    previous.push({ id: tx.id, categoryId: tx.categoryId });
+    previous.push({
+      id: tx.id,
+      categoryId: tx.categoryId,
+      reviewed: tx.reviewed,
+      hidden: tx.hidden,
+      ...(openedRule.actionRename ? { name: opened.name, merchantName: opened.merchantName } : {}),
+    });
   }
   return { applied: previous.length, ids: previous.map((row) => row.id), previous };
 }

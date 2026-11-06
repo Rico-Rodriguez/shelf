@@ -94,6 +94,15 @@ export function shortMonthLabel(year: number, month: number): string {
   return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
+/** "Aug 2026" for a "2026-08" key, "Q3 2026" for "2026-Q3". */
+export function periodLabel(key: string): string {
+  const month = /^(\d{4})-(\d{2})$/.exec(key);
+  if (month) return shortMonthLabel(Number(month[1]), Number(month[2]));
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(key);
+  if (quarter) return `Q${quarter[2]} ${quarter[1]}`;
+  return key;
+}
+
 export function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
   const date = new Date(year, month - 1 + delta, 1);
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
@@ -170,6 +179,25 @@ export function budgetPace(
     return { label: "Over", tone: overPlan ? "bad" : "warn", gapCents: spentCents - expected };
   }
   return { label: "Ahead", tone: "good", gapCents: expected - spentCents };
+}
+
+/** "Over pace" / "Ahead of pace". A bare "Over" beside a positive left-to-spend reads as over budget. */
+export function paceWords(label: "Ahead" | "Over"): string {
+  return label === "Over" ? "Over pace" : "Ahead of pace";
+}
+
+/**
+ * Where one category stands against its own plan. Under the plan it shows what is left,
+ * over the plan it shows by how much. Pace through the month is the marker on the bar,
+ * not this figure, so a bill paid in full early never reads as "Over".
+ */
+export function categoryStanding(
+  spentCents: number,
+  availableCents: number,
+): { label: "Left" | "Over"; cents: number; over: boolean } {
+  const left = availableCents - spentCents;
+  if (left < 0) return { label: "Over", cents: -left, over: true };
+  return { label: "Left", cents: left, over: false };
 }
 
 /**
@@ -301,14 +329,21 @@ export function billsStillDueCents(
   return billsCountedInMonth(bills, year, month).reduce((sum, bill) => sum + bill.cents, 0);
 }
 
-/** Merchant key for rules. Lowercase, strip punctuation, collapse spaces, and drop one trailing " - {place}". Keep this in step with src/lib/plan.ts. */
+/**
+ * Merchant key for rules. Lowercase, drop one trailing " - {place}", drop store numbers
+ * ("#1234", "0457"), strip punctuation, and collapse spaces. Keep this in step with src/lib/plan.ts.
+ */
 export function merchantMatchKey(name: string): string {
   const withoutPlace = name.replace(/\s+-\s+[^-]+$/, "").trim();
-  return withoutPlace
+  const key = withoutPlace
     .toLowerCase()
+    .replace(/#\s*[a-z0-9]*\d[a-z0-9]*/g, " ")
+    .replace(/\b\d{3,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (key) return key;
+  return withoutPlace.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /** Same payee when the keys match, or they share a word-boundary prefix of at least two words. A single word does not glue longer names together. */

@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
-import { budgetPace, dayLabel, flowMoney, money, monthFraction, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
+import { budgetPace, categoryStanding, dayLabel, paceWords, flowMoney, money, monthFraction, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { mergeBudget, subscribeLive } from "../../src/live-edits";
 import { celebrate } from "../../src/toast";
@@ -288,19 +288,9 @@ export default function BudgetScreen() {
     const figureFrom = anchorRect(`plan.figure.${row.category.id}`);
     const barFrom = anchorRect(`plan.bar.${row.category.id}`);
     setRowOrigin(origin);
-    const pacedRow = row.availableCents > 0;
-    const rowPace = pacedRow ? budgetPace(row.spentCents, row.availableCents) : null;
-    const rowOver = pacedRow && row.remainingCents < 0;
-    const figure = rowPace ? rowPace.gapCents : row.spentCents;
-    const figureColor = rowPace
-      ? rowPace.tone === "bad"
-        ? colors.danger
-        : rowPace.tone === "warn"
-          ? colors.warn
-          : colors.positive
-      : rowOver
-        ? colors.danger
-        : colors.ink;
+    const standing = row.availableCents > 0 ? categoryStanding(row.spentCents, row.availableCents) : null;
+    const figure = standing ? standing.cents : row.spentCents;
+    const figureColor = standing?.over ? colors.danger : colors.ink;
     const carry: FlightPiece[] = [];
     if (figureFrom) {
       carry.push({
@@ -498,7 +488,7 @@ export default function BudgetScreen() {
                         color: paceColor,
                       }}
                     >
-                      {pace.label}
+                      {paceWords(pace.label)}
                     </Text>
                   </View>
                 ) : null}
@@ -578,10 +568,9 @@ export default function BudgetScreen() {
                     <Card>
                       {group.rows.map((row, index) => {
                         const paced = row.availableCents > 0;
-                        const rowPace = paced ? budgetPace(row.spentCents, row.availableCents) : null;
-                        const rowPaceColor = rowPace?.tone === "bad" ? colors.danger : rowPace?.tone === "warn" ? colors.warn : colors.positive;
-                        const rowOver = paced && row.remainingCents < 0;
-                        const figure = rowPace ? rowPace.gapCents : row.spentCents;
+                        const standing = paced ? categoryStanding(row.spentCents, row.availableCents) : null;
+                        const rowOver = Boolean(standing?.over);
+                        const figure = standing ? standing.cents : row.spentCents;
 
                         return (
                           <AnchorBox key={row.category.id} id={`plan.row.${row.category.id}`}>
@@ -608,13 +597,13 @@ export default function BudgetScreen() {
                                 ) : null}
                               </View>
                               <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                                {rowPace ? (
-                                  <Text style={{ fontSize: 12, fontWeight: "700", color: rowPaceColor }}>
-                                    {rowPace.label}
+                                {standing ? (
+                                  <Text style={{ fontSize: 12, fontWeight: standing.over ? "700" : "500", color: standing.over ? colors.danger : colors.muted }}>
+                                    {standing.label}
                                   </Text>
                                 ) : null}
                                 <AnchorBox id={`plan.figure.${row.category.id}`}>
-                                  <Text style={{ fontSize: 16, fontWeight: "600", color: rowPace ? rowPaceColor : colors.ink }}>{money(figure)}</Text>
+                                  <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink, fontVariant: ["tabular-nums"] }}>{money(figure)}</Text>
                                 </AnchorBox>
                               </View>
                             </View>
@@ -770,7 +759,7 @@ export default function BudgetScreen() {
           return (
             <Sheet
               title={catName || editing.category.name}
-              subtitle={rowPace?.label}
+              subtitle={rowPace ? `${paceWords(rowPace.label)} by ${money(rowPace.gapCents)}` : undefined}
               subtitleColor={rowPace ? rowPaceColor : undefined}
               height="80%"
               origin={rowOrigin}

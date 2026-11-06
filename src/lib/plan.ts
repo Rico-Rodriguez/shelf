@@ -137,16 +137,20 @@ export function merchantKey(name: string) {
 }
 
 /**
- * Merchant key for rules. Lowercase, strip punctuation, collapse spaces, and drop one trailing " - {place}".
- * Keep this in step with apps/mobile/src/format.ts.
+ * Merchant key for rules. Lowercase, drop one trailing " - {place}", drop store numbers
+ * ("#1234", "0457"), strip punctuation, and collapse spaces. Keep this in step with apps/mobile/src/format.ts.
  */
-export function merchantMatchKey(name: string) {
+export function merchantMatchKey(name: string): string {
   const withoutPlace = name.replace(/\s+-\s+[^-]+$/, "").trim();
-  return withoutPlace
+  const key = withoutPlace
     .toLowerCase()
+    .replace(/#\s*[a-z0-9]*\d[a-z0-9]*/g, " ")
+    .replace(/\b\d{3,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (key) return key;
+  return withoutPlace.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /** Same payee when the keys match, or they share a word-boundary prefix of at least two words. A single word does not glue longer names together. */

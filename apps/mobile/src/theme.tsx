@@ -229,3 +229,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useTheme(): ThemeValue {
   return useContext(ThemeContext);
 }
+
+/**
+ * Styles that read the palette. A module-level StyleSheet.create copies the light
+ * colors once at import, so dark mode never reaches it. This returns a hook that
+ * builds the sheet per palette and caches it.
+ */
+export function themedStyles<T>(make: (colors: Palette) => T): () => T {
+  const cache = new WeakMap<Palette, T>();
+  return function useThemedStyles() {
+    const { palette } = useTheme();
+    let sheet = cache.get(palette);
+    if (!sheet) {
+      sheet = make(palette);
+      cache.set(palette, sheet);
+    }
+    return sheet;
+  };
+}

@@ -196,7 +196,7 @@ export default function AccountsScreen() {
         }, 0);
         return (
           <View key={group.key} style={{ gap: 8 }}>
-            <Section title={group.name} trailing={signed(total)} />
+            <Section title={group.name} trailing={money(total)} />
             <Card>
               {group.rows.map((account, index) => {
                 const liability = isLiability(account.type);

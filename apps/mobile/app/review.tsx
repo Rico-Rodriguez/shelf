@@ -1,3 +1,4 @@
+import { themedStyles } from "../src/theme";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -27,6 +28,7 @@ type UndoAction = {
 };
 
 export default function ReviewScreen() {
+  const styles = useStyles();
   const [rows, setRows] = useState<Charge[] | null>(null);
   const [groups, setGroups] = useState<ChargeGroup[]>([]);
   const [faces, setFaces] = useState<Record<string, { monthCents: number; count: number }>>({});
@@ -310,7 +312,8 @@ export default function ReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((colors) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -422,4 +425,5 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 24,
   },
-});
+  }),
+);

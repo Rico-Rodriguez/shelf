@@ -68,8 +68,9 @@ export function registerAnchor(id: string, rect: FlightRect) {
   ) {
     return;
   }
+  // No emit: flights poll anchors when they start, and waking every listener on each layout
+  // re-rendered Today, Goals and the flight host whenever any anchored row laid out.
   anchors.set(id, { rect });
-  emit();
 }
 
 export function anchorRect(id: string): FlightRect | null {
@@ -190,8 +191,22 @@ export function clearGoalPreview() {
   emit();
 }
 
+let stagedTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function stageFlight(plan: FlightPlan, reduceMotion = false) {
   staged = plan;
+  if (stagedTimer) clearTimeout(stagedTimer);
+  // A staged flight the destination never takes (it was already focused, or the
+  // navigation was cancelled) must not leave the chart or bars faded out.
+  stagedTimer = setTimeout(() => {
+    stagedTimer = null;
+    if (staged !== plan) return;
+    staged = null;
+    if (active?.id !== plan.id) {
+      barsOpacity.setValue(1);
+      chartOpacity.setValue(1);
+    }
+  }, 1500);
   if (reduceMotion) return;
   if (plan.handoff === "chart-to-bars") barsOpacity.setValue(0);
   if (plan.handoff === "bars-to-chart") chartOpacity.setValue(0);
@@ -216,6 +231,7 @@ function release(plan: FlightPlan) {
 
 export function playFlight(plan: FlightPlan, reduceMotion: boolean) {
   if (reduceMotion) {
+    active = null;
     barsOpacity.setValue(1);
     chartOpacity.setValue(1);
     hiddenIds = new Set();
@@ -267,6 +283,8 @@ export function useFlightArrival(id: string, reduceMotion: boolean, prepare?: (p
 }
 
 export function launchLeftToPlan(reduceMotion: boolean) {
+  // Only fly from Today's figure when Today is the screen on view; otherwise its anchor is stale.
+  if (surface !== "today") return false;
   const from = anchorRect("today.left");
   const mem = recallAnchor("today.left");
   if (!from || !mem) return false;
@@ -294,6 +312,7 @@ export function launchLeftToPlan(reduceMotion: boolean) {
 }
 
 export function launchPlanToToday(reduceMotion: boolean) {
+  if (surface !== "plan") return false;
   const from = anchorRect("plan.left");
   const mem = recallAnchor("plan.left");
   if (!from || !mem) return false;
@@ -366,7 +385,8 @@ export function FlightRun({ plan, onDone }: { plan: FlightPlan; onDone: () => vo
       return;
     }
     const duration = plan.duration ?? 560;
-    Animated.parallel(
+    let stale = false;
+    const animation = Animated.parallel(
       run.pieces.map((piece, index) =>
         Animated.timing(run.values[index], {
           toValue: 1,
@@ -376,9 +396,16 @@ export function FlightRun({ plan, onDone }: { plan: FlightPlan; onDone: () => vo
           useNativeDriver: true,
         }),
       ),
-    ).start(({ finished }) => {
-      if (finished) onDoneRef.current();
+    );
+    animation.start(() => {
+      // Release even when the animation was interrupted, or the real figures stay hidden at
+      // opacity 0. A run replaced by a newer one for the same plan stays quiet instead.
+      if (!stale) onDoneRef.current();
     });
+    return () => {
+      stale = true;
+      animation.stop();
+    };
   }, [run, plan.duration]);
 
   if (!run?.pieces.length) return null;

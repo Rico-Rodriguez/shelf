@@ -6,7 +6,7 @@ import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { advanceDueDate, annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
 import { anchorRect, playFlight, useFlightArrival, type FlightPiece } from "../src/flight";
 import { useReduceMotion } from "../src/theme";
-import { Back, Button, Card, colors, Facts, Field, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, Facts, Field, GlassButton, GlassIconButton, Hero, LedgerRow, LoadError, Loading, Note, Screen, Section, Sheet, Switch } from "../src/ui";
 
 type Bill = {
   id: string;
@@ -297,8 +297,8 @@ export default function BillsScreen() {
       onRefresh={load}
       action={
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          <Button label="Find bills" tone="quiet" onPress={() => void detect()} />
-          <Button label="Add" onPress={openNew} />
+          <GlassIconButton icon="spark" label="Find bills" onPress={() => void detect()} />
+          <GlassButton label="Add" icon="plus" onPress={openNew} compact />
         </View>
       }
     >
