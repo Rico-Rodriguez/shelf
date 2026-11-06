@@ -20,6 +20,16 @@ export type HeldReview = {
 
 type Settle = { resolve: () => void; reject: (err: unknown) => void };
 
+/** A charge as it was before a review or rule changed it. */
+type PriorCharge = {
+  id: string;
+  categoryId: string | null;
+  reviewed?: boolean;
+  hidden?: boolean;
+  name?: string;
+  merchantName?: string | null;
+};
+
 type ReviewJob = {
   id: string;
   kind: "review";
@@ -31,7 +41,9 @@ type ReviewJob = {
   rename?: string;
   body?: Record<string, unknown>;
   affected: HeldReview[];
-  previous: { id: string; categoryId: string | null; reviewed?: boolean }[];
+  previous: PriorCharge[];
+  /** Charges the server's rule touched, including ones that were never on screen. */
+  ruleTouched?: PriorCharge[];
   revert?: Record<string, unknown>;
   patchDone: boolean;
   ruleId: string | null;
@@ -203,7 +215,7 @@ export function enqueueReview(input: {
   rename?: string;
   body?: Record<string, unknown>;
   affected: HeldReview[];
-  previous: { id: string; categoryId: string | null; reviewed?: boolean }[];
+  previous: PriorCharge[];
   revert?: Record<string, unknown>;
 }): ReviewJob {
   const job: ReviewJob = {
@@ -366,7 +378,7 @@ async function send(job: Job) {
     persist();
   }
   if (job.makeRule && job.categoryId && !job.ruleId) {
-    const created = await api<{ id: string }>("/api/rules", {
+    const created = await api<{ id: string; previous?: PriorCharge[] }>("/api/rules", {
       method: "POST",
       body: JSON.stringify({
         name: job.merchant,
@@ -378,6 +390,7 @@ async function send(job: Job) {
       }),
     });
     job.ruleId = created.id;
+    job.ruleTouched = created.previous ?? [];
   }
 }
 
@@ -398,12 +411,21 @@ async function compensate(job: Job) {
     if (job.revert) {
       await api(`/api/transactions/${job.txId}`, { method: "PATCH", body: JSON.stringify(job.revert) });
     }
-    const rows = job.previous.length ? job.previous : [{ id: job.txId, categoryId: null, reviewed: false }];
+    const rows: PriorCharge[] = job.previous.length ? [...job.previous] : [{ id: job.txId, categoryId: null, reviewed: false }];
+    const onScreen = new Set(rows.map((row) => row.id));
+    for (const row of job.ruleTouched ?? []) {
+      if (!onScreen.has(row.id)) rows.push(row);
+    }
     for (const row of rows) {
       if (job.revert && row.id === job.txId) continue;
       await api(`/api/transactions/${row.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ categoryId: row.categoryId, reviewed: row.reviewed ?? false }),
+        body: JSON.stringify({
+          categoryId: row.categoryId,
+          reviewed: row.reviewed ?? false,
+          ...(row.hidden != null ? { hidden: row.hidden } : {}),
+          ...(row.name != null ? { name: row.name, merchantName: row.merchantName ?? null } : {}),
+        }),
       });
     }
   }

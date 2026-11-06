@@ -4,7 +4,7 @@ import { getDb } from "@/db";
 import { rules } from "@/db/schema";
 import { AuthError, requireDek, requireWriter } from "@/lib/auth";
 import { nid } from "@/lib/ids";
-import { applyRuleToUnreviewed } from "@/lib/rules";
+import { applyRuleToMatches } from "@/lib/rules";
 import { openRule, sealedRuleWrite } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     });
     if (!applyUnreviewed) return NextResponse.json({ id, applied: 0, ids: [], previous: [] });
     const [created] = await db.select().from(rules).where(eq(rules.id, id));
-    const applied = created ? await applyRuleToUnreviewed(db, created, dek) : { applied: 0, ids: [], previous: [] };
+    const applied = created ? await applyRuleToMatches(db, created, dek) : { applied: 0, ids: [], previous: [] };
     return NextResponse.json({ id, ...applied });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message === "forbidden" ? "You have view-only access." : "locked" }, { status: err.message === "forbidden" ? 403 : 401 });
