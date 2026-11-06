@@ -19,12 +19,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-updates",
-      "expo-widgets"
+      "expo-widgets",
+      "./plugins/with-live-activity-layout"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.shelf.mobile",
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "package": "app.shelf.mobile",
