@@ -50,22 +50,22 @@ export type Palette = {
 };
 
 export const light: Palette = {
-  bg: "#f2f2f7",
-  card: "#ffffff",
-  cardInset: "#f2f2f7",
-  fill: "#ebebf0",
-  fillStrong: "#d8d8de",
-  ink: "#0b0b0f",
-  accentInk: "#0d6b52",
-  muted: "#6c6c73",
-  tertiary: "#9b9ba2",
-  line: "rgba(60, 60, 67, 0.12)",
-  lineStrong: "rgba(60, 60, 67, 0.22)",
-  positive: "#0f8a66",
+  bg: "#ffffff",
+  card: "#f4f5f7",
+  cardInset: "#eceef1",
+  fill: "#eceef1",
+  fillStrong: "#dcdfe3",
+  ink: "#0b0b0c",
+  accentInk: "#0a7f45",
+  muted: "#6b6f76",
+  tertiary: "#9a9ea5",
+  line: "rgba(60, 60, 67, 0.1)",
+  lineStrong: "rgba(60, 60, 67, 0.2)",
+  positive: "#0a8f4e",
   danger: "#e0412b",
-  accent: "#0f8a66",
-  accentSoft: "rgba(15, 138, 102, 0.11)",
-  warn: "#c2770f",
+  accent: "#0a8f4e",
+  accentSoft: "rgba(10, 143, 78, 0.11)",
+  warn: "#e0662a",
   control: "#0b0b0f",
   controlInk: "#ffffff",
   scheme: "light",
@@ -74,10 +74,10 @@ export const light: Palette = {
   secondaryLabel: "#6c6c73",
   tertiaryLabel: "#9b9ba2",
   quaternaryLabel: "#c4c4c9",
-  systemBackground: "#f2f2f7",
-  secondarySystemBackground: "#ffffff",
-  systemGroupedBackground: "#f2f2f7",
-  secondarySystemGroupedBackground: "#ffffff",
+  systemBackground: "#ffffff",
+  secondarySystemBackground: "#f4f5f7",
+  systemGroupedBackground: "#ffffff",
+  secondarySystemGroupedBackground: "#f4f5f7",
   separator: "rgba(60, 60, 67, 0.12)",
   // Functional Liquid Glass Chrome
   glass: "rgba(255, 255, 255, 0.72)",
@@ -90,7 +90,7 @@ export const light: Palette = {
   specularTop: "rgba(255, 255, 255, 0.96)",
   specularSides: "rgba(60, 60, 67, 0.08)",
   specularBottom: "rgba(60, 60, 67, 0.08)",
-  navBg: "rgba(242, 242, 247, 0.82)",
+  navBg: "rgba(255, 255, 255, 0.84)",
   sheetBg: "rgba(255, 255, 255, 0.97)",
   blurTint: "systemChromeMaterialLight",
   blurSubtleTint: "systemMaterialLight",
@@ -98,21 +98,21 @@ export const light: Palette = {
 
 export const dark: Palette = {
   bg: "#000000",
-  card: "#1c1c1e",
-  cardInset: "#141416",
-  fill: "#2c2c2e",
-  fillStrong: "#3a3a3c",
+  card: "#141416",
+  cardInset: "#0c0c0d",
+  fill: "#1f1f22",
+  fillStrong: "#2e2e32",
   ink: "#f5f5f7",
-  accentInk: "#5ee0b4",
-  muted: "#a1a1a8",
-  tertiary: "#6e6e76",
-  line: "rgba(235, 235, 245, 0.1)",
-  lineStrong: "rgba(235, 235, 245, 0.18)",
-  positive: "#3fd29f",
+  accentInk: "#2fd07f",
+  muted: "#98989f",
+  tertiary: "#6c6c72",
+  line: "rgba(235, 235, 245, 0.09)",
+  lineStrong: "rgba(235, 235, 245, 0.16)",
+  positive: "#2fd07f",
   danger: "#ff6a55",
-  accent: "#3fd29f",
-  accentSoft: "rgba(63, 210, 159, 0.15)",
-  warn: "#f0a94a",
+  accent: "#2fd07f",
+  accentSoft: "rgba(47, 208, 127, 0.14)",
+  warn: "#ff8a4c",
   control: "#f5f5f7",
   controlInk: "#0b0b0f",
   scheme: "dark",
@@ -122,9 +122,9 @@ export const dark: Palette = {
   tertiaryLabel: "#6e6e76",
   quaternaryLabel: "#48484d",
   systemBackground: "#000000",
-  secondarySystemBackground: "#1c1c1e",
+  secondarySystemBackground: "#141416",
   systemGroupedBackground: "#000000",
-  secondarySystemGroupedBackground: "#1c1c1e",
+  secondarySystemGroupedBackground: "#141416",
   separator: "rgba(235, 235, 245, 0.1)",
   // Functional Liquid Glass Chrome
   glass: "rgba(28, 28, 30, 0.72)",
@@ -155,7 +155,7 @@ export function useReduceTransparency(): boolean {
   const [reduceTransparency, setReduceTransparency] = useState(false);
 
   useEffect(() => {
-    AccessibilityInfo.isReduceTransparencyEnabled()
+    void AccessibilityInfo.isReduceTransparencyEnabled?.()
       .then(setReduceTransparency)
       .catch(() => undefined);
     const sub = AccessibilityInfo.addEventListener("reduceTransparencyChanged", (enabled) => {
@@ -167,21 +167,55 @@ export function useReduceTransparency(): boolean {
   return reduceTransparency;
 }
 
-/** Motion finishes on the first frame when Reduce Motion is on. Haptics stay. */
+export type MotionMode = "expressive" | "calm";
+
+const MOTION_KEY = "shelf-motion";
+let motionMode: MotionMode = "expressive";
+const motionListeners = new Set<(mode: MotionMode) => void>();
+void SecureStore.getItemAsync(MOTION_KEY)
+  .then((stored) => {
+    if (stored === "calm" || stored === "expressive") setMotionMode(stored, false);
+  })
+  .catch(() => undefined);
+
+export function setMotionMode(next: MotionMode, persist = true) {
+  motionMode = next;
+  if (persist) void SecureStore.setItemAsync(MOTION_KEY, next).catch(() => undefined);
+  motionListeners.forEach((listener) => listener(next));
+}
+
+/** Expressive (rolling numbers, charts that draw in, springy sheets) or calm (plain fades). */
+export function useMotionMode(): MotionMode {
+  const [mode, setMode] = useState(motionMode);
+  useEffect(() => {
+    setMode(motionMode);
+    motionListeners.add(setMode);
+    return () => {
+      motionListeners.delete(setMode);
+    };
+  }, []);
+  return mode;
+}
+
+/**
+ * Motion finishes on the first frame when the iPhone's Reduce Motion is on,
+ * or when the person turned expressive motion off in Settings. Haptics stay.
+ */
 export function useReduceMotion(): boolean {
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const [systemReduce, setSystemReduce] = useState(false);
+  const mode = useMotionMode();
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled()
-      .then(setReduceMotion)
+      .then(setSystemReduce)
       .catch(() => undefined);
     const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", (enabled) => {
-      setReduceMotion(enabled);
+      setSystemReduce(enabled);
     });
     return () => sub.remove();
   }, []);
 
-  return reduceMotion;
+  return systemReduce || mode === "calm";
 }
 
 type ThemeValue = {

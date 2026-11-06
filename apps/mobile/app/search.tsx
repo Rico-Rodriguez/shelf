@@ -7,11 +7,11 @@ import { Back, Card, colors, Loading, Note, Screen, SearchField } from "../src/u
 const PAGES = [
   ["/(app)", "Home"],
   ["/(app)/activity", "Activity"],
-  ["/(app)/budget", "Budget"],
+  ["/(app)/trends", "Insights"],
   ["/accounts", "Accounts"],
   ["/bills", "Bills"],
   ["/goals", "Goals"],
-  ["/insights", "Insights"],
+  ["/insights", "Merchants"],
   ["/settings", "Settings"],
   ["/rules", "Rules"],
 ] as const;

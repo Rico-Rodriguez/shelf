@@ -11,8 +11,6 @@ import { ISLAND_RECT, islandChargeId, syncIsland, type IslandTx } from "../../sr
 import {
   anchorRect,
   emitShelfRefresh,
-  launchLeftToPlan,
-  launchPlanToToday,
   peekCategoryReturn,
   playFlight,
   setFlightSurface,
@@ -24,19 +22,21 @@ import { useReduceMotion, useReduceTransparency, useTheme } from "../../src/them
 import { colors, QuickLogModal, type QuickLogDraft } from "../../src/ui";
 
 const TABS = [
-  { name: "index", title: "Today", icon: "home" },
-  { name: "budget", title: "Plan", icon: "chart" },
+  { name: "index", title: "Home", icon: "home" },
   { name: "activity", title: "Activity", icon: "list" },
+  { name: "trends", title: "Insights", icon: "chart" },
 ] as const;
 
 function MobileBar({
   title,
   unread,
   syncLabel,
+  search = false,
 }: {
   title: string;
   unread: number;
   syncLabel: string;
+  search?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
@@ -58,8 +58,6 @@ function MobileBar({
         zIndex: 100,
         paddingTop: insets.top,
         backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: palette.line,
         overflow: "hidden",
       }}
     >
@@ -73,17 +71,19 @@ function MobileBar({
           alignItems: "center",
           justifyContent: "space-between",
           paddingLeft: 20,
-          paddingRight: 12,
+          paddingRight: 14,
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10, flexShrink: 1 }}>
-          <Text
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={{ fontSize: 28, fontWeight: "700", letterSpacing: -0.8, color: palette.ink }}
-          >
-            {title}
-          </Text>
+          {title ? (
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              style={{ fontSize: 30, fontWeight: "700", letterSpacing: -0.9, color: palette.ink }}
+            >
+              {title}
+            </Text>
+          ) : null}
           {syncLabel === "Syncing" || failed ? (
             <View ref={syncMeasure.ref} onLayout={syncMeasure.onLayout} collapsable={false} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: failed ? palette.danger : palette.tertiary }} />
@@ -95,6 +95,20 @@ function MobileBar({
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {search ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+              onPress={() => {
+                tapPress();
+                router.push("/search");
+              }}
+              style={({ pressed }) => [barButton, { backgroundColor: palette.fill }, pressed ? { opacity: 0.6 } : null]}
+              hitSlop={4}
+            >
+              <Icon name="search" size={17} color={palette.ink} />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={unread ? `Notifications, ${unread} unread` : "Notifications"}
@@ -105,20 +119,8 @@ function MobileBar({
             style={({ pressed }) => [barButton, { backgroundColor: palette.fill }, pressed ? { opacity: 0.6 } : null]}
             hitSlop={4}
           >
-            <Icon name="bell" size={18} color={palette.ink} />
-            {unread ? <View style={[unreadDot, { backgroundColor: palette.danger, borderColor: palette.fill }]} /> : null}
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            onPress={() => {
-              tapPress();
-              router.push("/settings");
-            }}
-            style={({ pressed }) => [barButton, { backgroundColor: palette.fill }, pressed ? { opacity: 0.6 } : null]}
-            hitSlop={4}
-          >
-            <Icon name="gear" size={18} color={palette.ink} />
+            <Icon name="bell" size={17} color={palette.ink} />
+            {unread ? <View style={[unreadDot, { backgroundColor: palette.warn, borderColor: palette.fill }]} /> : null}
           </Pressable>
         </View>
       </View>
@@ -126,166 +128,116 @@ function MobileBar({
   );
 }
 
-function CrossfadeLabel({
+function TabIcon({
+  icon,
+  label,
   focused,
-  title,
-}: {
-  focused: boolean;
-  title: string;
-}) {
-  const { palette } = useTheme();
-  const reduceMotion = useReduceMotion();
-  const fade = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  useEffect(() => {
-    if (reduceMotion) {
-      fade.setValue(focused ? 1 : 0);
-      return;
-    }
-    Animated.timing(fade, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
-  }, [focused, reduceMotion, fade]);
-  const idle = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-  const label = { fontSize: 11, letterSpacing: -0.1, marginTop: 0 } as const;
-  return (
-    <View style={{ alignItems: "center", marginTop: 2, flexShrink: 0 }}>
-      <Text style={{ ...label, fontWeight: "700", opacity: 0 }} numberOfLines={1}>
-        {title}
-      </Text>
-      <Animated.View style={{ opacity: idle, position: "absolute", left: 0, right: 0, top: 0, alignItems: "center" }}>
-        <Text style={{ ...label, fontWeight: "500", color: palette.tertiary }} numberOfLines={1}>
-          {title}
-        </Text>
-      </Animated.View>
-      <Animated.View style={{ opacity: fade, position: "absolute", left: 0, right: 0, top: 0, alignItems: "center" }}>
-        <Text style={{ ...label, fontWeight: "700", color: palette.accentInk }} numberOfLines={1}>
-          {title}
-        </Text>
-      </Animated.View>
-    </View>
-  );
-}
-
-function ShelfTabBarItem({
-  route,
-  focused,
-  reviewCount,
-  spec,
+  badge,
   onPress,
 }: {
-  route: { key: string; name: string };
+  icon: string;
+  label: string;
   focused: boolean;
-  reviewCount: number;
-  spec?: { name: string; title: string; icon: string };
+  badge?: number;
   onPress: () => void;
 }) {
   const { palette } = useTheme();
   const reduceMotion = useReduceMotion();
   const scale = useRef(new Animated.Value(1)).current;
-  const iconFade = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const lit = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
     if (reduceMotion) {
-      iconFade.setValue(focused ? 1 : 0);
+      lit.setValue(focused ? 1 : 0);
       return;
     }
-    Animated.timing(iconFade, { toValue: focused ? 1 : 0, duration: 180, useNativeDriver: true }).start();
-  }, [focused, reduceMotion, iconFade]);
-  const iconIdle = iconFade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-
+    Animated.timing(lit, { toValue: focused ? 1 : 0, duration: 160, useNativeDriver: true }).start();
+    if (focused) {
+      scale.setValue(0.86);
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 420, damping: 14, mass: 0.7 }).start();
+    }
+  }, [focused, reduceMotion, lit, scale]);
+  const idle = lit.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={focused ? { selected: true } : {}}
-      accessibilityLabel={
-        route.name === "activity" && reviewCount > 0
-          ? `Activity, ${reviewCount} to categorize`
-          : spec?.title
-      }
+      accessibilityLabel={badge ? `${label}, ${badge} to review` : label}
       onPressIn={() => {
         if (reduceMotion) return;
-        Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+        Animated.spring(scale, { toValue: 0.86, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPressOut={() => {
         if (reduceMotion) return;
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 500, damping: 16 }).start();
       }}
       onPress={() => {
         if (!focused) tapSelect();
         onPress();
       }}
-      style={{
-        flex: 1,
-        minHeight: 52,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 6,
-      }}
+      style={{ flex: 1, height: 52, alignItems: "center", justifyContent: "center" }}
     >
-      <Animated.View style={{ position: "relative", alignItems: "center", transform: [{ scale }] }}>
-        <View style={{ width: 21, height: 21 }}>
-          <Animated.View style={{ opacity: iconIdle, position: "absolute" }}>
-            <Icon name={spec?.icon ?? "more"} size={21} color={palette.tertiary} />
-          </Animated.View>
-          <Animated.View style={{ opacity: iconFade }}>
-            <Icon name={spec?.icon ?? "more"} size={21} color={palette.accentInk} filled />
-          </Animated.View>
-        </View>
-        {route.name === "activity" && reviewCount > 0 ? (
-          <View style={[badge, { backgroundColor: palette.danger }]}>
-            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
-              {reviewCount > 99 ? "99+" : reviewCount}
-            </Text>
+      <Animated.View style={{ width: 26, height: 26, transform: [{ scale }] }}>
+        <Animated.View style={{ position: "absolute", opacity: idle }}>
+          <Icon name={icon} size={26} color={palette.tertiary} />
+        </Animated.View>
+        <Animated.View style={{ opacity: lit }}>
+          <Icon name={icon} size={26} color={palette.ink} filled />
+        </Animated.View>
+        {badge ? (
+          <View style={[badgeStyle, { backgroundColor: palette.warn, borderColor: palette.bg }]}>
+            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "800", fontVariant: ["tabular-nums"] }}>{badge > 99 ? "99+" : badge}</Text>
           </View>
         ) : null}
-        <CrossfadeLabel focused={focused} title={spec?.title ?? ""} />
       </Animated.View>
     </Pressable>
   );
 }
 
-function ShelfQuickLogButton({ onPress }: { onPress: () => void }) {
+function LogButton({ onPress }: { onPress: () => void }) {
   const { palette } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
-
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Log a purchase"
       onPressIn={() => {
         if (reduceMotion) return;
-        Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+        Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, stiffness: 600, damping: 22 }).start();
       }}
       onPressOut={() => {
         if (reduceMotion) return;
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 380, damping: 12 }).start();
       }}
       onPress={() => {
         tapPress();
         onPress();
       }}
+      style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
     >
       <Animated.View
         style={{
-          width: 64,
-          height: 64,
-          borderRadius: 32,
-          borderCurve: "continuous",
-          backgroundColor: palette.accent,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: palette.ink,
           alignItems: "center",
           justifyContent: "center",
           transform: [{ scale }],
           shadowColor: "#000",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: palette.scheme === "dark" ? 0.5 : 0.18,
-          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: palette.scheme === "dark" ? 0.5 : 0.2,
+          shadowRadius: 16,
           elevation: 8,
         }}
       >
-        <Icon name="plus" size={26} color={palette.scheme === "dark" ? "#03140d" : "#ffffff"} />
+        <Icon name="plus" size={26} color={palette.bg} />
       </Animated.View>
     </Pressable>
   );
 }
 
+/** Four icons with the log button in the middle: Home, Activity, +, Insights, Settings. */
 function ShelfTabBar({
   state,
   reviewCount,
@@ -300,116 +252,69 @@ function ShelfTabBar({
   const insets = useSafeAreaInsets();
   const { palette } = useTheme();
   const reduceTransparency = useReduceTransparency();
-  const reduceMotion = useReduceMotion();
   const isDark = palette.scheme === "dark";
   const activeName = state.routes[state.index]?.name ?? "index";
-  const activeIndex = Math.max(0, TABS.findIndex((tab) => tab.name === activeName));
-  // Tabs share the row equally, so the highlight only ever moves sideways.
-  // translateX runs on the native driver, so a tab mounting on the JS thread cannot stall it.
-  const [slot, setSlot] = useState(0);
-  const x = useRef(new Animated.Value(0)).current;
-  const placed = useRef(false);
-
-  useEffect(() => {
-    if (!slot) return;
-    const to = activeIndex * slot;
-    if (!placed.current || reduceMotion) {
-      x.setValue(to);
-      placed.current = true;
-      return;
-    }
-    Animated.spring(x, { toValue: to, useNativeDriver: true, stiffness: 520, damping: 40, mass: 0.8 }).start();
-  }, [activeIndex, slot, reduceMotion, x]);
-
-  const visibleRoutes = state.routes.filter((route) => TABS.some((tab) => tab.name === route.name));
-
+  const routeFor = (name: string) => state.routes.find((route) => route.name === name);
+  const tab = (spec: (typeof TABS)[number]) => {
+    const route = routeFor(spec.name);
+    if (!route) return <View key={spec.name} style={{ flex: 1 }} />;
+    const focused = activeName === spec.name;
+    return (
+      <TabIcon
+        key={spec.name}
+        icon={spec.icon}
+        label={spec.title}
+        focused={focused}
+        badge={spec.name === "activity" && reviewCount > 0 ? reviewCount : undefined}
+        onPress={() => onPress(route, focused)}
+      />
+    );
+  };
   return (
     <View
-      pointerEvents="box-none"
       style={{
         position: "absolute",
         bottom: 0,
         left: 0,
         right: 0,
-        paddingBottom: Math.max(insets.bottom, 14),
-        paddingHorizontal: 16,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
+        paddingTop: 6,
+        paddingBottom: Math.max(insets.bottom - 4, 10),
+        paddingHorizontal: 10,
+        backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: palette.line,
+        overflow: "visible",
       }}
     >
-      <View
-        style={{
-          flex: 1,
-          height: 64,
-          borderRadius: 32,
-          borderCurve: "continuous",
-          backgroundColor: reduceTransparency ? palette.card : palette.dockBg,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: palette.lineStrong,
-          padding: 6,
-          overflow: "hidden",
-          shadowColor: "#000",
-          shadowOpacity: isDark ? 0.5 : 0.1,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 10,
-        }}
-      >
-        {!reduceTransparency ? (
-          <BlurView intensity={isDark ? 60 : 75} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
-        ) : null}
-        <View
-          style={{ flex: 1, flexDirection: "row" }}
-          onLayout={(event) => setSlot(event.nativeEvent.layout.width / TABS.length)}
-        >
-          {slot ? (
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: 0,
-                width: slot,
-                borderRadius: 26,
-                borderCurve: "continuous",
-                backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.055)",
-                transform: [{ translateX: x }],
-              }}
-            />
-          ) : null}
-          {TABS.map((spec) => {
-            const route = visibleRoutes.find((item) => item.name === spec.name);
-            if (!route) return null;
-            const focused = activeName === spec.name;
-            return (
-              <ShelfTabBarItem
-                key={route.key}
-                route={route}
-                focused={focused}
-                reviewCount={reviewCount}
-                spec={spec}
-                onPress={() => onPress(route, focused)}
-              />
-            );
-          })}
-        </View>
+      {!reduceTransparency ? (
+        <BlurView intensity={isDark ? 60 : 80} tint={palette.blurTint} style={StyleSheet.absoluteFill} />
+      ) : null}
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        {tab(TABS[0])}
+        {tab(TABS[1])}
+        <LogButton onPress={onQuickLog} />
+        {tab(TABS[2])}
+        <TabIcon
+          icon="gear"
+          label="Settings"
+          focused={false}
+          onPress={() => router.push("/settings")}
+        />
       </View>
-      <ShelfQuickLogButton onPress={onQuickLog} />
     </View>
   );
 }
 
 const barButton = { width: 36, height: 36, borderRadius: 18, alignItems: "center" as const, justifyContent: "center" as const };
 const unreadDot = { position: "absolute" as const, right: 6, top: 6, width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5 };
-const badge = {
+const badgeStyle = {
   position: "absolute" as const,
-  top: -4,
-  right: -10,
-  minWidth: 16,
-  height: 16,
-  borderRadius: 8,
+  top: -5,
+  right: -11,
+  minWidth: 18,
+  height: 18,
+  borderRadius: 9,
+  borderWidth: 2,
   alignItems: "center" as const,
   justifyContent: "center" as const,
   paddingHorizontal: 4,
@@ -579,13 +484,13 @@ export default function AppTabs() {
     ]).then(() => undefined);
   };
 
-  const onBudget = path.includes("budget");
+  const onBudget = path.includes("trends");
   const onActivity = path.includes("activity");
   const onAccounts = path.startsWith("/account/");
   const onToday = !onBudget && !onActivity && !onAccounts;
   useEffect(() => {
     if (onToday) setFlightSurface("today");
-    else if (onBudget) setFlightSurface("plan");
+    else if (onBudget) setFlightSurface("other");
     else if (onActivity) setFlightSurface("activity");
     else setFlightSurface("other");
   }, [onToday, onBudget, onActivity]);
@@ -599,8 +504,6 @@ export default function AppTabs() {
             state={props.state}
             reviewCount={reviewCount}
             onPress={(route, focused) => {
-              if (!focused && route.name === "budget") launchLeftToPlan(reduceMotion);
-              if (!focused && route.name === "index") launchPlanToToday(reduceMotion);
               if (!focused && path.includes("activity")) {
                 const back = peekCategoryReturn();
                 const from = anchorRect("activity.category.banner");
@@ -650,19 +553,10 @@ export default function AppTabs() {
         <Tabs.Screen
           name="index"
           options={{
-            title: "Today",
+            title: "Home",
             headerShown: showBar && onToday,
             headerTransparent: true,
-            header: () => <MobileBar title="Today" unread={unread} syncLabel={syncLabel} />,
-          }}
-        />
-        <Tabs.Screen
-          name="budget"
-          options={{
-            title: "Plan",
-            headerShown: showBar && onBudget,
-            headerTransparent: true,
-            header: () => <MobileBar title="Plan" unread={unread} syncLabel={syncLabel} />,
+            header: () => <MobileBar title="" search unread={unread} syncLabel={syncLabel} />,
           }}
         />
         <Tabs.Screen
@@ -672,6 +566,15 @@ export default function AppTabs() {
             headerShown: showBar && onActivity,
             headerTransparent: true,
             header: () => <MobileBar title="Activity" unread={unread} syncLabel={syncLabel} />,
+          }}
+        />
+        <Tabs.Screen
+          name="trends"
+          options={{
+            title: "Insights",
+            headerShown: showBar && path.includes("trends"),
+            headerTransparent: true,
+            header: () => <MobileBar title="Insights" unread={unread} syncLabel={syncLabel} />,
           }}
         />
       </Tabs>
