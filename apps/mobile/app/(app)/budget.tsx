@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../../src/api";
 import { budgetPace, categoryStanding, dayLabel, paceWords, flowMoney, money, monthFraction, monthLabel, monthRange, shelfColor, shortMonthLabel } from "../../src/format";
 import { tapPress, tapSelect } from "../../src/haptic";
@@ -377,7 +377,7 @@ export default function BudgetScreen() {
   const leftToAssign = typedIncomeCents - plannedTotal;
   const tileText = hasPlan ? (over ? `-${money(Math.abs(left))}` : money(left)) : money(plan?.expenseSpentCents ?? 0);
   figureTextRef.current = tileText;
-  const planLeft = useMeasuredAnchor("plan.left", { text: tileText, color: over ? colors.danger : colors.ink, fontSize: 38 });
+  const planLeft = useMeasuredAnchor("plan.left", { text: tileText, color: over ? colors.danger : colors.ink, fontSize: 46 });
   const planLeftHidden = useFlightHidden("plan.left");
 
   return (
@@ -387,28 +387,30 @@ export default function BudgetScreen() {
         framed
         onRefresh={load}
         action={
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <>
             <MonthNav
               year={cursor.year}
               month={cursor.month}
               compact
               onChange={changeMonth}
             />
-            <GlassIconButton
-              icon="flag"
-              label="Set target"
-              size={34}
-              iconSize={15}
-              onPress={() => setPlanOpen(true)}
-            />
-            <GlassIconButton
-              icon="plus"
-              label="Add category"
-              size={34}
-              iconSize={16}
-              onPress={() => void openAdd()}
-            />
-          </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <GlassIconButton
+                icon="flag"
+                label="Set income target"
+                size={36}
+                iconSize={16}
+                onPress={() => setPlanOpen(true)}
+              />
+              <GlassIconButton
+                icon="plus"
+                label="Add category"
+                size={36}
+                iconSize={17}
+                onPress={() => void openAdd()}
+              />
+            </View>
+          </>
         }
       >
         {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
@@ -416,81 +418,22 @@ export default function BudgetScreen() {
         {!plan && !error ? <Loading /> : null}
         {plan ? (
           <Animated.View style={{ gap: 20, opacity: monthFade, transform: [{ translateX: monthSlide }] }}>
-            {/* iOS Health Style Monthly Budget Tile */}
+            {/* Open hero, same shape as Today: label and pace, then the figure. */}
             <Pressable
+              accessibilityRole="button"
+              accessibilityHint="Opens the monthly income target"
               onPress={() => {
                 tapPress();
                 setPlanOpen(true);
               }}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: colors.card,
-                  borderRadius: 22,
-                  borderCurve: "continuous",
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  padding: 18,
-                  gap: 12,
-                  shadowColor: "#000",
-                  shadowOpacity: colors.scheme === "dark" ? 0.28 : 0.04,
-                  shadowRadius: 16,
-                  shadowOffset: { width: 0, height: 5 },
-                  elevation: 3,
-                },
-                pressed ? { opacity: 0.9, transform: [{ scale: 0.985 }] } : null,
-              ]}
+              style={({ pressed }) => [{ paddingTop: 8, paddingHorizontal: 4, gap: 10 }, pressed ? { opacity: 0.7 } : null]}
             >
-              {/* Tile Header: Eyebrow + Status Badge */}
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Icon name="chart" size={14} color={colors.accentInk} />
-                  <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.6, color: colors.muted, textTransform: "uppercase" }}>
-                    {hasPlan ? "Monthly Budget" : "Spending So Far"}
-                  </Text>
-                </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontSize: 15, fontWeight: "500", color: colors.muted, letterSpacing: -0.2 }}>
+                  {hasPlan ? (over ? "Over budget" : "Left to spend") : "Spent so far"}
+                </Text>
                 {hasPlan ? (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 5,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 99,
-                      borderCurve: "continuous",
-                      backgroundColor:
-                        pace.tone === "bad"
-                          ? colors.scheme === "dark"
-                            ? "rgba(255, 107, 74, 0.16)"
-                            : "rgba(217, 74, 46, 0.12)"
-                          : pace.tone === "warn"
-                            ? colors.scheme === "dark"
-                              ? "rgba(224, 161, 90, 0.16)"
-                              : "rgba(196, 122, 26, 0.12)"
-                            : colors.scheme === "dark"
-                              ? "rgba(61, 190, 154, 0.16)"
-                              : "rgba(27, 122, 98, 0.12)",
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: paceColor,
-                      }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "700",
-                        letterSpacing: -0.1,
-                        color: paceColor,
-                      }}
-                    >
-                      {paceWords(pace.label)}
-                    </Text>
-                  </View>
+                  <Text style={{ fontSize: 15, fontWeight: "600", letterSpacing: -0.2, color: paceColor }}>{paceWords(pace.label)}</Text>
                 ) : null}
               </View>
 
@@ -500,21 +443,15 @@ export default function BudgetScreen() {
                   <RollingFigure
                     text={figureSeed ?? tileText}
                     style={{
-                      fontSize: 38,
+                      fontSize: 46,
                       fontWeight: "700",
-                      letterSpacing: -1.4,
+                      letterSpacing: -1.8,
                       color: over ? colors.danger : colors.ink,
                       fontVariant: ["tabular-nums"],
                     }}
                   />
                 </View>
-                <Text style={{ marginTop: 2, fontSize: 16, fontWeight: "500", color: colors.muted }}>
-                  {hasPlan ? (over ? "over budget" : "left to spend") : "spent"}
-                </Text>
               </View>
-              <Text style={{ fontSize: 13, color: plan.leftoverCents < 0 ? colors.danger : colors.muted, fontVariant: ["tabular-nums"] }}>
-                {`Left to assign ${money(plan.leftoverCents)}`}
-              </Text>
 
               {/* Visual Progress Bar */}
               {hasPlan ? (
@@ -525,15 +462,21 @@ export default function BudgetScreen() {
                     color={pace.tone === "bad" ? colors.danger : pace.tone === "warn" ? colors.warn : colors.accent}
                   />
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`Spent ${money(plan.expenseSpentCents)} of ${money(plannedTotal)}`}
+                    <Text style={{ fontSize: 13, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {`${money(plan.expenseSpentCents)} of ${money(plannedTotal)} spent`}
                     </Text>
-                    <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
-                      {`${Math.round((plan.expenseSpentCents / (plannedTotal || 1)) * 100)}% spent`}
+                    <Text style={{ fontSize: 13, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {`${Math.round((plan.expenseSpentCents / (plannedTotal || 1)) * 100)}%`}
                     </Text>
                   </View>
                 </View>
               ) : null}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 99, backgroundColor: plan.leftoverCents < 0 ? colors.fill : colors.accentSoft }}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: plan.leftoverCents < 0 ? colors.danger : colors.accentInk, fontVariant: ["tabular-nums"] }}>
+                  {plan.leftoverCents < 0 ? `Over-assigned by ${money(-plan.leftoverCents)}` : `${money(plan.leftoverCents)} left to assign`}
+                </Text>
+                <Icon name="chevron" size={12} color={plan.leftoverCents < 0 ? colors.danger : colors.accentInk} />
+              </View>
             </Pressable>
 
             <Animated.View style={{ gap: 20, opacity: barsOpacity }}>
@@ -554,10 +497,10 @@ export default function BudgetScreen() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       paddingVertical: 2,
-                      paddingHorizontal: 2,
+                      paddingHorizontal: 4,
                     }}
                   >
-                    <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 }}>
+                    <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: "700", color: colors.ink, letterSpacing: -0.5 }}>
                       {group.name}
                     </Text>
                     <Text style={{ fontSize: 13, fontWeight: "500", color: colors.muted, fontVariant: ["tabular-nums"] }}>
@@ -578,7 +521,7 @@ export default function BudgetScreen() {
                             onPress={() => openRow(row)}
                             onPressIn={tapPress}
                             style={({ pressed }) => [
-                              { paddingHorizontal: 16, paddingVertical: 12, gap: 8, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line },
+                              { paddingHorizontal: 16, paddingVertical: 14, gap: 10, borderTopWidth: index ? StyleSheet.hairlineWidth : 0, borderTopColor: colors.line },
                               pressed ? { backgroundColor: colors.fill } : null,
                             ]}
                           >
@@ -597,14 +540,14 @@ export default function BudgetScreen() {
                                 ) : null}
                               </View>
                               <View style={{ alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                                {standing ? (
-                                  <Text style={{ fontSize: 12, fontWeight: standing.over ? "700" : "500", color: standing.over ? colors.danger : colors.muted }}>
-                                    {standing.label}
-                                  </Text>
-                                ) : null}
                                 <AnchorBox id={`plan.figure.${row.category.id}`}>
                                   <Text style={{ fontSize: 16, fontWeight: "600", color: rowOver ? colors.danger : colors.ink, fontVariant: ["tabular-nums"] }}>{money(figure)}</Text>
                                 </AnchorBox>
+                                {standing ? (
+                                  <Text style={{ fontSize: 13, fontWeight: standing.over ? "600" : "400", color: standing.over ? colors.danger : colors.muted }}>
+                                    {standing.label.toLowerCase()}
+                                  </Text>
+                                ) : null}
                               </View>
                             </View>
                             {paced ? (
@@ -632,13 +575,9 @@ export default function BudgetScreen() {
               onPress={() => void openAdd()}
               style={({ pressed }) => [
                 {
-                  marginTop: 8,
-                  marginBottom: 12,
-                  paddingVertical: 14,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  borderStyle: "dashed",
+                  minHeight: 52,
+                  borderRadius: 18,
+                  borderCurve: "continuous",
                   backgroundColor: colors.card,
                   alignItems: "center",
                   justifyContent: "center",
@@ -649,7 +588,7 @@ export default function BudgetScreen() {
               ]}
             >
               <Icon name="plus" size={16} color={colors.accentInk} />
-              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accentInk }}>New Category</Text>
+              <Text style={{ fontSize: 16, fontWeight: "500", color: colors.accentInk }}>Add category</Text>
             </Pressable>
 
             {hiddenCount > 0 ? (
@@ -665,7 +604,7 @@ export default function BudgetScreen() {
 
       {planOpen && data ? (
         <Sheet
-          title="Monthly Target"
+          title="Monthly income"
           onClose={() => setPlanOpen(false)}
         >
           {/* Allocation Health Card */}

@@ -47,8 +47,7 @@ import {
   LoadError,
   Loading,
   MenuRow,
-  ReviewBanner,
-  Screen,
+    Screen,
   Section,
   SpendMix,
 } from "../../src/ui";
@@ -373,35 +372,38 @@ export default function HomeScreen() {
             </Hero>
           )}
 
+          {/* Shortcuts: what needs you first, then the rest of your money. */}
           <Card>
+            {shownDash.unreviewed.count > 0 ? (
+              <MenuRow
+                title={shownDash.unreviewed.count === 1 ? "1 purchase to review" : `${shownDash.unreviewed.count} purchases to review`}
+                icon="tag"
+                active
+                compact
+                trailing={<Text style={{ fontSize: 15, fontWeight: "500", color: colors.accentInk }}>Review</Text>}
+                onPress={() => {
+                  router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+                }}
+              />
+            ) : null}
             <MenuRow
               title="Your money"
-              subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} left` : undefined}
+              subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} to go` : "Accounts, goals, cash flow"}
               icon="wallet"
-              compact
+              divided={shownDash.unreviewed.count > 0}
               onPress={() => router.push("/money")}
             />
           </Card>
-
-          {/* Quick Review Prompt when Unreviewed Charges Exist */}
-          {shownDash.unreviewed.count > 0 ? (
-            <ReviewBanner
-              count={shownDash.unreviewed.count}
-              onPress={() => {
-                router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
-              }}
-            />
-          ) : null}
 
           {/* First run / empty state */}
           {shownDash.accountCount === 0 && shownDash.transactions.length === 0 ? (
             <Card>
               <View style={{ gap: 14, alignItems: "center", padding: 24 }}>
-                <Text style={{ fontSize: 18, fontWeight: "700", color: colors.ink }}>
+                <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
                   Welcome to Shelf
                 </Text>
-                <Text style={{ fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20 }}>
-                  Add an account to see what you’ve spent and what’s left in the budget.
+                <Text style={{ fontSize: 15, color: colors.muted, textAlign: "center", lineHeight: 21 }}>
+                  Add an account to see what you’ve spent and what’s left this month.
                 </Text>
                 <Button label="Add an account" onPress={() => router.push("/accounts")} block />
               </View>
@@ -412,7 +414,7 @@ export default function HomeScreen() {
               {latest.length > 0 ? (
                 <View style={{ gap: 8 }}>
                   <Section
-                    title="Latest Activity"
+                    title="Recent activity"
                     action="See all"
                     onAction={() => {
                       tapPress();
@@ -450,7 +452,7 @@ export default function HomeScreen() {
               {upcomingBillsSlice.length > 0 || suggestions > 0 ? (
                 <View style={{ gap: 8 }}>
                   <Section
-                    title="Committed Bills"
+                    title="Upcoming bills"
                     action="All bills"
                     onAction={() => {
                       tapPress();
@@ -484,10 +486,10 @@ export default function HomeScreen() {
                           pressed ? { backgroundColor: colors.fill } : null,
                         ]}
                       >
-                        <Text style={{ fontSize: 15, color: colors.ink }}>
-                          {suggestions === 1 ? "1 potential recurring charge" : `${suggestions} potential recurring charges`}
+                        <Text style={{ fontSize: 16, color: colors.ink, letterSpacing: -0.3 }}>
+                          {suggestions === 1 ? "1 possible bill found" : `${suggestions} possible bills found`}
                         </Text>
-                        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.accentInk }}>Review</Text>
+                        <Text style={{ fontSize: 15, fontWeight: "500", color: colors.accentInk }}>Review</Text>
                       </Pressable>
                     ) : null}
                   </Card>
@@ -498,7 +500,7 @@ export default function HomeScreen() {
               {spendRows.length > 0 ? (
                 <View style={{ gap: 8 }}>
                   <Section
-                    title="Where It Went"
+                    title="Spending"
                     trailing={money(shownDash.cashFlow.spendingCents)}
                     action="Insights"
                     onAction={() => {
@@ -543,11 +545,11 @@ function SpendCategoryRow({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          minHeight: 50,
+          minHeight: 52,
           paddingHorizontal: 16,
           flexDirection: "row",
           alignItems: "center",
-          gap: 10,
+          gap: 12,
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: colors.line,
         },
@@ -556,11 +558,11 @@ function SpendCategoryRow({
     >
       <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: shelfColor(row.color) }} />
-        <Text style={{ flex: 1, fontSize: 15, color: colors.ink }} numberOfLines={1}>
+        <Text style={{ flex: 1, fontSize: 16, color: colors.ink, letterSpacing: -0.3 }} numberOfLines={1}>
           {row.name}
         </Text>
       </View>
-      <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(row.cents)}</Text>
+      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.3 }}>{money(row.cents)}</Text>
     </Pressable>
   );
 }
