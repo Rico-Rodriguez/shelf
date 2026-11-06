@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { budgetItems, categories, categoryGroups, netWorthSnapshots, transactionSplits, transactions } from "@/db/schema";
+import { budgetItems, categories, categoryGroups, transactionSplits, transactions } from "@/db/schema";
 import { AuthError, requireDek } from "@/lib/auth";
-import { computeNetWorth } from "@/lib/networth";
 import { addMonths, monthRange, yearMonth } from "@/lib/dates";
 import { transactionParts } from "@/lib/spend";
 import { getOrCreateBudgetMonth } from "@/lib/budget";
-import { eq } from "drizzle-orm";
-import { openBudgetItem, openSnapshot, openSplit, openTx } from "@/lib/secrets";
+import { eq, gte } from "drizzle-orm";
+import { openBudgetItem, openSplit, openTx } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -20,17 +19,17 @@ export async function GET(request: Request) {
     const month = Number(url.searchParams.get("month") ?? now.month);
     const { start, end } = monthRange(year, month);
     const db = await getDb();
-    const [txRows, splitRows, cats, groups, snapRows, nw] = await Promise.all([
-      db.select().from(transactions),
+    // Only the last four months matter here: this one and the three it is compared with.
+    const earliest = monthRange(addMonths(year, month, -3).year, addMonths(year, month, -3).month).start;
+    const [txRows, splitRows, cats, groups] = await Promise.all([
+      db.select().from(transactions).where(gte(transactions.date, earliest)),
       db.select().from(transactionSplits),
       db.select().from(categories),
       db.select().from(categoryGroups),
-      db.select().from(netWorthSnapshots),
-      computeNetWorth(dek),
     ]);
     const txs = txRows.map((row) => openTx(row, dek));
-    const splits = splitRows.map((row) => openSplit(row, dek));
-    const snaps = snapRows.map((row) => openSnapshot(row, dek));
+    const txIds = new Set(txs.map((tx) => tx.id));
+    const splits = splitRows.filter((row) => txIds.has(row.transactionId)).map((row) => openSplit(row, dek));
 
     const incomeIds = new Set(cats.filter((c) => c.kind === "income").map((c) => c.id));
     const monthTx = txs.filter((t) => t.date >= start && t.date <= end && !t.hidden && !t.pending && !t.isTransfer);
@@ -60,17 +59,6 @@ export async function GET(request: Request) {
         };
         catSpend[key].cents += part.amountCents;
       }
-    }
-
-    const nodes: { id: string; color: string }[] = [{ id: "Income", color: "#6B8F5E" }];
-    const links: { source: string; target: string; value: number }[] = [];
-    for (const [group, value] of Object.entries(groupSpend)) {
-      nodes.push({ id: group, color: groups.find((g) => g.name === group)?.color ?? "#C4A484" });
-      links.push({ source: "Income", target: group, value: value / 100 });
-    }
-    for (const row of Object.values(catSpend)) {
-      if (!nodes.find((n) => n.id === row.name)) nodes.push({ id: row.name, color: row.color });
-      links.push({ source: row.group, target: row.name, value: row.cents / 100 });
     }
 
     function spendBetween(rangeStart: string, rangeEnd: string) {
@@ -150,9 +138,6 @@ export async function GET(request: Request) {
         .slice(0, 25),
       byCategory: compared,
       byGroup: Object.entries(groupSpend).map(([name, cents]) => ({ name, cents })),
-      sankey: { nodes, links },
-      netWorth: nw,
-      snapshots: snaps.sort((a, b) => a.date.localeCompare(b.date)),
     });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: "locked" }, { status: 401 });
