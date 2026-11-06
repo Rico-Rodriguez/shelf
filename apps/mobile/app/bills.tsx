@@ -351,7 +351,7 @@ export default function BillsScreen() {
                 <Text style={{ fontSize: 16, color: colors.ink }}>{draft.merchantName}</Text>
                 <Text style={{ fontSize: 13, color: colors.muted }}>{`${CADENCE_LABEL[draft.cadence] ?? draft.cadence} · next ${draft.nextDate}`}</Text>
               </View>
-              <Text style={{ fontWeight: "600" }}>{money(draft.amountCents)}</Text>
+              <Text style={{ fontWeight: "600", color: colors.ink }}>{money(draft.amountCents)}</Text>
               <Button label="Skip" tone="quiet" onPress={() => void skip(draft)} />
             </View>
           ))}
@@ -391,7 +391,7 @@ export default function BillsScreen() {
           {picking === "account" ? (
             <Card>
               <Pressable onPress={() => { setForm({ ...form, accountId: "" }); setPicking(null); }} style={choice}>
-                <Text>Any account</Text>
+                <Text style={{ color: form.accountId ? colors.ink : colors.accentInk }}>Any account</Text>
               </Pressable>
               {accounts.map((account) => (
                 <Pressable key={account.id} onPress={() => { setForm({ ...form, accountId: account.id }); setPicking(null); }} style={choice}>

@@ -280,7 +280,7 @@ function ShelfQuickLogButton({ onPress }: { onPress: () => void }) {
           elevation: 8,
         }}
       >
-        <Icon name="plus" size={26} color="#ffffff" />
+        <Icon name="plus" size={26} color={palette.scheme === "dark" ? "#03140d" : "#ffffff"} />
       </Animated.View>
     </Pressable>
   );

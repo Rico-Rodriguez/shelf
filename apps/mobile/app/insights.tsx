@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../src/api";
 import { addDays, money, monthLabel, monthRange, shelfColor, shortDate, todayISO, versusShort } from "../src/format";
 import { anchorRect, setCategoryReturn, stageFlight, useFlightHidden, useMeasuredAnchor } from "../src/flight";
@@ -140,10 +140,10 @@ export default function InsightsScreen() {
                   <Pressable
                     key={row.name}
                     onPress={() => router.push({ pathname: "/merchant", params: { name: row.name } })}
-                    style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
+                    style={{ minHeight: 52, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: index ? StyleSheet.hairlineWidth : 0, borderTopColor: colors.line }}
                   >
                     <Text numberOfLines={1} style={{ flex: 1, fontSize: 16, color: colors.ink }}>{row.name}</Text>
-                    <Text style={{ fontWeight: "600" }}>{money(row.cents)}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(row.cents)}</Text>
                   </Pressable>
                 ))}
               </Card>
