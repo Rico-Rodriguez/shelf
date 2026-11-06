@@ -33,12 +33,14 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
   const prevOpened = prevMonth[0] ? openBudgetMonth(prevMonth[0], dek) : null;
   const income = prevOpened?.plannedIncomeCents ?? cfg?.plannedIncomeCents ?? 0;
   const flexPool = prevOpened?.flexPoolCents ?? 0;
+  // A month copied from a sample month is still sample data, so clearing samples resets it too.
+  const isSample = prevMonth[0]?.isSample ?? false;
 
   const row = {
     id: nid(),
     year,
     month,
-    isSample: false,
+    isSample,
     ...sealedBudgetMonthWrite(income, dek, flexPool),
   };
   await db.insert(budgetMonths).values(row);
@@ -64,11 +66,12 @@ export async function getOrCreateBudgetMonth(year: number, month: number, dek: B
       id: nid(),
       budgetMonthId: row.id,
       categoryId: cat.id,
+      isSample: Boolean(prevItem?.isSample),
       ...sealedBudgetItemWrite(planned, rolloverIn, dek),
     });
   }
 
-  return openBudgetMonth({ ...row, plannedIncomeCents: income, secretEnc: row.secretEnc, isSample: false }, dek);
+  return openBudgetMonth({ ...row, plannedIncomeCents: income, secretEnc: row.secretEnc }, dek);
 }
 
 const TRANSFER_CATEGORIES = new Set(["cat-transfer", "cat-cc-payment", "cat-invest"]);
