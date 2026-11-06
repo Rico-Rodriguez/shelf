@@ -128,6 +128,10 @@ jobs:
           test "$short" = "$version"
           test "$built" = "$build"
           test "$bid" = "$(node -p "require('./apps/mobile/app.json').expo.ios.bundleIdentifier")"
+          # Build and validate altstore.json before touching the release, so a
+          # bad source fails the run while the previous release is still up.
+          node scripts/altstore-source.mjs --ipa "dist/${named}" --out dist/altstore.json --min-os "$min_os"
+          node scripts/altstore-source.mjs --validate dist/altstore.json
           # Upload the IPA first so the source's downloadURL exists, then
           # replace altstore.json with the version and build this run produced.
           gh release delete ipa --yes --cleanup-tag || true
@@ -136,8 +140,6 @@ jobs:
             --title "Shelf ${version} (${build})" \
             --notes "Shelf ${version} (${build}). Download ${named}, or Shelf.ipa. Do not unzip it, and do not use the Actions artifact zip. Feather source: https://github.com/${GITHUB_REPOSITORY}/releases/download/ipa/altstore.json" \
             --latest=false
-          node scripts/altstore-source.mjs --ipa "dist/${named}" --out dist/altstore.json --min-os "$min_os"
-          node scripts/altstore-source.mjs --validate dist/altstore.json
           gh release upload ipa dist/altstore.json --clobber
           asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/ipa" --jq ".assets[] | select(.name==\"${named}\") | .id")
           url=$(curl -sI \
