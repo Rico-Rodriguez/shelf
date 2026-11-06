@@ -1761,6 +1761,14 @@ export function SheetContainer({
     }
   }, [visible, screenHeight, translateY, reduceMotion, origin, grow]);
 
+  useEffect(
+    () => () => {
+      translateY.stopAnimation();
+      grow.stopAnimation();
+    },
+    [translateY, grow],
+  );
+
   const dismiss = useCallback((velocity = 0) => {
     if (isClosing.current) return;
     isClosing.current = true;
@@ -1805,10 +1813,15 @@ export function SheetContainer({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 4,
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           translateY.stopAnimation();
+        },
+        onPanResponderTerminate: () => {
+          if (isClosing.current) return;
+          Animated.spring(translateY, { toValue: 0, damping: 26, stiffness: 380, useNativeDriver: true }).start();
         },
         onPanResponderMove: (_, gestureState) => {
           if (isClosing.current) return;
@@ -1944,11 +1957,8 @@ export function SheetContainer({
                   : 1,
             }}
           >
-          <View style={{ paddingTop: 8, paddingBottom: 6 }}>
-            <View
-              {...panResponder.panHandlers}
-              style={{ paddingVertical: 10, paddingHorizontal: 40, alignSelf: "center" }}
-            >
+          <View style={{ paddingTop: 8, paddingBottom: 6 }} {...panResponder.panHandlers}>
+            <View style={{ paddingVertical: 10, paddingHorizontal: 40, alignSelf: "center" }}>
               <View style={styles.handle} />
             </View>
             {title ? (
@@ -1988,8 +1998,15 @@ export function SheetContainer({
           ) : scrollable ? (
             <ScrollView
               style={{ flex: 1 }}
+              bounces
+              alwaysBounceVertical
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
+              onScrollEndDrag={(event) => {
+                // Pulling past the top and letting go closes the sheet, like a native one.
+                const { contentOffset, velocity } = event.nativeEvent;
+                if (contentOffset.y < -70 || (contentOffset.y < -20 && (velocity?.y ?? 0) < -1.2)) dismiss(0);
+              }}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 24, 40), gap: 14 }}
             >
               <SmallSections value="small">{children}</SmallSections>
