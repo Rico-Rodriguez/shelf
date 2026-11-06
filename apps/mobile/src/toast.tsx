@@ -6,7 +6,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import success from "./success.json";
 import { tapPress, tapSuccess } from "./haptic";
 import { BlurView } from "expo-blur";
-import { colors, useTheme } from "./theme";
+import { colors, useReduceMotion, useTheme } from "./theme";
 
 type Listener = (message: string) => void;
 let listener: Listener | null = null;
@@ -23,19 +23,28 @@ export function celebrate(message: string) {
 
 /** The same check, large enough to be the whole moment — used when a queue clears. */
 export function SuccessMark({ size = 120 }: { size?: number }) {
+  const reduceMotion = useReduceMotion();
+  // Reduce Motion shows the finished check instead of playing it.
+  if (reduceMotion) return <LottieView source={success} autoPlay={false} progress={1} loop={false} style={{ width: size, height: size }} />;
   return <LottieView source={success} autoPlay loop={false} style={{ width: size, height: size }} />;
 }
 
 export function ConfirmMark({ size = 48 }: { size?: number }) {
-  const scale = useRef(new Animated.Value(0.82)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
+  const scale = useRef(new Animated.Value(reduceMotion ? 1 : 0.82)).current;
+  const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      scale.setValue(1);
+      opacity.setValue(1);
+      return;
+    }
     Animated.parallel([
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 28 }),
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
     ]).start();
-  }, [scale, opacity]);
+  }, [scale, opacity, reduceMotion]);
 
   return (
     <Animated.View style={{ width: size, height: size, alignItems: "center", justifyContent: "center", opacity, transform: [{ scale }] }}>
@@ -67,10 +76,19 @@ export function UndoHost({ bottomOffset }: { bottomOffset?: number } = {}) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(14)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
+  const reduceMotion = useReduceMotion();
+  const reduceRef = useRef(reduceMotion);
+  reduceRef.current = reduceMotion;
 
   useEffect(() => {
     pushOffer = (next) => {
       setOffer(next);
+      if (reduceRef.current) {
+        opacity.setValue(1);
+        translateY.setValue(0);
+        scale.setValue(1);
+        return;
+      }
       opacity.setValue(0);
       translateY.setValue(14);
       scale.setValue(0.92);
@@ -178,8 +196,18 @@ function DrawnCheck({ size = CHECK }: { size?: number }) {
   const ringOpacity = useRef(new Animated.Value(0.7)).current;
   const spark = useRef(new Animated.Value(0)).current;
   const length = CHECK_LENGTH * (size / CHECK);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      // Finished frame: check drawn, no pop, ring and sparks already gone.
+      pop.setValue(1);
+      ring.setValue(1.85);
+      ringOpacity.setValue(0);
+      spark.setValue(1);
+      pathRef.current?.setNativeProps?.({ strokeDashoffset: 0 });
+      return;
+    }
     Animated.spring(pop, { toValue: 1, useNativeDriver: true, stiffness: 420, damping: 14, mass: 0.55 }).start();
     Animated.parallel([
       Animated.timing(ring, { toValue: 1.85, duration: 640, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
@@ -197,7 +225,7 @@ function DrawnCheck({ size = CHECK }: { size?: number }) {
     pathRef.current?.setNativeProps?.({ strokeDashoffset: length });
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [length, pop, ring, ringOpacity, spark]);
+  }, [length, pop, ring, ringOpacity, spark, reduceMotion]);
 
   const reach = size * 0.72;
   return (
@@ -245,7 +273,7 @@ function DrawnCheck({ size = CHECK }: { size?: number }) {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={length}
-            strokeDashoffset={length}
+            strokeDashoffset={reduceMotion ? 0 : length}
           />
         </Svg>
       </Animated.View>
