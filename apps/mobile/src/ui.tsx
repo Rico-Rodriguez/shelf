@@ -1769,6 +1769,19 @@ export function SheetContainer({
     [translateY, grow],
   );
 
+  // Lift the sheet above the keyboard so a field and its Save button stay visible.
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow", (event) =>
+      setKeyboard(Math.max(0, screenHeight - event.endCoordinates.screenY)),
+    );
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [screenHeight]);
+
   const dismiss = useCallback((velocity = 0) => {
     if (isClosing.current) return;
     isClosing.current = true;
@@ -1897,6 +1910,7 @@ export function SheetContainer({
           }}
           style={[
             styles.sheet,
+            keyboard ? { marginBottom: keyboard } : null,
             fit ? null : minHeight ? { minHeight } : null,
             fit ? null : height ? { height } : null,
             origin && !metrics && !reduceMotion ? { opacity: 0 } : null,
@@ -1950,7 +1964,8 @@ export function SheetContainer({
           ) : null}
           <Animated.View
             style={{
-              flex: 1,
+              // A sheet that hugs its rows has no height to share out, so flex: 1 would shrink it to nothing.
+              flex: fit ? 0 : 1,
               opacity:
                 origin && !reduceMotion
                   ? grow.interpolate({ inputRange: [0, 0.62, 1], outputRange: [0, 0, 1] })
