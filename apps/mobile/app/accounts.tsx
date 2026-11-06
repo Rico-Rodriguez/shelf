@@ -2,6 +2,8 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api, load as read, peek, subscribeCache } from "../src/api";
+import { useCached } from "../src/cached";
+import { Icon } from "../src/icons";
 import { accountIdentity, isLiability, money, netWorthCents, signed } from "../src/format";
 import { anchorRect, stageFlight, useMeasuredAnchor } from "../src/flight";
 import { tapPress } from "../src/haptic";
@@ -69,6 +71,12 @@ export default function AccountsScreen() {
       setPlaidConfigured(res.plaidConfigured);
     });
   }, []);
+
+  const market = useCached<{ holdings: { institutionValueCents: number }[]; totalCents?: number; gainCents?: number | null }>("/api/investments");
+  const marketValue = market.data
+    ? (market.data.totalCents ?? market.data.holdings.reduce((sum, row) => sum + row.institutionValueCents, 0))
+    : null;
+  const marketGain = market.data?.gainCents ?? null;
 
   const all = accounts ?? [];
   const hidden = all.filter((account) => account.isHidden);
@@ -158,6 +166,37 @@ export default function AccountsScreen() {
             { label: "Debts", cents: debtTotal, color: colors.danger },
           ]}
         />
+      ) : null}
+
+      {market.data && market.data.holdings.length > 0 && marketValue != null ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            tapPress();
+            router.push("/investments");
+          }}
+          style={({ pressed }) => ({
+            minHeight: 64,
+            paddingHorizontal: 16,
+            borderRadius: 16,
+            borderCurve: "continuous",
+            backgroundColor: colors.card,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink }}>Investments</Text>
+            <Text style={{ fontSize: 13, color: colors.muted }}>
+              {market.data.holdings.length === 1 ? "1 holding" : `${market.data.holdings.length} holdings`}
+              {marketGain != null ? ` · ${marketGain >= 0 ? "up" : "down"} ${money(Math.abs(marketGain))}` : ""}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.ink, fontVariant: ["tabular-nums"] }}>{money(marketValue)}</Text>
+          <Icon name="chevron" size={14} color={colors.tertiary} />
+        </Pressable>
       ) : null}
 
       {items
