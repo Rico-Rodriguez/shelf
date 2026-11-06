@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../src/api";
+import { useCached } from "../src/cached";
 import { money, periodLabel, periodRange, signed } from "../src/format";
 import { tapPress } from "../src/haptic";
 import { Icon } from "../src/icons";
@@ -11,23 +11,12 @@ type Point = { key: string; income: number; spending: number; savings: number };
 
 export default function CashFlowScreen() {
   const [grain, setGrain] = useState("month");
-  const [series, setSeries] = useState<Point[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    const now = new Date();
-    return api<{ series: Point[] }>(`/api/cash-flow?grain=${grain}&months=12&year=${now.getFullYear()}&month=${now.getMonth() + 1}`)
-      .then((res) => {
-        setSeries(res.series);
-        setError(null);
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load cash flow"));
-  }, [grain]);
-
-  useEffect(() => {
-    setSeries(null);
-    void load();
-  }, [load]);
+  const now = new Date();
+  const { data, error, reload: load } = useCached<{ series: Point[] }>(
+    `/api/cash-flow?grain=${grain}&months=12&year=${now.getFullYear()}&month=${now.getMonth() + 1}`,
+    { keep: true, fallback: "Could not load cash flow" },
+  );
+  const series = data?.series ?? null;
 
   const rows = series ?? [];
   const first = rows.findIndex((row) => row.income || row.spending || row.savings);

@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../src/api";
+import { api, load as read, peek } from "../src/api";
 import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { advanceDueDate, annualizedCents, inDaysPhrase, money, monthRange, occurrencesInMonth, todayISO } from "../src/format";
 import { anchorRect, playFlight, useFlightArrival, type FlightPiece } from "../src/flight";
@@ -59,15 +59,15 @@ export default function BillsScreen() {
   useFlightArrival("after-bills", reduceMotion);
   const now = new Date();
   const openedBill = useRef<string | null>(null);
-  const [rows, setRows] = useState<Bill[] | null>(null);
+  const [rows, setRows] = useState<Bill[] | null>(() => peek<{ recurrences: Bill[] }>("/api/recurring")?.recurrences ?? null);
   const [findOpen, setFindOpen] = useState(false);
   const [finding, setFinding] = useState(false);
   const [suggestions, setSuggestions] = useState<Draft[]>([]);
   const [editing, setEditing] = useState<Bill | "new" | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [groups, setGroups] = useState<ChargeGroup[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<ChargeGroup[]>(() => peek<{ groups: ChargeGroup[] }>("/api/categories")?.groups ?? []);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>(() => peek<{ accounts: { id: string; name: string }[] }>("/api/accounts")?.accounts ?? []);
   const [picking, setPicking] = useState<"cadence" | "category" | "account" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ message: string; retry: () => void } | null>(null);
@@ -76,7 +76,7 @@ export default function BillsScreen() {
 
   function load() {
     const started = listEpoch.current;
-    void api<{ recurrences: Bill[] }>("/api/recurring")
+    void read<{ recurrences: Bill[] }>("/api/recurring")
       .then((res) => {
         if (started !== listEpoch.current) return;
         setRows(res.recurrences);
@@ -87,8 +87,8 @@ export default function BillsScreen() {
 
   useEffect(() => {
     load();
-    void api<{ groups: ChargeGroup[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
-    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
+    void read<{ groups: ChargeGroup[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
+    void read<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
   }, []);
 
   const bills = (rows ?? [])

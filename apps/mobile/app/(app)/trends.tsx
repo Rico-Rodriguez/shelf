@@ -1,25 +1,18 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
-import { api, load as read, peek, subscribeCache } from "../../src/api";
-import { money, monthRange, netWorthCents, shelfColor, shiftMonth, todayISO, billsStillDueCents, type NetWorthAccount } from "../../src/format";
-import { tapMedium, tapPress, tapSelect, tapSuccess } from "../../src/haptic";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { load as read, peek, subscribeCache } from "../../src/api";
+import { money, netWorthCents, shelfColor, shiftMonth, todayISO, billsStillDueCents, type NetWorthAccount } from "../../src/format";
+import { tapMedium, tapPress, tapSelect } from "../../src/haptic";
 import { Icon } from "../../src/icons";
-import { useReduceMotion, useTheme } from "../../src/theme";
-import { Button, Field, LoadError, Loading, Note, RollingFigure, Screen, Section, Sheet } from "../../src/ui";
+import { budgetPath, LimitSheet, MonthBars, type BudgetRow } from "../../src/spend";
+import { useTheme } from "../../src/theme";
+import { LoadError, Loading, RollingFigure, Screen, Section } from "../../src/ui";
 
-type BudgetRow = {
-  category: { id: string; name: string };
-  group: { color: string } | null;
-  plannedCents: number;
-  spentCents: number;
-  usualCents?: number | null;
-};
 type Budget = { rows: BudgetRow[]; expenseSpentCents: number };
 type CashFlow = { series: { key: string; spending: number }[] };
 type Bill = { id: string; amountCents: number; cadence: string; nextDate: string; isIncome: boolean; isActive: boolean };
 
-const budgetPath = (year: number, month: number) => `/api/budget?year=${year}&month=${month}`;
 const MONTHS = 6;
 const CASH_FLOW = `/api/cash-flow?months=${MONTHS}`;
 
@@ -66,7 +59,8 @@ export default function InsightsScreen() {
     }, [load]),
   );
   useEffect(() => {
-    setBudget(peek<Budget>(path) ?? null);
+    // Keep last month up until the new one lands, so picking a bar does not blank the list.
+    setBudget((before) => peek<Budget>(path) ?? before);
     return subscribeCache<Budget>(path, (next) => next && setBudget(next));
   }, [path]);
 
@@ -97,8 +91,7 @@ export default function InsightsScreen() {
 
   function openCategory(row: BudgetRow) {
     tapPress();
-    const range = monthRange(picked.year, picked.month);
-    router.push({ pathname: "/(app)/activity", params: { categoryId: row.category.id, start: range.start, end: range.end } });
+    router.push({ pathname: "/category", params: { id: row.category.id, name: row.category.name, year: String(picked.year), month: String(picked.month) } });
   }
 
   return (
@@ -175,64 +168,6 @@ export default function InsightsScreen() {
         />
       ) : null}
     </Screen>
-  );
-}
-
-function MonthBars({
-  months,
-  picked,
-  onPick,
-}: {
-  months: { year: number; month: number; key: string; cents: number; current: boolean }[];
-  picked: { year: number; month: number };
-  onPick: (m: { year: number; month: number }) => void;
-}) {
-  const { palette } = useTheme();
-  const reduceMotion = useReduceMotion();
-  const grow = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
-  const top = Math.max(1, ...months.map((m) => m.cents));
-  const signature = months.map((m) => m.cents).join(",");
-  useEffect(() => {
-    if (reduceMotion) {
-      grow.setValue(1);
-      return;
-    }
-    grow.setValue(0);
-    Animated.spring(grow, { toValue: 1, useNativeDriver: true, stiffness: 160, damping: 18, mass: 0.9 }).start();
-  }, [signature, reduceMotion, grow]);
-  const track = 96;
-  return (
-    <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-end" }}>
-      {months.map((m) => {
-        const on = m.year === picked.year && m.month === picked.month;
-        const h = Math.max(6, (m.cents / top) * track);
-        return (
-          <Pressable
-            key={m.key}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={`${new Date(m.year, m.month - 1, 1).toLocaleDateString("en-US", { month: "long" })}, ${money(m.cents)}`}
-            onPress={() => onPick(m)}
-            style={{ flex: 1, alignItems: "center", gap: 6 }}
-          >
-            <View style={{ height: track, width: "100%", justifyContent: "flex-end" }}>
-              <Animated.View
-                style={{
-                  height: h,
-                  borderRadius: 8,
-                  borderCurve: "continuous",
-                  backgroundColor: on ? palette.positive : palette.fill,
-                  transform: [{ translateY: grow.interpolate({ inputRange: [0, 1], outputRange: [h, 0] }) }, { scaleY: grow.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) }],
-                }}
-              />
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: on ? "700" : "600", color: on ? palette.positive : palette.muted }}>
-              {new Date(m.year, m.month - 1, 1).toLocaleDateString("en-US", { month: "short" })}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -315,41 +250,6 @@ function Tile({ title, value, detail, small, onPress }: { title: string; value: 
       </Text>
       {detail ? <Text style={{ fontSize: 12, fontWeight: "500", color: palette.muted }}>{detail}</Text> : null}
     </Pressable>
-  );
-}
-
-function LimitSheet({ row, year, month, onClose, onSaved }: { row: BudgetRow; year: number; month: number; onClose: () => void; onSaved: () => void }) {
-  const { palette } = useTheme();
-  const [value, setValue] = useState(row.plannedCents > 0 ? String(Math.round(row.plannedCents / 100)) : "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cents = Math.round(Number(value.replace(/[^0-9.]/g, "")) * 100);
-
-  async function save(next: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api("/api/budget", { method: "PUT", body: JSON.stringify({ year, month, items: [{ categoryId: row.category.id, plannedCents: next }] }) });
-      tapSuccess();
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the limit");
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Sheet title={row.category.name} subtitle={`Spent ${money(row.spentCents)} so far`} onClose={onClose} fit>
-      <View style={{ gap: 14 }}>
-        <Text style={{ fontSize: 15, lineHeight: 21, color: palette.muted }}>
-          A limit adds a thin bar to this category that turns orange near the end. It carries into next month.
-        </Text>
-        <Field label="Monthly limit" value={value} onChangeText={setValue} keyboardType="decimal-pad" placeholder="$0" />
-        {error ? <Note tone="danger">{error}</Note> : null}
-        <Button label="Save limit" busy={busy} block onPress={() => (cents > 0 && !busy ? void save(cents) : undefined)} />
-        {row.plannedCents > 0 ? <Button label="Remove limit" tone="quiet" block onPress={() => (!busy ? void save(0) : undefined)} /> : null}
-      </View>
-    </Sheet>
   );
 }
 

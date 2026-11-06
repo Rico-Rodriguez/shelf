@@ -150,10 +150,13 @@ export default function ActivityScreen() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const currentPath = txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range);
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const load = useCallback(() => {
     const started = reviewEpoch.current;
+    const path = txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range);
     return Promise.all([
-      read<TxPayload>(txPath(search, unreviewedOnly, categoryId, accountFilter, tag, range)),
+      read<TxPayload>(path),
       read<{ groups: ChargeGroup[] }>("/api/categories"),
       read<{ accounts: { id: string; name: string }[] }>("/api/accounts"),
     ])
@@ -191,6 +194,7 @@ export default function ActivityScreen() {
         setGroups(cats.groups);
         setAccounts(accts.accounts);
         setAccountId((current) => current || accts.accounts[0]?.id || "");
+        setLoadedPath(path);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load activity"));
@@ -537,6 +541,9 @@ export default function ActivityScreen() {
   );
 
   const reviewOpen = focusMode && unreviewedOnly;
+  // The list behind the deck can hold a different first card than the server's
+  // review order, so the deck waits for the review list itself.
+  const reviewReady = reviewOpen && loadedPath === currentPath;
   const reviewEntered = useRef(opensInReview);
   if (reviewOpen && !reviewEntered.current) {
     reviewEntered.current = true;
@@ -546,14 +553,14 @@ export default function ActivityScreen() {
   }
 
   useEffect(() => {
-    if (!(focusMode && unreviewedOnly)) return;
+    if (!reviewReady && !(reviewOpen && error)) return;
     if (reduceMotion) {
       reviewRise.setValue(1);
       return;
     }
     reviewRise.setValue(0);
     Animated.spring(reviewRise, { toValue: 1, useNativeDriver: true, stiffness: 280, damping: 24, mass: 0.75 }).start();
-  }, [focusMode, unreviewedOnly, reduceMotion, reviewRise]);
+  }, [reviewReady, reviewOpen, error, reduceMotion, reviewRise]);
 
   function closeReview() {
     const finish = () => {
@@ -596,8 +603,9 @@ export default function ActivityScreen() {
       >
         <Animated.View style={[reviewStyle, { paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }]}>
           {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
+          {error && !reviewReady ? <LoadError message={error} onRetry={() => void load()} /> : null}
           {outboxTick >= 0 && outboxStalled() ? <ReviewHold /> : null}
-          {unreviewedRows.length > 0 ? (
+          {!reviewReady ? null : unreviewedRows.length > 0 ? (
             <ReviewDeck
               rows={unreviewedRows}
               remaining={unreviewed}

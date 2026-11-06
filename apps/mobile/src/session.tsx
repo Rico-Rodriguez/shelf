@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
-import { api, ApiError, getToken, setToken } from "./api";
+import { api, ApiError, cacheHydrationPromise, getToken, setToken } from "./api";
 
 export type ShelfState = {
   needsSetup: boolean;
@@ -47,6 +47,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<ShelfState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const answered = useRef(false);
 
   useEffect(() => {
     void (async () => {
@@ -59,6 +60,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (locked || !token || !cached) return;
         const parsed = JSON.parse(cached) as ShelfState;
         if (canEnter(parsed)) {
+          // Let the saved pages land first so Home opens with numbers, not a spinner.
+          await Promise.race([cacheHydrationPromise, new Promise((resolve) => setTimeout(resolve, 700))]);
+          if (answered.current) return;
           setState(parsed);
           setReady(true);
         }
@@ -78,12 +82,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ]);
       const locked = await readLocked();
       const shown = locked ? { ...next, unlocked: false } : next;
+      answered.current = true;
       setState(shown);
       setError(null);
       void SecureStore.setItemAsync(SESSION_STATE_KEY, JSON.stringify(shown)).catch(() => undefined);
       return shown;
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        answered.current = true;
         setState(null);
         void SecureStore.deleteItemAsync(SESSION_STATE_KEY).catch(() => undefined);
       }

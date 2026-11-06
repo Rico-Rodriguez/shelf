@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { api } from "../src/api";
+import { api, load as read, peek } from "../src/api";
 import { Back, Button, Card, colors, EmptyState, Field, GlassButton, Loading, Note, Screen, Sheet, Switch } from "../src/ui";
 
 type Rule = {
@@ -61,10 +61,10 @@ const empty: FormState = {
 
 export default function RulesScreen() {
   const params = useLocalSearchParams<{ merchant?: string; categoryId?: string; name?: string; rename?: string }>();
-  const [rules, setRules] = useState<Rule[] | null>(null);
-  const [groups, setGroups] = useState<{ categories: { id: string; name: string }[] }[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
-  const [goals, setGoals] = useState<{ id: string; name: string }[]>([]);
+  const [rules, setRules] = useState<Rule[] | null>(() => peek<{ rules: Rule[] }>("/api/rules")?.rules ?? null);
+  const [groups, setGroups] = useState<{ categories: { id: string; name: string }[] }[]>(() => peek<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories")?.groups ?? []);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>(() => peek<{ accounts: { id: string; name: string }[] }>("/api/accounts")?.accounts ?? []);
+  const [goals, setGoals] = useState<{ id: string; name: string }[]>(() => peek<{ goals: { id: string; name: string }[] }>("/api/goals")?.goals ?? []);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(empty);
@@ -75,16 +75,16 @@ export default function RulesScreen() {
   const categories = groups.flatMap((group) => group.categories);
 
   function load() {
-    void api<{ rules: Rule[] }>("/api/rules")
+    void read<{ rules: Rule[] }>("/api/rules")
       .then((res) => setRules(res.rules))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load rules"));
   }
 
   useEffect(() => {
     load();
-    void api<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
-    void api<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
-    void api<{ goals: { id: string; name: string }[] }>("/api/goals").then((res) => setGoals(res.goals)).catch(() => undefined);
+    void read<{ groups: { categories: { id: string; name: string }[] }[] }>("/api/categories").then((res) => setGroups(res.groups)).catch(() => undefined);
+    void read<{ accounts: { id: string; name: string }[] }>("/api/accounts").then((res) => setAccounts(res.accounts)).catch(() => undefined);
+    void read<{ goals: { id: string; name: string }[] }>("/api/goals").then((res) => setGoals(res.goals)).catch(() => undefined);
   }, []);
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
-import { api } from "../src/api";
+import { api, mutateCache } from "../src/api";
+import { useCached } from "../src/cached";
 import { Back, Card, colors, EmptyState, Loading, Note, Screen } from "../src/ui";
 
 type NoteRow = {
@@ -47,16 +47,20 @@ function openNote(row: NoteRow) {
 }
 
 export default function NotificationsScreen() {
-  const [rows, setRows] = useState<NoteRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, reload } = useCached<{ notifications: NoteRow[]; unread?: number }>("/api/notifications", { fallback: "Could not load notifications" });
+  const rows = data?.notifications ?? null;
 
-  function load() {
-    void api<{ notifications: NoteRow[] }>("/api/notifications")
-      .then((res) => setRows(res.notifications))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load notifications"));
+  // Mark read on screen first, then tell the server.
+  function markRead(id: string | null) {
+    const at = new Date().toISOString();
+    mutateCache<{ notifications: NoteRow[]; unread?: number }>("/api/notifications", (current) => {
+      const notifications = (current?.notifications ?? []).map((row) => (id == null || row.id === id ? { ...row, readAt: row.readAt ?? at } : row));
+      return { ...current, notifications, unread: notifications.filter((row) => !row.readAt).length };
+    });
+    void api("/api/notifications", { method: "POST", body: JSON.stringify(id == null ? { all: true } : { id }) })
+      .then(() => reload())
+      .catch(() => reload());
   }
-
-  useEffect(load, []);
 
   return (
     <Screen
@@ -64,7 +68,7 @@ export default function NotificationsScreen() {
       refresh={<Back />}
       action={
         rows?.some((row) => !row.readAt) ? (
-          <Pressable onPress={() => void api("/api/notifications", { method: "POST", body: JSON.stringify({ all: true }) }).then(load)}>
+          <Pressable onPress={() => markRead(null)}>
             <Text style={{ color: colors.accentInk, fontWeight: "600", fontSize: 15 }}>Mark all read</Text>
           </Pressable>
         ) : null
@@ -80,7 +84,7 @@ export default function NotificationsScreen() {
               key={row.id}
               onPress={() => {
                 openNote(row);
-                void api("/api/notifications", { method: "POST", body: JSON.stringify({ id: row.id }) }).then(load);
+                if (!row.readAt) markRead(row.id);
               }}
               style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 12, gap: 2, justifyContent: "center", borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, opacity: row.readAt ? 0.55 : 1 }}
             >
