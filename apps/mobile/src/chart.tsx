@@ -6,7 +6,7 @@ import Svg, { Circle, ClipPath, Defs, G, Line, LinearGradient, Path, Rect, Stop,
 import { money, shortDate } from "./format";
 import { tapTick } from "./haptic";
 import { useScrollLock } from "./scroll";
-import { colors, useReduceMotion } from "./theme";
+import { colors, useReduceMotion, themedStyles } from "./theme";
 
 function smoothLine(coords: { x: number; y: number }[]) {
   if (coords.length === 0) return "";
@@ -41,6 +41,7 @@ export function SpendChart({
   caption?: string;
   color?: string;
 }) {
+  const styles = useStyles();
   const series = points.length > 0 && points[0].cents !== 0 ? [{ date: points[0].date, cents: 0 }, ...points] : points;
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
@@ -406,7 +407,8 @@ export function GroupedBars({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((colors) =>
+  StyleSheet.create({
   floatingPill: {
     position: "absolute",
     width: 110,
@@ -447,4 +449,5 @@ const styles = StyleSheet.create({
     color: colors.tertiary,
     textTransform: "uppercase",
   },
-});
+  }),
+);

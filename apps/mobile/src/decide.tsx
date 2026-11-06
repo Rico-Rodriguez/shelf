@@ -26,7 +26,7 @@ import { anchorRect, playFlight, previewGoalRemaining, useFlightHidden, useMeasu
 import { matchesMerchantRule } from "./review-flow";
 import { tapCelebration, tapMedium, tapPress, tapSelect, tapSuccess } from "./haptic";
 import { Icon, MerchantMark } from "./icons";
-import { useReduceMotion, useReduceTransparency, useTheme } from "./theme";
+import { useReduceMotion, useReduceTransparency, useTheme, themedStyles } from "./theme";
 import { ConfirmMark } from "./toast";
 import { colors, Sheet, Switch } from "./ui";
 
@@ -108,6 +108,7 @@ function CardContent({
   goalLine?: string | null;
   amountAnchor?: string;
 }) {
+  const styles = useStyles();
   const merchant = tx.merchantName || tx.name;
 
   return (
@@ -363,6 +364,7 @@ export function ReviewDeck({
   onUndo?: () => void;
   canUndo?: boolean;
 }) {
+  const styles = useStyles();
   const { width: windowWidth } = useWindowDimensions();
   const cardWidth = Math.min(windowWidth - 32, 420);
 
@@ -1101,7 +1103,8 @@ export function ReviewDeck({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles((colors) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "space-between",
@@ -1511,4 +1514,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.accentInk,
   },
-});
+  }),
+);
