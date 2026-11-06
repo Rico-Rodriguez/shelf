@@ -338,15 +338,18 @@ function ShelfTabBarItem({
 function ShelfQuickLogButton({ onPress }: { onPress: () => void }) {
   const { palette } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Quick log expense"
       onPressIn={() => {
+        if (reduceMotion) return;
         Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPressOut={() => {
+        if (reduceMotion) return;
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 24 }).start();
       }}
       onPress={() => {
