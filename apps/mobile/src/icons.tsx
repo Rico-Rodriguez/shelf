@@ -214,28 +214,31 @@ function Calendar({ size, color }: { size: number; color: string }) {
   );
 }
 
-export function MerchantMark({ name, color }: { name: string; color?: string | null }) {
-  const { palette } = useTheme();
-  const initials = (name || "?")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-  const tint = color ? shelfColor(color) : "";
+const MARK_TINTS = ["#2f9e5f", "#1e6fd6", "#c4591b", "#d6345c", "#e08a1e", "#6a4ce0", "#0f8fa3", "#b8407a", "#5b6b7f"];
+
+function markTint(name: string) {
+  let hash = 0;
+  for (const char of name.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return MARK_TINTS[hash % MARK_TINTS.length];
+}
+
+/** A solid merchant tile with one initial. The tint comes from the name, so a merchant keeps its color everywhere. */
+export function MerchantMark({ name, color, size = 40, round = false }: { name: string; color?: string | null; size?: number; round?: boolean }) {
+  const initial = (name || "?").trim().replace(/^the\s+/i, "")[0]?.toUpperCase() ?? "?";
+  const tint = name ? markTint(name) : color ? shelfColor(color) : MARK_TINTS[MARK_TINTS.length - 1];
   return (
     <View
       style={{
-        width: 36,
-        height: 36,
-        borderRadius: 12,
+        width: size,
+        height: size,
+        borderRadius: round ? size / 2 : size * 0.3,
+        borderCurve: "continuous",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: tint ? `${tint}22` : palette.fill,
+        backgroundColor: tint,
       }}
     >
-      <Text style={{ fontSize: 13, fontWeight: "700", letterSpacing: -0.2, color: tint || palette.ink }}>{initials || "?"}</Text>
+      <Text style={{ fontSize: size * 0.42, fontWeight: "700", letterSpacing: -0.4, color: "#ffffff" }}>{initial}</Text>
     </View>
   );
 }

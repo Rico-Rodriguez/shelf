@@ -98,6 +98,7 @@ export async function GET(request: Request) {
           amountCents: tx.amountCents,
           date: tx.date,
           pending: tx.pending,
+          reviewed: tx.reviewed,
           categoryId: tx.categoryId,
           category: category ? { id: category.id, name: category.name, color: shelfColor(group?.color) } : null,
           accountName: account?.name ?? null,

@@ -609,6 +609,8 @@ export function LedgerRow({
   divided,
   rowAnchor,
   amountAnchor,
+  bare = false,
+  flag = false,
 }: {
   name: string;
   meta?: string;
@@ -619,19 +621,26 @@ export function LedgerRow({
   divided?: boolean;
   rowAnchor?: string;
   amountAnchor?: string;
+  /** Sits on the page instead of inside a card. */
+  bare?: boolean;
+  /** An orange dot for a purchase waiting for review. */
+  flag?: boolean;
 }) {
   const styles = useStyles();
   const rowMeasure = useMeasuredAnchor(rowAnchor, { text: name, color: amountColor ?? colors.ink, fontSize: 16 });
   const amountMeasure = useMeasuredAnchor(amountAnchor, { text: amount, color: amountColor ?? colors.ink, fontSize: 16 });
   const rowOpacity = useFlightHidden(rowAnchor);
   const body = (
-    <View ref={rowMeasure.ref} onLayout={rowMeasure.onLayout} collapsable={false} style={[styles.ledger, { opacity: rowOpacity }]}>
-      {divided ? <View style={[styles.hairline, { left: 64 }]} /> : null}
-      <MerchantMark name={name} color={color} />
+    <View ref={rowMeasure.ref} onLayout={rowMeasure.onLayout} collapsable={false} style={[styles.ledger, bare ? { paddingHorizontal: 0 } : null, { opacity: rowOpacity }]}>
+      {divided ? <View style={[styles.hairline, { left: bare ? 52 : 68 }]} /> : null}
+      <MerchantMark name={name} color={color} round={bare} />
       <View style={styles.ledgerCopy}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
-          {name}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text numberOfLines={1} style={[styles.rowTitle, { flexGrow: 0, flexShrink: 1, flexBasis: "auto" }]}>
+            {name}
+          </Text>
+          {flag ? <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.warn }} /> : null}
+        </View>
         {meta ? (
           <Text numberOfLines={1} style={styles.meta}>
             {meta}
@@ -2085,8 +2094,8 @@ function NumberKey({
   isSpecial?: boolean;
 }) {
   const { palette } = useTheme();
-  const isDark = palette.scheme === "dark";
   const scale = useRef(new Animated.Value(1)).current;
+  const [pressedKey, setPressedKey] = useState(false);
 
   return (
     <Pressable
@@ -2094,13 +2103,15 @@ function NumberKey({
       accessibilityLabel={label || (icon === "back" ? "Backspace" : "Key")}
       onPressIn={() => {
         tapSelect();
-        Animated.spring(scale, { toValue: 0.92, useNativeDriver: true, stiffness: 600, damping: 25 }).start();
+        setPressedKey(true);
+        Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, stiffness: 700, damping: 22 }).start();
       }}
       onPressOut={() => {
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 600, damping: 25 }).start();
+        setPressedKey(false);
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, stiffness: 520, damping: 14 }).start();
       }}
       onPress={onPress}
-      style={{ flex: 1, height: 48 }}
+      style={{ flex: 1, height: 52 }}
     >
       <Animated.View
         style={[
@@ -2110,32 +2121,19 @@ function NumberKey({
             borderCurve: "continuous",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: isDark
-              ? isSpecial
-                ? "rgba(255, 255, 255, 0.07)"
-                : "rgba(255, 255, 255, 0.12)"
-              : isSpecial
-                ? "rgba(0, 0, 0, 0.04)"
-                : "rgba(255, 255, 255, 0.95)",
-            borderWidth: 1,
-            borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1.5 },
-            shadowOpacity: isDark ? 0.22 : 0.04,
-            shadowRadius: 3,
-            elevation: 1,
+            backgroundColor: pressedKey ? palette.fill : "transparent",
             transform: [{ scale }],
           },
         ]}
       >
         {icon === "back" ? (
-          <Icon name="chevron-left" size={18} color={palette.ink} />
+          <Icon name="chevron-left" size={22} color={palette.ink} />
         ) : (
           <Text
             style={{
-              fontSize: isSpecial ? 15 : 22,
-              fontWeight: isSpecial ? "600" : "500",
-              color: isSpecial ? palette.muted : palette.ink,
+              fontSize: isSpecial && label !== "." ? 17 : 27,
+              fontWeight: "500",
+              color: isSpecial && label !== "." ? palette.muted : palette.ink,
               fontVariant: ["tabular-nums"],
             }}
           >
@@ -2163,7 +2161,7 @@ export function NumberPad({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={[{ gap: 8 }, style]}>
+    <View style={[{ gap: 2 }, style]}>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <NumberKey label="1" onPress={() => onKey("1")} />
         <NumberKey label="2" onPress={() => onKey("2")} />
@@ -2671,49 +2669,84 @@ export function QuickLogModal({
     }
   }
 
+  // Purchases you make again and again, ranked for the amount on the keypad.
+  const history = useMemo(() => {
+    const rows = peek<{ transactions?: { name: string; merchantName: string | null; amountCents: number; date: string; categoryId?: string | null; category?: { id?: string; name?: string } | null }[] }>("/api/transactions?")?.transactions ?? [];
+    const byName = new Map<string, { name: string; amounts: number[]; categoryId: string | null; categoryName: string | null; last: string }>();
+    for (const tx of rows) {
+      const name = (tx.merchantName || tx.name || "").trim();
+      if (!name || tx.amountCents === 0) continue;
+      const item = byName.get(name.toLowerCase()) ?? { name, amounts: [], categoryId: tx.categoryId ?? tx.category?.id ?? null, categoryName: tx.category?.name ?? null, last: tx.date };
+      item.amounts.push(tx.amountCents);
+      if (tx.date > item.last) item.last = tx.date;
+      byName.set(name.toLowerCase(), item);
+    }
+    return [...byName.values()];
+  }, [visible]);
+
+  const typedCents = amountToCents(amount);
+  const suggestions = useMemo(() => {
+    const today = Date.now();
+    return history
+      .filter((item) => (isIncome ? item.amounts.some((a) => a < 0) : item.amounts.some((a) => a > 0)))
+      .map((item) => {
+        const amounts = item.amounts.filter((a) => (isIncome ? a < 0 : a > 0)).map(Math.abs).sort((a, b) => a - b);
+        const typical = amounts[Math.floor(amounts.length / 2)] ?? 0;
+        const low = amounts[0] ?? 0;
+        const high = amounts[amounts.length - 1] ?? 0;
+        const days = Math.max(0, (today - new Date(`${item.last}T12:00:00`).getTime()) / 86400000);
+        const fit = typedCents > 0 && typical > 0 ? Math.exp(-Math.abs(Math.log(typedCents / typical)) * 2.2) : 0.5;
+        const score = Math.log(1 + amounts.length) * (0.35 + fit) + (days < 7 ? 0.35 : days < 30 ? 0.15 : 0);
+        return { ...item, typical, low, high, fit, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+  }, [history, typedCents, isIncome]);
+
+  const [picked, setPicked] = useState<string | null>(null);
+  const [details, setDetails] = useState(false);
+  useEffect(() => {
+    if (!visible) return;
+    setPicked(null);
+    setDetails(Boolean(draft?.merchant));
+  }, [visible, draft]);
+  // The best guess is chosen for you as you type, until you pick something yourself.
+  const guess = typedCents > 0 && !picked && !details ? suggestions[0] : null;
+  useEffect(() => {
+    if (!guess) return;
+    applyMerchant(guess.name, guess.categoryId);
+  }, [guess?.name, typedCents]);
+
   if (!visible) return null;
 
-  const cents = amountToCents(amount);
+  const cents = typedCents;
   const accountName = accounts.find((account) => account.id === accountId)?.name ?? "";
   const categoryPool = categories.filter((c) => (isIncome ? c.kind === "income" : c.kind !== "income"));
   const preferred = pickQuickCategory(categories, isIncome);
-  const head = categoryPool.slice(0, 8);
-  const quickPillCats = preferred && !head.some((c) => c.id === preferred.id) ? [preferred, ...head].slice(0, 8) : head;
-  const saveLabel = !accountName ? "Choose an account" : cents > 0 ? `Add to ${accountName}` : "Enter an amount";
-  const now = new Date();
-  const rawDash = peek<{
-    transactions: {
-      id: string;
-      name: string;
-      amountCents: number;
-      date: string;
-      merchantName: string | null;
-      categoryId?: string | null;
-      category?: { id?: string } | null;
-    }[];
-    budget: { plannedCents: number; spentCents: number; remainingCents: number };
-    cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
-    unreviewed: { count: number };
-  }>(dashboardPath());
-  const dash = rawDash ? mergeDashboard(rawDash) : null;
-  const rawBudget = peek<{
-    expenseSpentCents: number;
-    rows: { category: { id: string; name: string }; availableCents: number; remainingCents: number; spentCents: number }[];
-  }>(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
-  const budget = rawBudget ? mergeBudget(rawBudget) : null;
-  const plannedCents = dash?.budget.plannedCents ?? 0;
-  const leftCents = plannedCents - (dash?.budget.spentCents ?? 0);
-  const nextLeft = isIncome ? leftCents + cents : leftCents - cents;
-  const planRow = budget?.rows.find((row) => row.category.id === selectedCatId && row.availableCents > 0);
-  const nextCategory = planRow ? (isIncome ? planRow.remainingCents + cents : planRow.remainingCents - cents) : null;
-  const seenMerchants = new Set<string>();
-  const merchantChips: { name: string; categoryId: string | null }[] = [];
-  for (const tx of dash?.transactions ?? []) {
-    const name = tx.merchantName?.trim();
-    if (!name || seenMerchants.has(name)) continue;
-    seenMerchants.add(name);
-    merchantChips.push({ name, categoryId: tx.categoryId ?? tx.category?.id ?? null });
-  }
+  const head = categoryPool.slice(0, 10);
+  const quickPillCats = preferred && !head.some((c) => c.id === preferred.id) ? [preferred, ...head].slice(0, 10) : head;
+  const saveLabel = !accountName ? "Choose an account" : cents > 0 ? `Log ${isIncome ? "+" : ""}${money(cents)}` : "Enter an amount";
+  const chosen = suggestions.find((item) => item.name.toLowerCase() === merchant.trim().toLowerCase()) ?? null;
+  const hint =
+    cents <= 0
+      ? isIncome
+        ? "Type what came in"
+        : "Type an amount"
+      : chosen && chosen.fit > 0.45
+        ? `Looks like ${chosen.categoryName ? chosen.categoryName.toLowerCase() : chosen.name}`
+        : merchant
+          ? `At ${merchant}`
+          : "Pick one below, or add details";
+  const ready = cents > 0 && Boolean(accountId);
+  const chipStyle = (on = false) => ({
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 99,
+    backgroundColor: on ? palette.ink : palette.fill,
+  });
 
   function applyMerchant(name: string, categoryId: string | null) {
     setMerchant(name);
@@ -2729,10 +2762,12 @@ export function QuickLogModal({
   }
 
   return (
-    <Sheet
-      title={pickingAccount ? "Account" : "Add"}
+    <SheetContainer
+      visible
+      scrollable={false}
+      title={pickingAccount ? "Account" : isIncome ? "Log income" : "Log a purchase"}
       onClose={pickingAccount ? () => setPickingAccount(false) : onClose}
-      height="92%"
+      height="94%"
     >
       {pickingAccount ? (
         accounts.length ? (
@@ -2751,254 +2786,205 @@ export function QuickLogModal({
           <Note>Add an account first.</Note>
         )
       ) : (
-        <>
-          <FlowToggle
-            isIncome={isIncome}
-            onChange={(income) => {
-              incomeMode.current = income;
-              setIsIncome(income);
-              setSelectedCatId(pickQuickCategory(categories, income)?.id ?? null);
-            }}
-          />
-
-          <View ref={padAmount.ref} onLayout={padAmount.onLayout} collapsable={false} style={{ alignItems: "center" }}>
+        <View style={{ flex: 1, gap: 14, paddingHorizontal: 20 }}>
+          <View ref={padAmount.ref} onLayout={padAmount.onLayout} collapsable={false} style={{ alignItems: "center", marginTop: 6 }}>
             <RollingFigure
               text={`${isIncome && cents > 0 ? "+" : ""}${money(cents)}`}
-              duration={160}
+              duration={170}
               style={{
-                fontSize: 48,
+                fontSize: 64,
                 fontWeight: "700",
-                letterSpacing: -2,
+                letterSpacing: -2.8,
                 textAlign: "center",
-                color: isIncome ? palette.positive : palette.ink,
+                color: cents <= 0 ? palette.tertiary : isIncome ? palette.positive : palette.ink,
                 fontVariant: ["tabular-nums"],
               }}
             />
           </View>
-          {plannedCents > 0 && cents > 0 ? (
-            <Text
-              style={{
-                fontSize: 14,
-                fontWeight: "600",
-                textAlign: "center",
-                color: nextLeft < 0 ? palette.danger : palette.muted,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {`Left to spend ${money(nextLeft)}`}
-            </Text>
-          ) : null}
-          {planRow && nextCategory != null && cents > 0 ? (
-            <Text
-              style={{
-                fontSize: 13,
-                textAlign: "center",
-                color: nextCategory < 0 ? palette.danger : palette.tertiary,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {nextCategory < 0
-                ? `${planRow.category.name} · ${money(Math.abs(nextCategory))} over`
-                : `${planRow.category.name} · ${money(nextCategory)} left`}
-            </Text>
-          ) : null}
+          <Text style={{ textAlign: "center", fontSize: 14, color: palette.muted, marginTop: -6 }} numberOfLines={1}>
+            {hint}
+          </Text>
 
-
-          <Pressable
-            onPress={() => setPickingAccount(true)}
-            accessibilityRole="button"
-            accessibilityLabel={accountName ? `Account ${accountName}` : "Choose an account"}
-            style={{
-              minHeight: 48,
-              borderRadius: 14,
-              borderCurve: "continuous",
-              paddingHorizontal: 14,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
-              borderWidth: 1,
-              borderColor: palette.line,
-            }}
-          >
-            <Text style={{ fontSize: 15, color: palette.muted }}>Account</Text>
-            <Text style={{ fontSize: 15, fontWeight: "600", color: palette.ink }} numberOfLines={1}>
-              {accountName || "Choose"}
-            </Text>
-          </Pressable>
-
-          {merchantChips.length ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {merchantChips.map((chip) => {
-                const selected = merchant.trim().toLowerCase() === chip.name.toLowerCase();
+          {!details && suggestions.length ? (
+            <View ref={padMerchant.ref} onLayout={padMerchant.onLayout} collapsable={false} style={{ gap: 7 }}>
+              {suggestions.map((item) => {
+                const on = merchant.trim().toLowerCase() === item.name.toLowerCase();
+                const usual =
+                  item.low && item.high && item.low !== item.high
+                    ? `usually ${money(item.low).replace(".00", "")}–${money(item.high).replace(".00", "")}`
+                    : item.typical
+                      ? `usually ${money(item.typical)}`
+                      : "";
                 return (
                   <Pressable
-                    key={chip.name}
+                    key={item.name}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
                     onPress={() => {
                       tapSelect();
-                      applyMerchant(chip.name, chip.categoryId);
+                      setPicked(item.name);
+                      applyMerchant(item.name, item.categoryId);
                     }}
                     style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      minHeight: 52,
                       paddingHorizontal: 12,
-                      paddingVertical: 7,
-                      borderRadius: 99,
-                      backgroundColor: selected
-                        ? isDark
-                          ? "rgba(255,255,255,0.18)"
-                          : "rgba(0,0,0,0.1)"
-                        : isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(0,0,0,0.04)",
+                      borderRadius: 16,
+                      borderCurve: "continuous",
+                      backgroundColor: on ? palette.accentSoft : palette.card,
+                      borderWidth: 1.5,
+                      borderColor: on ? palette.positive : "transparent",
                     }}
                   >
-                    <Text style={{ fontSize: 13, fontWeight: selected ? "700" : "500", color: selected ? palette.ink : palette.muted }}>
-                      {chip.name}
-                    </Text>
+                    <MerchantMark name={item.name} size={32} round />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "600", color: palette.ink, letterSpacing: -0.2 }}>
+                        {item.name}
+                      </Text>
+                      <Text numberOfLines={1} style={{ fontSize: 12.5, color: palette.muted }}>
+                        {[item.categoryName, usual].filter(Boolean).join(" · ")}
+                      </Text>
+                    </View>
+                    {on ? <Icon name="check" size={16} color={palette.positive} /> : null}
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </View>
           ) : null}
 
-          <View
-            ref={padMerchant.ref}
-            onLayout={padMerchant.onLayout}
-            collapsable={false}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)",
-              borderRadius: 14,
-              borderCurve: "continuous",
-              paddingHorizontal: 14,
-              paddingVertical: 9,
-              borderWidth: 1,
-              borderColor: palette.line,
-            }}
-          >
-            <Icon name="pencil" size={15} color={palette.tertiary} />
-            <TextInput
-              value={merchant}
-              onChangeText={setMerchant}
-              placeholder="Merchant or description (optional)"
-              placeholderTextColor={palette.tertiary}
-              style={{ flex: 1, fontSize: 15, color: palette.ink, marginLeft: 8, padding: 0 }}
-              autoCapitalize="sentences"
-            />
-            {merchant ? (
-              <Pressable onPress={() => setMerchant("")} hitSlop={8}>
-                <Icon name="close" size={14} color={palette.tertiary} />
-              </Pressable>
-            ) : null}
-          </View>
+          {details ? (
+            <View style={{ gap: 10 }}>
+              <View
+                ref={padMerchant.ref}
+                onLayout={padMerchant.onLayout}
+                collapsable={false}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: palette.card,
+                  borderRadius: 14,
+                  borderCurve: "continuous",
+                  paddingHorizontal: 14,
+                  minHeight: 46,
+                }}
+              >
+                <Icon name="pencil" size={15} color={palette.tertiary} />
+                <TextInput
+                  value={merchant}
+                  onChangeText={setMerchant}
+                  placeholder="Where, or a note"
+                  placeholderTextColor={palette.tertiary}
+                  style={{ flex: 1, fontSize: 16, color: palette.ink, marginLeft: 8, paddingVertical: 10 }}
+                  autoCapitalize="sentences"
+                />
+                {merchant ? (
+                  <Pressable onPress={() => setMerchant("")} hitSlop={8} accessibilityLabel="Clear">
+                    <Icon name="close" size={14} color={palette.tertiary} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {quickPillCats.map((cat) => {
+                  const selected = selectedCatId === cat.id;
+                  return (
+                    <Pressable
+                      key={cat.id}
+                      onPress={() => {
+                        tapSelect();
+                        setSelectedCatId(cat.id);
+                      }}
+                      style={chipStyle(selected)}
+                    >
+                      <View
+                        ref={selected ? padColor.ref : undefined}
+                        onLayout={selected ? padColor.onLayout : undefined}
+                        collapsable={false}
+                        style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }}
+                      />
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: selected ? palette.bg : palette.ink }}>{cat.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {quickPillCats.map((cat) => {
-              const selected = selectedCatId === cat.id;
-              return (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => {
-                    tapSelect();
-                    setSelectedCatId(cat.id);
-                  }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    paddingHorizontal: 12,
-                    paddingVertical: 7,
-                    borderRadius: 99,
-                    borderCurve: "continuous",
-                    backgroundColor: selected ? (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)") : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                    borderWidth: 1,
-                    borderColor: selected ? (cat.color || palette.accent) : "transparent",
-                  }}
-                >
-                  <View
-                    ref={selected ? padColor.ref : undefined}
-                    onLayout={selected ? padColor.onLayout : undefined}
-                    collapsable={false}
-                    style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cat.color || palette.accent }}
-                  />
-                  <Text style={{ fontSize: 13, fontWeight: selected ? "700" : "500", color: selected ? palette.ink : palette.muted }}>
-                    {cat.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <View style={{ flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: 8 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isIncome ? "Income. Switch to a purchase" : "Purchase. Switch to income"}
+              onPress={() => {
+                tapSelect();
+                const income = !isIncome;
+                incomeMode.current = income;
+                setIsIncome(income);
+                setPicked(null);
+                setMerchant("");
+                setSelectedCatId(pickQuickCategory(categories, income)?.id ?? null);
+              }}
+              style={chipStyle(false)}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: isIncome ? palette.positive : palette.ink }}>{isIncome ? "Income" : "Purchase"}</Text>
+              <Icon name="flow" size={12} color={palette.tertiary} />
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setPickingAccount(true)} style={chipStyle(false)}>
+              <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "600", color: palette.ink, maxWidth: 140 }}>
+                {accountName || "Choose account"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                tapSelect();
+                setDetails((open) => !open);
+                setPicked(merchant || null);
+              }}
+              style={chipStyle(details)}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: details ? palette.bg : palette.ink }}>{details ? "Suggestions" : "+ Details"}</Text>
+            </Pressable>
+          </View>
 
           {error ? <Note tone="danger">{error}</Note> : null}
 
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: 8 }}>
-            {[5, 10, 20, 50].map((preset) => (
-              <Pressable
-                key={preset}
-                onPress={() => {
-                  tapSelect();
-                  setAmount(String(preset));
-                }}
-                style={({ pressed }) => [
-                  {
-                    paddingHorizontal: 13,
-                    paddingVertical: 6,
-                    borderRadius: 99,
-                    backgroundColor: amount === String(preset) ? (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)") : isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
-                    borderWidth: 1,
-                    borderColor: palette.glassBorderSubtle,
-                  },
-                  pressed ? { opacity: 0.7, transform: [{ scale: 0.96 }] } : null,
-                ]}
-              >
-                <Text style={{ fontSize: 13, fontWeight: "600", color: palette.ink, fontVariant: ["tabular-nums"] }}>
-                  {`$${preset}`}
+          <View style={{ marginTop: "auto", gap: 8 }}>
+            <NumberPad
+              hasDecimal
+              onKey={(digit) => setAmount((current) => pushDigit(current, digit))}
+              onDecimal={() => setAmount((current) => (current.includes(".") ? current : `${current || "0"}.`))}
+              onClear={() => setAmount("")}
+              onBackspace={() => setAmount((current) => current.slice(0, -1))}
+            />
+            <Pressable
+              onPress={handleSave}
+              disabled={busy || !ready}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                {
+                  height: 56,
+                  borderRadius: 18,
+                  borderCurve: "continuous",
+                  backgroundColor: ready ? palette.positive : palette.fill,
+                  alignItems: "center",
+                  justifyContent: "center",
+                },
+                pressed ? { transform: [{ scale: 0.98 }], opacity: 0.9 } : null,
+              ]}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ fontSize: 17, fontWeight: "700", color: ready ? (palette.scheme === "dark" ? "#000" : "#fff") : palette.tertiary, letterSpacing: -0.3, fontVariant: ["tabular-nums"] }}>
+                  {saveLabel}
                 </Text>
-              </Pressable>
-            ))}
+              )}
+            </Pressable>
           </View>
-
-          <NumberPad
-            hasDecimal
-            onKey={(digit) => setAmount((current) => pushDigit(current, digit))}
-            onDecimal={() => setAmount((current) => (current.includes(".") ? current : `${current || "0"}.`))}
-            onClear={() => setAmount("")}
-            onBackspace={() => setAmount((current) => current.slice(0, -1))}
-          />
-
-          <Pressable
-            onPress={handleSave}
-            disabled={busy || cents <= 0 || !accountId}
-            style={({ pressed }) => [
-              {
-                height: 52,
-                borderRadius: 18,
-                borderCurve: "continuous",
-                backgroundColor: cents > 0 && accountId ? (isIncome ? palette.positive : palette.control) : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                alignItems: "center",
-                justifyContent: "center",
-              },
-              pressed ? { transform: [{ scale: 0.98 }], opacity: 0.88 } : null,
-            ]}
-          >
-            {busy ? (
-              <ActivityIndicator color={palette.controlInk} />
-            ) : (
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "700",
-                  color: cents > 0 && accountId ? palette.controlInk : palette.tertiary,
-                  letterSpacing: -0.3,
-                }}
-              >
-                {saveLabel}
-              </Text>
-            )}
-          </Pressable>
-        </>
+        </View>
       )}
-    </Sheet>
+    </SheetContainer>
   );
 }
 
@@ -3006,7 +2992,7 @@ function makeStyles(colors: Palette) {
   const isDark = colors.scheme === "dark";
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
-    scroll: { paddingHorizontal: 16, paddingBottom: 100, gap: 24 },
+    scroll: { paddingHorizontal: 20, paddingBottom: 100, gap: 24 },
     header: {
       flexDirection: "row",
       alignItems: "center",

@@ -1,76 +1,17 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { load as read, peek, subscribeCache } from "../../src/api";
-import {
-  billsCountedInMonth,
-  billsStillDueCents,
-  budgetPace,
-  paceWords,
-  dashboardPath,
-  dayLabel,
-  expectedPaceCents,
-  flowMoney,
-  inDaysPhrase,
-  money,
-  monthRange,
-  nearestOpenGoal,
-  netWorthCents,
-  sameMerchant,
-  shelfColor,
-  shortDate,
-  todayISO,
-  type NetWorthAccount,
-} from "../../src/format";
-import {
-  anchorRect,
-  goalPreview,
-  launchLeftToPlan,
-  playFlight,
-  setCategoryReturn,
-  stageFlight,
-  useFlightArrival,
-  useFlightClock,
-  useMeasuredAnchor,
-} from "../../src/flight";
-import { tapPress } from "../../src/haptic";
+import { dashboardPath, dayLabel, flowMoney, money, shortDate } from "../../src/format";
+import { useFlightArrival, useFlightClock, useFlightHidden, useMeasuredAnchor, playFlight } from "../../src/flight";
+import { tapPress, tapSelect } from "../../src/haptic";
+import { Icon } from "../../src/icons";
 import { islandSitPlan, markIslandSat, onIslandSit } from "../../src/island";
-import { useReduceMotion } from "../../src/theme";
 import { mergeDashboard, subscribeLive } from "../../src/live-edits";
-import {
-  Button,
-  Card,
-  colors,
-  Facts,
-  Hero,
-  LedgerRow,
-  LoadError,
-  Loading,
-  MenuRow,
-    Screen,
-  Section,
-  SpendMix,
-} from "../../src/ui";
-
-type Bill = {
-  id: string;
-  amountCents: number;
-  cadence: string;
-  nextDate: string;
-  isIncome: boolean;
-  isActive: boolean;
-};
-
-type OpenGoal = {
-  id: string;
-  name: string;
-  kind: string;
-  targetCents: number;
-  targetDate: string | null;
-  progressCents: number;
-  remainingCents: number;
-  createdAt?: string | null;
-};
+import { buildPeriod, MONTHS_OF_HISTORY, RANGES, valueAt, type Monthly, type Range } from "../../src/periods";
+import { useReduceMotion, useTheme } from "../../src/theme";
+import { TrendChart, type TrendPoint } from "../../src/trend";
+import { Button, colors, LedgerRow, LoadError, Loading, RollingFigure, Screen, Section } from "../../src/ui";
 
 type Dash = {
   cashFlow: { incomeCents: number; spendingCents: number; savedCents: number };
@@ -79,7 +20,6 @@ type Dash = {
   unreviewed: { count: number };
   accountCount: number;
   spendSeries?: { date: string; cents: number }[];
-  recurring: { id: string; merchantName: string; amountCents: number; nextDate: string; isIncome: boolean }[];
   transactions: {
     id: string;
     name: string;
@@ -87,49 +27,48 @@ type Dash = {
     amountCents: number;
     date: string;
     pending: boolean;
-    reviewed: boolean;
-    hidden?: boolean;
+    reviewed?: boolean;
     categoryId?: string | null;
     category: { id?: string; name: string; color: string } | null;
-    account?: { name: string } | null;
   }[];
-  spending?: { id: string; name: string; cents: number; color: string }[];
-  suggestedSubscriptions?: { merchantName: string }[];
 };
+
+type CashFlow = { series: { key: string; spending: number }[] };
+
+function lastMonthPath() {
+  const now = new Date();
+  return dashboardPath(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+}
+
+const CASH_FLOW = `/api/cash-flow?months=${MONTHS_OF_HISTORY}`;
 
 export default function HomeScreen() {
   const dashPath = dashboardPath();
-  const [data, setData] = useState<Dash | null>(() => peek<Dash>(dashboardPath()) ?? null);
-  const [worth, setWorth] = useState<number | null>(() => {
-    const cached = peek<{ accounts: NetWorthAccount[] }>("/api/accounts");
-    return cached?.accounts ? netWorthCents(cached.accounts) : null;
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [recurrences, setRecurrences] = useState<Bill[] | null>(() => peek<{ recurrences: Bill[] }>("/api/recurring")?.recurrences ?? null);
-  const [goals, setGoals] = useState<OpenGoal[] | null>(() => peek<{ goals: OpenGoal[] }>("/api/goals")?.goals ?? null);
-  const [scrub, setScrub] = useState<{ date: string; cents: number } | null>(null);
-  const [figureSeed, setFigureSeed] = useState<string | null>(null);
+  const prevPath = lastMonthPath();
+  const { palette } = useTheme();
   const reduceMotion = useReduceMotion();
-  const seenTx = useRef<Set<string> | null>(null);
+  const [data, setData] = useState<Dash | null>(() => peek<Dash>(dashPath) ?? null);
+  const [lastMonth, setLastMonth] = useState<Dash | null>(() => peek<Dash>(prevPath) ?? null);
+  const [monthly, setMonthly] = useState<Monthly | null>(() => toMonthly(peek<CashFlow>(CASH_FLOW)));
+  const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<Range>("1M");
+  const [scrub, setScrub] = useState<TrendPoint | null>(null);
   useFlightClock();
-  const goalAdjust = goalPreview();
 
   const load = useCallback(() => {
-    return Promise.all([
-      read<Dash>(dashPath),
-      read<{ accounts: NetWorthAccount[] }>("/api/accounts").catch(() => null),
-      read<{ recurrences: Bill[] }>("/api/recurring").catch(() => null),
-      read<{ goals: OpenGoal[] }>("/api/goals").catch(() => null),
-    ])
-      .then(([next, accounts, recurring, goalRows]) => {
+    void read<Dash>(prevPath)
+      .then(setLastMonth)
+      .catch(() => undefined);
+    void read<CashFlow>(CASH_FLOW)
+      .then((res) => setMonthly(toMonthly(res)))
+      .catch(() => undefined);
+    return read<Dash>(dashPath)
+      .then((next) => {
         setData(next);
-        if (accounts) setWorth(netWorthCents(accounts.accounts));
-        if (recurring) setRecurrences(recurring.recurrences);
-        if (goalRows) setGoals(goalRows.goals);
         setError(null);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load home"));
-  }, [dashPath]);
+  }, [dashPath, prevPath]);
 
   useFocusEffect(
     useCallback(() => {
@@ -139,58 +78,9 @@ export default function HomeScreen() {
 
   const [liveTick, setLiveTick] = useState(0);
   useEffect(() => subscribeLive(() => setLiveTick((value) => value + 1)), []);
-  useEffect(() => {
-    return subscribeCache<Dash>(dashPath, (next) => {
-      if (next) setData(next);
-    });
-  }, [dashPath]);
-  const shownDash = useMemo(() => (data ? mergeDashboard(data) : null), [data, liveTick]);
+  useEffect(() => subscribeCache<Dash>(dashPath, (next) => next && setData(next)), [dashPath]);
+  const shown = useMemo(() => (data ? mergeDashboard(data) : null), [data, liveTick]);
 
-  const today = todayISO();
-  const now = new Date();
-  const range = monthRange(now.getFullYear(), now.getMonth() + 1);
-
-  const bills = (shownDash?.recurring ?? []).filter((row) => !row.isIncome && row.nextDate >= today);
-  const upcomingBillsSlice = bills.slice(0, 3);
-
-  const categories = (shownDash?.spending ?? []).filter((row) => row.cents > 0);
-  const restCents = categories.slice(4).reduce((sum, row) => sum + row.cents, 0);
-  const spendRows =
-    restCents > 0
-      ? [...categories.slice(0, 4), { id: "rest", name: "Other categories", cents: restCents, color: "#8B939E" }]
-      : categories.slice(0, 5);
-
-  const latest = shownDash?.transactions.slice(0, 4) ?? [];
-  const suggestions = shownDash?.suggestedSubscriptions?.length ?? 0;
-
-  const totalPlannedCents = shownDash?.budget.plannedCents ?? 0;
-  const spentCents = shownDash?.budget.spentCents ?? 0;
-  const leftCents = totalPlannedCents - spentCents;
-  const pace = budgetPace(spentCents, totalPlannedCents);
-  const paceCents = expectedPaceCents(totalPlannedCents);
-  const dueCents = recurrences ? billsStillDueCents(recurrences, now.getFullYear(), now.getMonth() + 1) : null;
-  const afterBills = dueCents == null ? null : leftCents - dueCents;
-  const pendingCents = shownDash?.pendingCents ?? 0;
-  const nearest = goals
-    ? nearestOpenGoal(
-        goals.map((goal) => {
-          if (goalAdjust?.id !== goal.id) return goal;
-          const preview = Math.max(0, goalAdjust.remainingCents - goalAdjust.addedCents);
-          return { ...goal, remainingCents: Math.min(goal.remainingCents, preview) };
-        }),
-      )
-    : null;
-  const savedCents = (shownDash?.cashFlow.incomeCents ?? 0) - (shownDash?.cashFlow.spendingCents ?? 0);
-
-  const heroText = money(leftCents);
-  useFlightArrival("plan-to-left", reduceMotion, (plan) => {
-    const carried = plan.pieces[0]?.text;
-    plan.onDone = () => {
-      if (reduceMotion || !carried || carried === heroText) return;
-      setFigureSeed(carried);
-      setTimeout(() => setFigureSeed(null), 32);
-    };
-  });
   useFlightArrival("island-sit", reduceMotion);
   useEffect(() => {
     return onIslandSit((arrival) => {
@@ -199,441 +89,179 @@ export default function HomeScreen() {
     });
   }, [reduceMotion]);
 
-  useEffect(() => {
-    const txs = shownDash?.transactions ?? [];
-    const ids = new Set(txs.map((tx) => tx.id));
-    if (seenTx.current == null) {
-      seenTx.current = ids;
-      return;
-    }
-    const fresh = txs.filter((tx) => !seenTx.current?.has(tx.id));
-    seenTx.current = ids;
-    fresh.forEach((tx, index) => {
-      const bill = bills.find((row) => sameMerchant(row.merchantName, tx.merchantName || tx.name));
-      const from = bill ? anchorRect(`today.bill.${bill.id}`) : null;
-      if (!bill || !from) return;
-      playFlight(
-        {
-          id: `bill-arrive-${tx.id}`,
-          hide: [`today.tx.${tx.id}`],
-          pieces: [
-            {
-              key: tx.id,
-              text: bill.merchantName,
-              meta: inDaysPhrase(bill.nextDate),
-              toMeta: tx.pending ? "Posts later" : dayLabel(tx.date),
-              color: colors.ink,
-              toColor: tx.pending ? colors.tertiary : flowMoney(tx.amountCents).color,
-              fontSize: 16,
-              fontWeight: "600",
-              from,
-              toAnchor: `today.tx.${tx.id}`,
-              delay: index * 40,
-            },
-          ],
-        },
-        reduceMotion,
-      );
-    });
-  }, [shownDash, bills, reduceMotion]);
+  const period = useMemo(
+    () =>
+      shown
+        ? buildPeriod(range, {
+            thisMonth: shown.spendSeries ?? [],
+            lastMonth: lastMonth?.spendSeries ?? null,
+            monthly,
+            thisMonthTotal: shown.cashFlow.spendingCents,
+          })
+        : null,
+    [shown, lastMonth, monthly, range],
+  );
 
-  function openSpend(id: string, kind: "slice" | "row") {
-    if (id === "rest") {
-      router.push("/insights");
-      return;
-    }
-    const anchor = kind === "slice" ? `today.slice.${id}` : `today.cat.${id}`;
-    const from = anchorRect(anchor);
-    const row = spendRows.find((item) => (item.id || item.name) === id);
-    if (from && row) {
-      setCategoryReturn(anchor, from);
-      stageFlight(
-        {
-          id: "category-open",
-          hide: ["activity.category.title", "activity.category.amount"],
-          pieces: [
-            { key: "swatch", kind: "fill", color: shelfColor(row.color), fontSize: 8, from, toAnchor: "activity.category.banner" },
-            { key: "name", text: row.name, color: colors.ink, fontSize: 15, fontWeight: "600", from, toAnchor: "activity.category.title", toFontSize: 22 },
-            { key: "amount", text: money(row.cents), color: colors.ink, fontSize: 15, fontWeight: "700", from, toAnchor: "activity.category.amount", toFontSize: 28 },
-          ],
-        },
-        reduceMotion,
-      );
-    }
-    router.push({ pathname: "/(app)/activity", params: { categoryId: row?.id && row.id !== "rest" ? row.id : id, start: range.start, end: range.end } });
-  }
+  const figure = money(scrub ? scrub.cents : (period?.totalCents ?? 0));
+  const figureMeasure = useMeasuredAnchor(scrub ? undefined : "today.left", { text: figure, color: colors.ink, fontSize: 46 });
+  const figureHidden = useFlightHidden("today.left");
 
-  function heroFacts(includePlan: boolean) {
-    const items: { kicker: string; value: string; color?: string; onPress?: () => void; anchor?: string }[] = includePlan
-      ? [
-          { kicker: "Spent", value: money(spentCents) },
-          { kicker: "Plan", value: money(totalPlannedCents) },
-        ]
-      : [
-          { kicker: "Income", value: money(shownDash?.cashFlow.incomeCents ?? 0) },
-          { kicker: "Spent", value: money(shownDash?.cashFlow.spendingCents ?? 0) },
-          {
-            kicker: savedCents < 0 ? "Net deficit" : "Net saved",
-            value: money(Math.abs(savedCents)),
-            color: savedCents < 0 ? colors.danger : colors.positive,
-          },
-        ];
-    if (includePlan && afterBills != null) {
-      items.push({
-        kicker: "After bills",
-        value: money(afterBills),
-        color: afterBills < 0 ? colors.danger : undefined,
-        anchor: "today.after",
-        onPress: () => {
-          tapPress();
-          const from = anchorRect("today.after");
-          const counted = recurrences ? billsCountedInMonth(recurrences, now.getFullYear(), now.getMonth() + 1) : [];
-          if (from && dueCents != null) {
-            stageFlight(
-              {
-                id: "after-bills",
-                hide: ["bills.hero", ...counted.map((bill) => `bills.row.${bill.id}.amount`)],
-                pieces: [
-                  {
-                    key: "sum",
-                    text: money(dueCents),
-                    color: colors.ink,
-                    fontSize: 15,
-                    fontWeight: "700",
-                    from,
-                    toAnchor: "bills.hero",
-                    toFontSize: 46,
-                  },
-                  ...counted.map((bill, index) => ({
-                    key: `${bill.id}-${index}`,
-                    text: money(bill.cents),
-                    color: colors.ink,
-                    fontSize: 15,
-                    fontWeight: "600" as const,
-                    from,
-                    toAnchor: `bills.row.${bill.id}.amount`,
-                    toFontSize: 16,
-                    delay: 30 + index * 36,
-                  })),
-                ],
-              },
-              reduceMotion,
-            );
-          }
-          router.push("/bills");
-        },
-      });
-    }
-    if (includePlan) {
-      items[0] = { ...items[0], anchor: "today.spent" };
-    }
-    if (pendingCents > 0) {
-      items.push({ kicker: "Pending", value: money(pendingCents), color: colors.tertiary, anchor: "today.pending" });
-    }
-    return items;
-  }
+  // While a finger is on the chart, compare that day with the same point last period.
+  const delta = scrub
+    ? period?.compare.length
+      ? Math.round(scrub.cents - valueAt(period.compare, scrub.at))
+      : null
+    : (period?.deltaCents ?? null);
+  const under = delta != null && delta <= 0;
+  const deltaColor = delta == null ? palette.muted : under ? palette.positive : palette.warn;
+  const overall = period?.deltaCents ?? null;
+  const lineColor = overall != null && overall > 0 ? palette.warn : palette.positive;
+
+  const recent = (shown?.transactions ?? []).slice(0, 5);
+  const toReview = shown?.unreviewed.count ?? 0;
+  const empty = shown && shown.accountCount === 0 && shown.transactions.length === 0;
 
   return (
     <Screen framed onRefresh={load}>
       {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
-      {!shownDash && !error ? <Loading /> : null}
+      {!shown && !error ? <Loading /> : null}
 
-      {shownDash ? (
+      {shown && period ? (
         <>
-          {totalPlannedCents > 0 ? (
-            <Hero
-              label={scrub ? shortDate(scrub.date) : "Left to spend"}
-              cents={scrub ? scrub.cents : leftCents}
-              tone={!scrub && leftCents < 0 ? "bad" : undefined}
-              status={{ label: paceWords(pace.label), tone: pace.tone }}
-              points={shownDash.spendSeries}
-              reference={{ cents: paceCents, label: "Pace" }}
-              onScrub={setScrub}
-              live={scrub != null}
-              figureAnchor={scrub ? undefined : "today.left"}
-              chartHandoff
-              figureSeed={figureSeed}
-              onPressFigure={() => {
-                tapPress();
-                launchLeftToPlan(reduceMotion);
-                router.push("/(app)/budget");
-              }}
-            >
-              <Facts items={heroFacts(true)} />
-            </Hero>
-          ) : (
-            <Hero
-              label="Net worth"
-              cents={worth ?? 0}
-              tone={(worth ?? 0) < 0 ? "bad" : undefined}
-              points={shownDash.spendSeries}
-            >
-              <Facts items={heroFacts(false)} />
-            </Hero>
-          )}
+          <View style={{ gap: 6, marginTop: -4 }}>
+            <Text style={{ fontSize: 15, fontWeight: "500", color: palette.muted, letterSpacing: -0.2 }}>
+              {scrub ? (scrub.label === "Today" ? "Spent so far" : `Spent by ${scrub.label}`) : period.title}
+            </Text>
+            <View ref={figureMeasure.ref} onLayout={figureMeasure.onLayout} collapsable={false} style={{ alignSelf: "flex-start", opacity: figureHidden }}>
+              <RollingFigure
+                text={figure}
+                live={scrub != null}
+                style={{ fontSize: 46, fontWeight: "700", letterSpacing: -1.9, color: palette.ink, fontVariant: ["tabular-nums"] }}
+              />
+            </View>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: deltaColor, letterSpacing: -0.2, fontVariant: ["tabular-nums"], minHeight: 19 }}>
+              {delta == null
+                  ? "Nothing to compare with yet"
+                  : delta === 0
+                    ? `Same as ${period.versus}`
+                    : `${under ? "↓" : "↑"} ${money(Math.abs(delta))} ${under ? "less" : "more"} than ${period.versus}`}
+            </Text>
+          </View>
 
-          {/* Shortcuts: what needs you first, then the rest of your money. */}
-          <Card>
-            {shownDash.unreviewed.count > 0 ? (
-              <MenuRow
-                title={shownDash.unreviewed.count === 1 ? "1 purchase to review" : `${shownDash.unreviewed.count} purchases to review`}
-                icon="tag"
-                active
-                compact
-                trailing={<Text style={{ fontSize: 15, fontWeight: "500", color: colors.accentInk }}>Review</Text>}
-                onPress={() => {
-                  router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+          <View style={{ gap: 14, marginTop: -6 }}>
+            <TrendChart points={period.points} compare={period.compare} color={lineColor} onScrub={setScrub} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              {RANGES.map((item) => {
+                const on = item === range;
+                return (
+                  <Pressable
+                    key={item}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={{ "1W": "One week", "1M": "This month", "3M": "Three months", "1Y": "One year" }[item]}
+                    hitSlop={6}
+                    onPress={() => {
+                      if (on) return;
+                      tapSelect();
+                      setRange(item);
+                    }}
+                    style={{
+                      minWidth: 56,
+                      height: 32,
+                      borderRadius: 10,
+                      borderCurve: "continuous",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: on ? `${lineColor}1f` : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: on ? lineColor : palette.muted, letterSpacing: -0.1 }}>{item}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {toReview > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                tapPress();
+                router.push({ pathname: "/(app)/activity", params: { reviewed: "false", focus: "1" } });
+              }}
+              style={({ pressed }) => ({
+                minHeight: 54,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                paddingHorizontal: 14,
+                borderRadius: 16,
+                borderCurve: "continuous",
+                backgroundColor: palette.card,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View style={{ minWidth: 26, height: 26, paddingHorizontal: 6, borderRadius: 13, backgroundColor: palette.warn, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontSize: 13, fontWeight: "800", color: "#fff", fontVariant: ["tabular-nums"] }}>{toReview > 99 ? "99+" : toReview}</Text>
+              </View>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: "600", color: palette.ink, letterSpacing: -0.3 }}>
+                {toReview === 1 ? "1 purchase to review" : `${toReview} purchases to review`}
+              </Text>
+              <Icon name="chevron" size={16} color={palette.tertiary} />
+            </Pressable>
+          ) : null}
+
+          {empty ? (
+            <View style={{ gap: 12, alignItems: "flex-start", paddingTop: 8 }}>
+              <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: palette.ink }}>Welcome to Shelf</Text>
+              <Text style={{ fontSize: 15, color: palette.muted, lineHeight: 21 }}>
+                Add an account, or tap + to log a purchase. Everything you spend shows up here.
+              </Text>
+              <Button label="Add an account" onPress={() => router.push("/accounts")} />
+            </View>
+          ) : recent.length ? (
+            <View style={{ gap: 4 }}>
+              <Section
+                title="Recent"
+                action="See all"
+                onAction={() => {
+                  tapPress();
+                  router.push("/(app)/activity");
                 }}
               />
-            ) : null}
-            <MenuRow
-              title="Your money"
-              subtitle={nearest ? `${nearest.name} · ${money(nearest.remainingCents)} to go` : "Accounts, goals, cash flow"}
-              icon="wallet"
-              divided={shownDash.unreviewed.count > 0}
-              onPress={() => router.push("/money")}
-            />
-          </Card>
-
-          {/* First run / empty state */}
-          {shownDash.accountCount === 0 && shownDash.transactions.length === 0 ? (
-            <Card>
-              <View style={{ gap: 14, alignItems: "center", padding: 24 }}>
-                <Text style={{ fontSize: 22, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
-                  Welcome to Shelf
-                </Text>
-                <Text style={{ fontSize: 15, color: colors.muted, textAlign: "center", lineHeight: 21 }}>
-                  Add an account to see what you’ve spent and what’s left this month.
-                </Text>
-                <Button label="Add an account" onPress={() => router.push("/accounts")} block />
+              <View>
+                {recent.map((tx, index) => {
+                  const when = dayLabel(tx.date);
+                  const label = tx.merchantName || tx.name;
+                  const flow = flowMoney(tx.amountCents);
+                  return (
+                    <LedgerRow
+                      key={tx.id}
+                      bare
+                      divided={index > 0}
+                      name={label}
+                      flag={tx.reviewed === false}
+                      meta={[when === "Today" || when === "Yesterday" ? when : shortDate(tx.date), tx.category?.name, tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")}
+                      amount={flow.text}
+                      amountColor={tx.pending ? colors.tertiary : flow.color}
+                      rowAnchor={`today.tx.${tx.id}`}
+                      amountAnchor={`today.tx.${tx.id}.amount`}
+                      onPress={() => router.push({ pathname: "/merchant", params: { name: label } })}
+                    />
+                  );
+                })}
               </View>
-            </Card>
-          ) : (
-            <>
-              {/* Latest Transactions Ledger */}
-              {latest.length > 0 ? (
-                <View style={{ gap: 8 }}>
-                  <Section
-                    title="Recent activity"
-                    action="See all"
-                    onAction={() => {
-                      tapPress();
-                      router.push("/(app)/activity");
-                    }}
-                  />
-                  <Card>
-                    {latest.map((tx, index) => {
-                      const when = dayLabel(tx.date);
-                      const whenShort = when === "Today" || when === "Yesterday" ? when : shortDate(tx.date);
-                      const label = tx.merchantName || tx.name;
-                      const flow = flowMoney(tx.amountCents);
-                      return (
-                        <LedgerRow
-                          key={tx.id}
-                          divided={index > 0}
-                          name={label}
-                          color={tx.category?.color}
-                          meta={[whenShort, tx.category?.name, tx.pending ? "Posts later" : ""].filter(Boolean).join(" · ")}
-                          amount={flow.text}
-                          amountColor={tx.pending ? colors.tertiary : flow.color}
-                          rowAnchor={`today.tx.${tx.id}`}
-                          amountAnchor={`today.tx.${tx.id}.amount`}
-                          onPress={() => {
-                            router.push({ pathname: "/merchant", params: { name: label } });
-                          }}
-                        />
-                      );
-                    })}
-                  </Card>
-                </View>
-              ) : null}
-
-              {/* Upcoming Fixed Commitments (Bills & Subscriptions) */}
-              {upcomingBillsSlice.length > 0 || suggestions > 0 ? (
-                <View style={{ gap: 8 }}>
-                  <Section
-                    title="Upcoming bills"
-                    action="All bills"
-                    onAction={() => {
-                      tapPress();
-                      router.push("/bills");
-                    }}
-                  />
-                  <Card>
-                    {upcomingBillsSlice.map((bill, index) => {
-                      const match =
-                        (shownDash?.transactions ?? []).find(
-                          (tx) => tx.amountCents > 0 && sameMerchant(bill.merchantName, tx.merchantName || tx.name),
-                        ) ?? null;
-                      return <BillDrag key={bill.id} bill={bill} match={match} index={index} reduceMotion={reduceMotion} />;
-                    })}
-                    {suggestions > 0 ? (
-                      <Pressable
-                        onPress={() => {
-                          tapPress();
-                          router.push("/bills");
-                        }}
-                        style={({ pressed }) => [
-                          {
-                            minHeight: 52,
-                            paddingHorizontal: 16,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            borderTopWidth: upcomingBillsSlice.length ? StyleSheet.hairlineWidth : 0,
-                            borderTopColor: colors.line,
-                          },
-                          pressed ? { backgroundColor: colors.fill } : null,
-                        ]}
-                      >
-                        <Text style={{ fontSize: 16, color: colors.ink, letterSpacing: -0.3 }}>
-                          {suggestions === 1 ? "1 possible bill found" : `${suggestions} possible bills found`}
-                        </Text>
-                        <Text style={{ fontSize: 15, fontWeight: "500", color: colors.accentInk }}>Review</Text>
-                      </Pressable>
-                    ) : null}
-                  </Card>
-                </View>
-              ) : null}
-
-              {/* Where It Went (Category Spending) */}
-              {spendRows.length > 0 ? (
-                <View style={{ gap: 8 }}>
-                  <Section
-                    title="Spending"
-                    trailing={money(shownDash.cashFlow.spendingCents)}
-                    action="Insights"
-                    onAction={() => {
-                      tapPress();
-                      router.push("/insights");
-                    }}
-                  />
-                  <Card>
-                    <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10 }}>
-                      <SpendMix
-                        rows={spendRows.map((row) => ({ key: row.id || row.name, cents: row.cents, color: shelfColor(row.color) }))}
-                        anchorFor={(key) => `today.slice.${key}`}
-                        onSlice={(key) => openSpend(key, "slice")}
-                      />
-                    </View>
-                    {spendRows.map((row, index) => (
-                      <SpendCategoryRow key={row.id || row.name} row={row} index={index} onPress={() => openSpend(row.id || row.name, "row")} />
-                    ))}
-                  </Card>
-                </View>
-              ) : null}
-            </>
-          )}
+            </View>
+          ) : null}
         </>
       ) : null}
     </Screen>
   );
 }
 
-function SpendCategoryRow({
-  row,
-  index,
-  onPress,
-}: {
-  row: { id: string; name: string; cents: number; color: string };
-  index: number;
-  onPress: () => void;
-}) {
-  const measure = useMeasuredAnchor(`today.cat.${row.id || row.name}`, { text: row.name, color: colors.ink, fontSize: 15 });
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          minHeight: 52,
-          paddingHorizontal: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.line,
-        },
-        pressed ? { backgroundColor: colors.fill } : null,
-      ]}
-    >
-      <View ref={measure.ref} onLayout={measure.onLayout} collapsable={false} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: shelfColor(row.color) }} />
-        <Text style={{ flex: 1, fontSize: 16, color: colors.ink, letterSpacing: -0.3 }} numberOfLines={1}>
-          {row.name}
-        </Text>
-      </View>
-      <Text style={{ fontSize: 16, fontWeight: "600", color: colors.ink, fontVariant: ["tabular-nums"], letterSpacing: -0.3 }}>{money(row.cents)}</Text>
-    </Pressable>
-  );
-}
-
-function BillDrag({
-  bill,
-  match,
-  index,
-  reduceMotion,
-}: {
-  bill: { id: string; merchantName: string; amountCents: number; nextDate: string };
-  match: { id: string; pending: boolean; amountCents: number } | null;
-  index: number;
-  reduceMotion: boolean;
-}) {
-  const shift = useRef(new Animated.Value(0)).current;
-  const rowRef = useRef<View>(null);
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => gesture.dy < -8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
-        onPanResponderMove: (_, gesture) => {
-          shift.setValue(Math.min(0, gesture.dy));
-        },
-        onPanResponderRelease: (_, gesture) => {
-          const destination = match ? anchorRect(`today.tx.${match.id}`) : null;
-          if (gesture.dy < -48 && match && destination) {
-            rowRef.current?.measureInWindow((x, y, width, height) => {
-              if (width <= 0) return;
-              playFlight(
-                {
-                  id: `bill-${bill.id}`,
-                  hide: [`today.tx.${match.id}`],
-                  pieces: [
-                    {
-                      key: bill.id,
-                      text: bill.merchantName,
-                      meta: inDaysPhrase(bill.nextDate),
-                      toMeta: match.pending ? "Posts later" : dayLabel(new Date().toISOString().slice(0, 10)),
-                      color: colors.ink,
-                      toColor: match.pending ? colors.tertiary : flowMoney(match.amountCents).color,
-                      fontSize: 16,
-                      fontWeight: "600",
-                      from: { x, y, width, height },
-                      to: destination,
-                    },
-                  ],
-                },
-                reduceMotion,
-              );
-            });
-          }
-          Animated.spring(shift, { toValue: 0, useNativeDriver: true, stiffness: 420, damping: 28 }).start();
-        },
-        onPanResponderTerminate: () => {
-          Animated.spring(shift, { toValue: 0, useNativeDriver: true, stiffness: 420, damping: 28 }).start();
-        },
-      }),
-    [bill, match, reduceMotion, shift],
-  );
-  return (
-    <Animated.View ref={rowRef} {...pan.panHandlers} style={{ transform: [{ translateY: shift }] }}>
-      <LedgerRow
-        divided={index > 0}
-        name={bill.merchantName}
-        meta={inDaysPhrase(bill.nextDate)}
-        amount={money(bill.amountCents)}
-        rowAnchor={`today.bill.${bill.id}`}
-        amountAnchor={`today.bill.${bill.id}.amount`}
-        onPress={() => router.push("/bills")}
-      />
-    </Animated.View>
-  );
+function toMonthly(res: CashFlow | null | undefined): Monthly | null {
+  if (!res?.series) return null;
+  const out: Monthly = {};
+  for (const row of res.series) out[row.key] = row.spending;
+  return out;
 }

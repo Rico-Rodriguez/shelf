@@ -667,7 +667,7 @@ export default function ActivityScreen() {
       {/* Search Bar + Filter Icon with indicator dot */}
       <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
         <View style={{ flex: 1 }}>
-          <SearchField value={query} onChangeText={setQuery} placeholder="Search merchants or notes" />
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search" />
         </View>
         <Pressable
           accessibilityRole="button"
@@ -680,17 +680,6 @@ export default function ActivityScreen() {
         >
           <Icon name="filter" size={18} color={colors.ink} />
           {filtered ? <View style={styles.filterDot} /> : null}
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add a transaction"
-          onPress={() => {
-            tapPress();
-            setAdding(true);
-          }}
-          style={styles.filterButton}
-        >
-          <Icon name="plus" size={18} color={colors.ink} />
         </Pressable>
       </View>
 
@@ -745,18 +734,14 @@ export default function ActivityScreen() {
                 paddingHorizontal: 6,
                 paddingVertical: 1,
                 borderRadius: 99,
-                backgroundColor: unreviewedOnly
-                  ? palette.danger
-                  : palette.scheme === "dark"
-                    ? "rgba(255, 107, 74, 0.2)"
-                    : "rgba(217, 74, 46, 0.12)",
+                backgroundColor: unreviewedOnly ? palette.warn : `${palette.warn}22`,
               }}
             >
               <Text
                 style={{
                   fontSize: 11,
                   fontWeight: "700",
-                  color: unreviewedOnly ? "#fff" : palette.danger,
+                  color: unreviewedOnly ? "#fff" : palette.warn,
                   fontVariant: ["tabular-nums"],
                 }}
               >
@@ -889,7 +874,7 @@ export default function ActivityScreen() {
         maxToRenderPerBatch={14}
         windowSize={7}
         initialNumToRender={14}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 88, 110) }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom + 100, 120) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink} />}
         renderItem={({ item }) => {
           if (item.type === "header") {
@@ -906,11 +891,9 @@ export default function ActivityScreen() {
             : tx.pending
               ? { text: spent.text, color: colors.tertiary }
               : spent;
-          const face = faces[tx.merchantName || tx.name];
-          const monthSoFar = face && face.monthCents > 0 ? `${money(face.monthCents)} this month` : "";
           const meta = tx.isTransfer
-            ? ["Transfer", tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ")
-            : [tx.category?.name, tx.account?.name, tx.pending ? "Posts later" : "", monthSoFar].filter(Boolean).join(" · ") || "Uncategorized";
+            ? ["Transfer", tx.pending ? "Pending" : ""].filter(Boolean).join(" · ")
+            : [tx.category?.name ?? "Uncategorized", tx.pending ? "Pending" : ""].filter(Boolean).join(" · ");
           return (
             <RowFrame
               id={tx.id}
@@ -922,8 +905,7 @@ export default function ActivityScreen() {
             >
               <SwipeRow
                 key={tx.id}
-                divided={!item.isFirst}
-                peek={!tx.reviewed}
+                peek={false}
                 onPress={() => {
                   if (!selecting) {
                     const from = anchorRect(`activity.row.${tx.id}`);
@@ -964,7 +946,12 @@ export default function ActivityScreen() {
                   ) : null}
                   <RowSwatch id={tx.id} color={tx.category?.color} name={tx.merchantName || tx.name} />
                   <View style={{ flex: 1, minWidth: 0, justifyContent: "center" }}>
-                    <RowName id={tx.id} name={tx.merchantName || tx.name} />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <View style={{ flexShrink: 1 }}>
+                        <RowName id={tx.id} name={tx.merchantName || tx.name} />
+                      </View>
+                      {!tx.reviewed ? <View accessibilityLabel="Waiting for review" style={styles.reviewDot} /> : null}
+                    </View>
                     <Text numberOfLines={1} style={styles.txMeta}>
                       {meta}
                     </Text>
@@ -1447,7 +1434,7 @@ function makeStyles(colors: Palette) {
   filterButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 14,
     borderCurve: "continuous",
     backgroundColor: colors.fill,
     alignItems: "center",
@@ -1506,25 +1493,22 @@ function makeStyles(colors: Palette) {
     fontSize: 14,
   },
   rowWrapper: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bg,
     overflow: "hidden",
   },
-  rowFirst: {
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderCurve: "continuous",
-  },
-  rowLast: {
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
-    borderCurve: "continuous",
+  rowFirst: {},
+  rowLast: {},
+  reviewDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.warn,
   },
   txRowInner: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 56,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    minHeight: 60,
+    paddingVertical: 9,
     gap: 12,
   },
   txName: {
@@ -1589,8 +1573,8 @@ function makeStyles(colors: Palette) {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    minHeight: 36,
-    paddingHorizontal: 14,
+    minHeight: 34,
+    paddingHorizontal: 13,
     borderRadius: 99,
     borderCurve: "continuous",
     backgroundColor: colors.fill,
@@ -1601,7 +1585,7 @@ function makeStyles(colors: Palette) {
   },
   quickPillText: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
     color: colors.ink,
     letterSpacing: -0.1,
   },

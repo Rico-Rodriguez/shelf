@@ -34,8 +34,7 @@ function openNote(row: NoteRow) {
     return;
   }
   if (row.kind === "budget" || href.startsWith("/budget")) {
-    const categoryId = idAfter(key, "over:");
-    router.push(categoryId ? { pathname: "/(app)/budget", params: { categoryId } } : "/(app)/budget");
+    router.push("/(app)/trends");
     return;
   }
   if (row.kind === "large") {

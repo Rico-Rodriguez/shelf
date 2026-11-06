@@ -308,7 +308,7 @@ const useStyles = themedStyles((colors) =>
     letterSpacing: -0.2,
   },
   frontRow: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.bg,
   },
   peekIndicator: {
     position: "absolute",

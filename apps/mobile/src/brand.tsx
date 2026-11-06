@@ -6,22 +6,19 @@ import { Outfit_700Bold } from "@expo-google-fonts/outfit/700Bold";
 import { useFonts } from "expo-font";
 import { Platform, StyleSheet } from "react-native";
 
-const REGULAR = "Outfit_400Regular";
-const MEDIUM = "Outfit_500Medium";
-const SEMIBOLD = "Outfit_600SemiBold";
-const BOLD = "Outfit_700Bold";
 const WORDMARK = "Fraunces_600SemiBold";
+const SYSTEM = Platform.OS === "ios" ? "System" : "sans-serif";
 
-/** Maps a text style to the Outfit file that matches its weight. Custom fonts ignore numeric fontWeight. */
+/** The face for a text style. Everything is SF Pro (the iPhone's own type); only the wordmark keeps Fraunces. */
 export function shelfFont(style: unknown): string {
   const flat = StyleSheet.flatten(style) as { fontWeight?: string | number; fontFamily?: string } | undefined;
   if (flat?.fontFamily === WORDMARK) return WORDMARK;
-  const weight = String(flat?.fontWeight ?? "400");
-  if (weight === "700" || weight === "800" || weight === "900" || weight === "bold") return BOLD;
-  if (weight === "600" || weight === "650" || weight === "640") return SEMIBOLD;
-  if (weight === "500" || weight === "550") return MEDIUM;
-  return REGULAR;
+  if (flat?.fontFamily) return flat.fontFamily;
+  return SYSTEM;
 }
+
+// Set before the first render, so text never waits on a font file.
+(globalThis as { __shelfFont?: typeof shelfFont }).__shelfFont = shelfFont;
 
 export function useShelfType(): boolean {
   const [loaded] = useFonts({
@@ -31,9 +28,6 @@ export function useShelfType(): boolean {
     Outfit_700Bold,
     Fraunces_600SemiBold,
   });
-  if (loaded) {
-    (globalThis as { __shelfFont?: typeof shelfFont }).__shelfFont = shelfFont;
-  }
   return loaded;
 }
 

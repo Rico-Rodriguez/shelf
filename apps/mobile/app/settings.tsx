@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { Share, Text, View } from "react-native";
 import { api, apiText } from "../src/api";
 import { Icon } from "../src/icons";
-import { Back, Button, Card, colors, Field, LoadError, MenuRow, Note, Screen, Section, Segment, SmallSections } from "../src/ui";
+import { Back, Button, Card, colors, Field, LoadError, MenuRow, Note, Screen, Section, Segment, SmallSections, ToggleRow } from "../src/ui";
 import { useSession } from "../src/session";
-import { useTheme } from "../src/theme";
+import { setMotionMode, useMotionMode, useTheme } from "../src/theme";
 
 type Household = {
   role: string;
@@ -15,6 +15,7 @@ type Household = {
 export default function SettingsScreen() {
   const { state, signOut, lock, refresh } = useSession();
   const { mode, setMode } = useTheme();
+  const motion = useMotionMode();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [csv, setCsv] = useState("");
@@ -89,6 +90,13 @@ export default function SettingsScreen() {
             ]}
           />
         </View>
+        <ToggleRow
+          divided
+          label="Expressive motion"
+          detail="Numbers roll, charts draw in and sheets spring. Turn off for simple fades."
+          on={motion === "expressive"}
+          onPress={() => setMotionMode(motion === "expressive" ? "calm" : "expressive")}
+        />
       </Card>
 
       <Section title="Household" />
