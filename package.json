@@ -8,7 +8,8 @@
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint",
     "icons": "node scripts/generate-icons.mjs",
-    "smoke": "node --experimental-strip-types scripts/smoke.mjs"
+    "smoke": "node --experimental-strip-types scripts/smoke.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -37,6 +38,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.25",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
