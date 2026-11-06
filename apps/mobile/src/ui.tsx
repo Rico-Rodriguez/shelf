@@ -444,10 +444,13 @@ export function Field({
   placeholder,
   keyboardType,
   multiline,
+  onSubmit,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
+  /** Runs when the keyboard's return key is pressed. */
+  onSubmit?: () => void;
   secureTextEntry?: boolean;
   /** Masked Shelf key. It is not a password, so the phone must not offer to save it. */
   shelfKey?: boolean;
@@ -469,6 +472,8 @@ export function Field({
           secureTextEntry={secret && !shown}
           placeholder={placeholder}
           keyboardType={shelfKey ? "default" : keyboardType}
+          returnKeyType={onSubmit ? "done" : undefined}
+          onSubmitEditing={onSubmit}
           multiline={multiline}
           autoCapitalize="none"
           autoCorrect={shelfKey ? false : undefined}
@@ -1910,7 +1915,7 @@ export function SheetContainer({
           }}
           style={[
             styles.sheet,
-            keyboard ? { marginBottom: keyboard } : null,
+            keyboard ? { marginBottom: keyboard, maxHeight: Math.max(240, screenHeight - keyboard - insets.top - 12) } : null,
             fit ? null : minHeight ? { minHeight } : null,
             fit ? null : height ? { height } : null,
             origin && !metrics && !reduceMotion ? { opacity: 0 } : null,
