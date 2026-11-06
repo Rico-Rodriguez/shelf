@@ -6,6 +6,7 @@ import {
   billsCountedInMonth,
   billsStillDueCents,
   budgetPace,
+  paceWords,
   dashboardPath,
   dayLabel,
   expectedPaceCents,
@@ -345,7 +346,7 @@ export default function HomeScreen() {
               label={scrub ? shortDate(scrub.date) : "Left to spend"}
               cents={scrub ? scrub.cents : leftCents}
               tone={!scrub && leftCents < 0 ? "bad" : undefined}
-              status={{ label: pace.label, tone: pace.tone }}
+              status={{ label: paceWords(pace.label), tone: pace.tone }}
               points={shownDash.spendSeries}
               reference={{ cents: paceCents, label: "Pace" }}
               onScrub={setScrub}

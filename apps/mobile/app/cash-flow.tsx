@@ -1,8 +1,10 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { api } from "../src/api";
-import { money, periodRange } from "../src/format";
+import { money, periodLabel, periodRange, signed } from "../src/format";
+import { tapPress } from "../src/haptic";
+import { Icon } from "../src/icons";
 import { Back, Card, colors, Facts, Hero, LoadError, Loading, Screen, Section, Segment } from "../src/ui";
 
 type Point = { key: string; income: number; spending: number; savings: number };
@@ -56,7 +58,7 @@ export default function CashFlowScreen() {
       {series ? (
         <>
           <Hero
-            label="Saved"
+            label={visible.length ? `Saved · ${periodLabel(visible[0].key)} – ${periodLabel(visible[visible.length - 1].key)}` : "Saved"}
             cents={savings}
             signed
             tone={savings < 0 ? "bad" : savings > 0 ? "good" : undefined}
@@ -73,18 +75,46 @@ export default function CashFlowScreen() {
           <Section title="Periods" />
           <Card>
             {visible.length === 0 ? <Text style={{ color: colors.muted, padding: 16 }}>Nothing in this range.</Text> : null}
-            {visible.map((row) => {
+            {visible.map((row, index) => {
               const range = periodRange(row.key);
               return (
-                <Text
+                <Pressable
                   key={row.key}
+                  disabled={!range}
+                  onPressIn={tapPress}
                   onPress={() => {
                     if (range) router.push({ pathname: "/(app)/activity", params: range });
                   }}
-                  style={{ minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: colors.ink, borderTopWidth: 1, borderTopColor: colors.line }}
+                  style={({ pressed }) => ({
+                    minHeight: 52,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    borderTopWidth: index ? 1 : 0,
+                    borderTopColor: colors.line,
+                    backgroundColor: pressed ? colors.fill : "transparent",
+                  })}
                 >
-                  {`${row.key}  ${row.savings < 0 ? "-" : ""}${money(Math.abs(row.savings))}`}
-                </Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "500", color: colors.ink }}>{periodLabel(row.key)}</Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, fontVariant: ["tabular-nums"] }}>
+                      {`In ${money(row.income)} · Out ${money(row.spending)}`}
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: "600",
+                      fontVariant: ["tabular-nums"],
+                      color: row.savings < 0 ? colors.danger : row.savings > 0 ? colors.positive : colors.ink,
+                    }}
+                  >
+                    {signed(row.savings)}
+                  </Text>
+                  {range ? <Icon name="chevron" size={14} color={colors.tertiary} /> : null}
+                </Pressable>
               );
             })}
           </Card>
