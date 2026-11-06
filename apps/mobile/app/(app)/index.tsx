@@ -3,10 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { load as read, peek, subscribeCache } from "../../src/api";
 import { dashboardPath, dayLabel, flowMoney, money, shortDate } from "../../src/format";
-import { useFlightArrival, useFlightClock, useFlightHidden, useMeasuredAnchor, playFlight } from "../../src/flight";
+import { useFlightClock, useFlightHidden, useMeasuredAnchor } from "../../src/flight";
 import { tapPress, tapSelect } from "../../src/haptic";
 import { Icon } from "../../src/icons";
-import { islandSitPlan, markIslandSat, onIslandSit } from "../../src/island";
 import { mergeDashboard, subscribeLive } from "../../src/live-edits";
 import { buildPeriod, MONTHS_OF_HISTORY, RANGES, valueAt, type Monthly, type Range } from "../../src/periods";
 import { useReduceMotion, useTheme } from "../../src/theme";
@@ -81,13 +80,6 @@ export default function HomeScreen() {
   useEffect(() => subscribeCache<Dash>(dashPath, (next) => next && setData(next)), [dashPath]);
   const shown = useMemo(() => (data ? mergeDashboard(data) : null), [data, liveTick]);
 
-  useFlightArrival("island-sit", reduceMotion);
-  useEffect(() => {
-    return onIslandSit((arrival) => {
-      markIslandSat(arrival.id);
-      playFlight(islandSitPlan(arrival, colors.tertiary), reduceMotion);
-    });
-  }, [reduceMotion]);
 
   const period = useMemo(
     () =>
