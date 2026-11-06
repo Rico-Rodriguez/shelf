@@ -220,7 +220,7 @@ export function ChargeSheet({
 
   return (
     <Sheet
-      title={pickingCategory ? "Select Category" : merchantName}
+      title={pickingCategory ? "Choose a category" : merchantName}
       onClose={pickingCategory ? () => setPickingCategory(false) : onClose}
       origin={pickingCategory ? null : origin}
       originAnchor={pickingCategory ? undefined : originAnchor}
@@ -466,7 +466,7 @@ export function ChargeSheet({
         </View>
       ) : null}
 
-      <Button label="Save Changes" onPress={() => void save()} busy={busy} block />
+      <Button label="Save changes" onPress={() => void save()} busy={busy} block />
     </>
   )}
 </Sheet>

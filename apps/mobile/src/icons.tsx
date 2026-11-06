@@ -37,6 +37,7 @@ export function Icon({
   if (name === "gear") return <Gear size={size} color={color} />;
   if (name === "bell") return <Bell size={size} color={color} />;
   if (name === "calendar") return <Calendar size={size} color={color} />;
+  if (name === "filter" || name === "sliders") return <Glyph size={size} color={color} d="M4 7h16M7 12h10M10 17h4" />;
   if (name === "flag") return <Glyph size={size} color={color} d="M6 20.5V4.5h11l-2.6 4 2.6 4H6" />;
   if (name === "spark") return <Glyph size={size} color={color} d="M4 16.5 9 11l3.2 3L20 6.5" />;
   if (name === "check") {
@@ -184,10 +185,12 @@ function Gear({ size, color }: { size: number; color: string }) {
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={STROKE} fill="none" />
       <Path
-        d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
         stroke={color}
         strokeWidth={STROKE}
-        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        transform="translate(1.2 1.2) scale(0.9)"
       />
     </Svg>
   );

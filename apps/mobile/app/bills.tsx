@@ -309,8 +309,8 @@ export default function BillsScreen() {
         <Hero label="Due this month" cents={outflow} points={points.length > 1 ? points : undefined} figureAnchor="bills.hero">
           <Facts
             items={[
-              { kicker: "Typical Monthly", value: money(monthlyBills) },
-              ...(next ? [{ kicker: "Next Due", value: `${next.merchantName} (${inDaysPhrase(next.date)})` }] : []),
+              { kicker: "Typical month", value: money(monthlyBills) },
+              ...(next ? [{ kicker: "Next due", value: `${next.merchantName} (${inDaysPhrase(next.date)})` }] : []),
             ]}
           />
         </Hero>
@@ -351,7 +351,7 @@ export default function BillsScreen() {
                 <Text style={{ fontSize: 16, color: colors.ink }}>{draft.merchantName}</Text>
                 <Text style={{ fontSize: 13, color: colors.muted }}>{`${CADENCE_LABEL[draft.cadence] ?? draft.cadence} · next ${draft.nextDate}`}</Text>
               </View>
-              <Text style={{ fontWeight: "600" }}>{money(draft.amountCents)}</Text>
+              <Text style={{ fontWeight: "600", color: colors.ink }}>{money(draft.amountCents)}</Text>
               <Button label="Skip" tone="quiet" onPress={() => void skip(draft)} />
             </View>
           ))}
@@ -380,7 +380,7 @@ export default function BillsScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getCategoryColor(categories.find((c) => c.id === form.categoryId)) }} />
               <Text style={{ fontSize: 16, color: colors.ink }}>
-                {categories.find((row) => row.id === form.categoryId)?.name ?? "Select Category"}
+                {categories.find((row) => row.id === form.categoryId)?.name ?? "Choose a category"}
               </Text>
             </View>
             <Text style={{ color: colors.muted, fontSize: 13, fontWeight: "600" }}>Change ›</Text>
@@ -391,7 +391,7 @@ export default function BillsScreen() {
           {picking === "account" ? (
             <Card>
               <Pressable onPress={() => { setForm({ ...form, accountId: "" }); setPicking(null); }} style={choice}>
-                <Text>Any account</Text>
+                <Text style={{ color: form.accountId ? colors.ink : colors.accentInk }}>Any account</Text>
               </Pressable>
               {accounts.map((account) => (
                 <Pressable key={account.id} onPress={() => { setForm({ ...form, accountId: account.id }); setPicking(null); }} style={choice}>
@@ -420,7 +420,7 @@ export default function BillsScreen() {
       ) : null}
 
       {picking === "category" ? (
-        <Sheet title="Select Category" onClose={() => setPicking(null)}>
+        <Sheet title="Choose a category" onClose={() => setPicking(null)}>
           <CategoryPicker
             groups={groups}
             selected={form.categoryId}

@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Share, View } from "react-native";
+import { Share, Text, View } from "react-native";
 import { api, apiText } from "../src/api";
-import { Back, Button, Card, Field, LoadError, MenuRow, Note, Screen, Section, Segment } from "../src/ui";
+import { Icon } from "../src/icons";
+import { Back, Button, Card, colors, Field, LoadError, MenuRow, Note, Screen, Section, Segment, SmallSections } from "../src/ui";
 import { useSession } from "../src/session";
 import { useTheme } from "../src/theme";
 
@@ -71,6 +72,7 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings" refresh={<Back />}>
+      <SmallSections value="small">
       {message ? <Note>{message}</Note> : null}
       {sampleError ? <LoadError message={sampleError} onRetry={demo ? clearSample : loadSample} /> : null}
 
@@ -91,21 +93,28 @@ export default function SettingsScreen() {
 
       <Section title="Household" />
       <Card>
-        {(home?.members ?? []).map((member, index) => (
-          <MenuRow
-            key={member.userId}
-            divided={index > 0}
-            title={home && home.members.length > 1 ? `${member.name} · ${member.role}` : member.name}
-            onPress={
-              home?.role === "owner" && member.role !== "owner"
-                ? () => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))
-                : () => undefined
-            }
-          />
-        ))}
+        {(home?.members ?? []).map((member, index) => {
+          const removable = home?.role === "owner" && member.role !== "owner";
+          return (
+            <MenuRow
+              key={member.userId}
+              divided={index > 0}
+              title={member.name}
+              subtitle={member.name.toLowerCase() === member.role.toLowerCase() ? undefined : member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+              plain
+              trailing={removable ? <Text style={{ fontSize: 15, fontWeight: "500", color: colors.danger }}>Remove</Text> : undefined}
+              onPress={
+                removable
+                  ? () => void api("/api/household", { method: "DELETE", body: JSON.stringify({ userId: member.userId }) }).then(() => api<Household>("/api/household").then(setHome))
+                  : () => undefined
+              }
+            />
+          );
+        })}
         {home?.role === "owner" ? (
           <MenuRow
             divided={(home.members ?? []).length > 0}
+            icon="plus"
             title="Invite someone"
             onPress={() =>
               void api<{ code: string }>("/api/household/invites", { method: "POST", body: JSON.stringify({ role: "member" }) }).then((res) =>
@@ -117,36 +126,39 @@ export default function SettingsScreen() {
         {!home ? <Note>Household</Note> : null}
       </Card>
 
-      <Section title="Sample" />
+      <Section title="Data" />
       <Card>
+        <MenuRow title="Rules" subtitle="File new purchases automatically" icon="list" onPress={() => router.push("/rules")} />
+        <MenuRow title="Export as JSON" icon="flow" divided onPress={() => void shareExport("json")} />
+        <MenuRow title="Export as CSV" icon="flow" divided onPress={() => void shareExport("csv")} />
         {demo ? (
           <MenuRow
             title={sampleBusy === "clear" ? "Removing sample data" : "Remove sample data"}
             danger
+            divided
             onPress={clearSample}
           />
         ) : (
           <MenuRow
             title={sampleBusy === "load" ? "Loading sample data" : "Load sample data"}
+            icon="spark"
+            divided
             onPress={loadSample}
           />
         )}
       </Card>
-      <Section title="Rules" />
-      <Card>
-        <MenuRow title="Manage rules" icon="list" onPress={() => router.push("/rules")} />
-      </Card>
 
-      <Section title="Export" />
-      <Card>
-        <MenuRow title="JSON" onPress={() => void shareExport("json")} />
-        <MenuRow title="CSV" divided onPress={() => void shareExport("csv")} />
-      </Card>
-
-      <Section title="Import" />
+      <Section title="Import a CSV" />
       <Card>
         {accounts.map((account, index) => (
-          <MenuRow key={account.id} divided={index > 0} title={account.name} active={accountId === account.id} onPress={() => setAccountId(account.id)} />
+          <MenuRow
+            key={account.id}
+            divided={index > 0}
+            title={account.name}
+            plain
+            trailing={accountId === account.id ? <Icon name="check" size={18} color={colors.accentInk} /> : undefined}
+            onPress={() => setAccountId(account.id)}
+          />
         ))}
         <View style={{ padding: 16, gap: 12 }}>
           <Field label="CSV to import" value={csv} onChangeText={setCsv} multiline />
@@ -177,9 +189,10 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <MenuRow title="Lock" onPress={() => void lock().then(() => router.replace("/"))} />
+        <MenuRow title="Lock Shelf" plain onPress={() => void lock().then(() => router.replace("/"))} />
         <MenuRow title="Sign out" danger divided onPress={() => void signOut().then(() => router.replace("/"))} />
       </Card>
+      </SmallSections>
     </Screen>
   );
 }

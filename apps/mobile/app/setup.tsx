@@ -33,12 +33,12 @@ export default function SetupScreen() {
 
   return (
     <Screen
-      title="Create Key"
+      title="Create a key"
       subtitle="Choose a key of at least 12 characters to secure your data."
     >
       <Field label="Shelf key" value={password} onChangeText={setPassword} shelfKey />
       {error ? <Note tone="danger">{error}</Note> : null}
-      <Button label="Create Shelf" onPress={() => void submit()} busy={busy} />
+      <Button label="Create key" onPress={() => void submit()} busy={busy} />
     </Screen>
   );
 }

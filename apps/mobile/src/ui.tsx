@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
@@ -59,39 +59,6 @@ export function Back({ label = "Back", onPress }: { label?: string; onPress?: ()
       <Icon name="chevron-left" size={18} color={palette.ink} />
       <Text style={styles.back}>{label}</Text>
     </Pressable>
-  );
-}
-
-export function AmbientLiquidGlow({ isDark }: { isDark: boolean }) {
-  return (
-    <View style={[StyleSheet.absoluteFill, { overflow: "hidden", opacity: 0.45 }]} pointerEvents="none">
-      {/* Top luminous ambient light pool - whisper-quiet and diffused */}
-      <View
-        style={{
-          position: "absolute",
-          top: -160,
-          right: -80,
-          width: 420,
-          height: 420,
-          borderRadius: 210,
-          backgroundColor: isDark ? "rgba(16, 185, 129, 0.04)" : "rgba(16, 185, 129, 0.025)",
-          transform: [{ scaleX: 1.5 }],
-        }}
-      />
-      {/* Subtle bottom-left soft ambient pool */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: -60,
-          left: -100,
-          width: 380,
-          height: 380,
-          borderRadius: 190,
-          backgroundColor: isDark ? "rgba(255, 255, 255, 0.015)" : "rgba(20, 24, 31, 0.012)",
-          transform: [{ scaleY: 1.2 }],
-        }}
-      />
-    </View>
   );
 }
 
@@ -158,14 +125,17 @@ export function Screen({
   const hasPinnedNav = !framed && Boolean(refresh);
 
   const topPadding = framed
-    ? insets.top + 54
+    ? insets.top + 52 + 12
     : hasPinnedNav
-      ? insets.top + 52
-      : insets.top + 16;
+      ? insets.top + 52 + 12
+      : insets.top + 24;
 
   const bottomPadding = framed
-    ? Math.max(insets.bottom + 88, 110)
-    : Math.max(insets.bottom + 24, 40);
+    ? Math.max(insets.bottom + 100, 120)
+    : Math.max(insets.bottom + 32, 48);
+
+  // Tab screens get their title from the pinned tab header, so only their actions show here.
+  const toolbar = framed && action ? <View style={styles.toolbar}>{action}</View> : null;
 
   const pinnedNav = hasPinnedNav ? (
     <View
@@ -177,8 +147,8 @@ export function Screen({
         zIndex: 50,
         paddingTop: insets.top,
         backgroundColor: reduceTransparency ? palette.bg : palette.navBg,
-        borderBottomWidth: 1,
-        borderBottomColor: palette.specularBottom || palette.glassBorderSubtle,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: palette.line,
         overflow: "hidden",
       }}
     >
@@ -189,7 +159,7 @@ export function Screen({
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View style={{ minHeight: 46, justifyContent: "center", alignItems: "center" }}>
+      <View style={{ height: 52, justifyContent: "center", alignItems: "center" }}>
         {title ? (
           <View
             pointerEvents="none"
@@ -228,14 +198,14 @@ export function Screen({
   if (!scrollable) {
     return (
       <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
-        {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
         {pinnedNav}
         <ScrollLockProvider value={setScrollLocked}>
           <View style={{ flex: 1, paddingTop: topPadding }}>
             {!hasPinnedNav && !framed && refresh ? <View style={{ paddingHorizontal: 16, marginBottom: -8 }}>{refresh}</View> : null}
+            {toolbar ? <View style={{ paddingHorizontal: 16 }}>{toolbar}</View> : null}
             {hasPinnedNav ? (
               subtitle ? <Text style={[styles.subtitle, { paddingHorizontal: 16, marginBottom: 8 }]}>{subtitle}</Text> : null
-            ) : title ? (
+            ) : title && !framed ? (
               <View style={[styles.header, { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 }]}>
                 <View style={{ flexShrink: 1, justifyContent: "center" }}>
                   <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
@@ -254,7 +224,6 @@ export function Screen({
 
   const body = (
     <Animated.View style={[styles.safe, { opacity: bodyFade }]}>
-      {!reduceTransparency ? <AmbientLiquidGlow isDark={isDark} /> : null}
       {pinnedNav}
       <ScrollLockProvider value={setScrollLocked}>
         <ScrollView
@@ -270,15 +239,16 @@ export function Screen({
                 refreshing={refreshing}
                 onRefresh={pull}
                 tintColor={colors.ink}
-                progressViewOffset={hasPinnedNav ? insets.top + 46 : framed ? insets.top + 50 : 0}
+                progressViewOffset={hasPinnedNav || framed ? insets.top + 52 : 0}
               />
             ) : undefined
           }
         >
           {!hasPinnedNav && !framed && refresh ? <View style={{ marginBottom: -8 }}>{refresh}</View> : null}
+          {toolbar}
           {hasPinnedNav ? (
             subtitle ? <Text style={[styles.subtitle, { marginBottom: 8 }]}>{subtitle}</Text> : null
-          ) : title ? (
+          ) : title && !framed ? (
             <View style={styles.header}>
               <View style={{ flexShrink: 1, justifyContent: "center" }}>
                 <Text style={[styles.title, title === "Shelf" ? { fontFamily: wordmark, fontWeight: "600" } : null]}>{title}</Text>
@@ -592,15 +562,35 @@ export function Button({
   );
 }
 
-export function Section({ title, action, onAction, trailing }: { title: string; action?: string; onAction?: () => void; trailing?: string }) {
+/** Section headers are page titles on a screen and quiet labels inside a sheet or a dated list. */
+const SectionSize = createContext<"large" | "small">("large");
+export const SmallSections = SectionSize.Provider;
+
+export function Section({
+  title,
+  action,
+  onAction,
+  trailing,
+  size,
+}: {
+  title: string;
+  action?: string;
+  onAction?: () => void;
+  trailing?: string;
+  size?: "large" | "small";
+}) {
   const styles = useStyles();
+  const inherited = useContext(SectionSize);
+  const small = (size ?? inherited) === "small";
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={[styles.section, small ? styles.sectionSmall : null]}>
+      <Text accessibilityRole="header" style={small ? styles.sectionTitleSmall : styles.sectionTitle} numberOfLines={1}>
+        {title}
+      </Text>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 12 }}>
-        {trailing ? <Text style={styles.sectionTrail}>{trailing}</Text> : null}
+        {trailing ? <Text style={small ? styles.sectionTrailSmall : styles.sectionTrail}>{trailing}</Text> : null}
         {action && onAction ? (
-          <Pressable onPress={onAction} hitSlop={8}>
+          <Pressable onPress={onAction} hitSlop={12} accessibilityRole="button">
             <Text style={styles.sectionAction}>{action}</Text>
           </Pressable>
         ) : null}
@@ -746,10 +736,13 @@ export function MenuRow({
   active,
   compact,
   trailing,
+  plain,
 }: {
   title: string;
   subtitle?: string;
   icon?: string;
+  /** No chevron: the row shows information or acts in place. */
+  plain?: boolean;
   onPress: () => void;
   divided?: boolean;
   danger?: boolean;
@@ -784,8 +777,41 @@ export function MenuRow({
         ) : null}
       </View>
       {trailing}
-      {danger ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
+      {danger || plain ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
     </Pressable>
+  );
+}
+
+/** A centered empty state: a glyph, one line on what is missing, and the next step. */
+export function EmptyState({
+  icon,
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  body?: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <View style={{ alignItems: "center", paddingVertical: 40, paddingHorizontal: 24, gap: 10 }}>
+      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: palette.fill, alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+        <Icon name={icon} size={24} color={palette.muted} />
+      </View>
+      <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: "700", letterSpacing: -0.5, color: palette.ink, textAlign: "center" }}>
+        {title}
+      </Text>
+      {body ? <Text style={{ fontSize: 15, lineHeight: 21, color: palette.muted, textAlign: "center", maxWidth: 300 }}>{body}</Text> : null}
+      {action && onAction ? (
+        <View style={{ marginTop: 8 }}>
+          <Button label={action} onPress={onAction} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -1444,13 +1470,6 @@ export function GlassIconButton({
       ]}
       hitSlop={8}
     >
-      {!reduceTransparency && !active ? (
-        <BlurView
-          intensity={isDark ? 50 : 65}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       <Icon name={icon} size={iconSize} color={color || (active ? palette.accentInk : palette.ink)} />
     </Pressable>
   );
@@ -1493,13 +1512,6 @@ export function GlassButton({
       ]}
       hitSlop={8}
     >
-      {!reduceTransparency && !isPrimary && !isAccent ? (
-        <BlurView
-          intensity={isDark ? 50 : 65}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       {icon ? <Icon name={icon} size={compact ? 13 : 15} color={isPrimary ? palette.controlInk : isAccent ? palette.accentInk : palette.ink} /> : null}
       <Text
         style={[
@@ -1536,13 +1548,6 @@ export function MonthNav({
 
   return (
     <View style={styles.monthNav}>
-      {!reduceTransparency ? (
-        <BlurView
-          intensity={isDark ? 50 : 65}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       <Pressable
         accessibilityLabel="Previous month"
         onPress={() => {
@@ -1600,13 +1605,6 @@ export function ReviewBanner({
       }}
       style={({ pressed }) => [styles.banner, pressed ? { opacity: 0.88, transform: [{ scale: 0.985 }] } : null]}
     >
-      {!reduceTransparency ? (
-        <BlurView
-          intensity={palette.scheme === "dark" ? 55 : 70}
-          tint={palette.blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
       <View style={styles.bannerIconWrap}>
         <Icon name="tag" size={17} color={colors.accentInk} />
       </View>
@@ -1987,7 +1985,9 @@ export function SheetContainer({
             ) : null}
           </View>
           {fit ? (
-            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}>{children}</View>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 12) }}>
+              <SmallSections value="small">{children}</SmallSections>
+            </View>
           ) : scrollable ? (
             <ScrollView
               style={{ flex: 1 }}
@@ -1995,11 +1995,11 @@ export function SheetContainer({
               keyboardDismissMode="on-drag"
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom + 24, 40), gap: 14 }}
             >
-              {children}
+              <SmallSections value="small">{children}</SmallSections>
             </ScrollView>
           ) : (
             <View style={{ flex: 1, paddingBottom: Math.max(insets.bottom + 16, 24) }}>
-              {children}
+              <SmallSections value="small">{children}</SmallSections>
             </View>
           )}
           </Animated.View>
@@ -2240,7 +2240,7 @@ export function EnvelopesGlance({
   return (
     <View style={{ gap: 8 }}>
       <Section
-        title="Category Envelopes"
+        title="Category envelopes"
         action="View plan"
         onAction={onViewAll}
       />
@@ -3006,7 +3006,7 @@ function makeStyles(colors: Palette) {
   const isDark = colors.scheme === "dark";
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
-    scroll: { padding: 16, paddingBottom: 100, gap: 20 },
+    scroll: { paddingHorizontal: 16, paddingBottom: 100, gap: 24 },
     header: {
       flexDirection: "row",
       alignItems: "center",
@@ -3014,6 +3014,14 @@ function makeStyles(colors: Palette) {
       gap: 12,
       minHeight: 40,
       marginBottom: 2,
+    },
+    toolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+      minHeight: 40,
+      marginBottom: -8,
     },
     headerAction: {
       flexDirection: "row",
@@ -3029,34 +3037,25 @@ function makeStyles(colors: Palette) {
       marginLeft: -4,
     },
     back: { color: colors.ink, fontSize: 16, fontWeight: "500", letterSpacing: -0.2 },
-    title: { fontSize: 26, fontWeight: "700", letterSpacing: -0.7, color: colors.ink },
-    subtitle: { marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.muted, letterSpacing: -0.1 },
+    title: { fontSize: 34, lineHeight: 40, fontWeight: "700", letterSpacing: -0.9, color: colors.ink },
+    subtitle: { marginTop: 4, fontSize: 15, lineHeight: 20, color: colors.muted, letterSpacing: -0.2 },
     card: {
       backgroundColor: colors.card,
-      borderRadius: 20,
+      borderRadius: 18,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderColor: colors.line,
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.22 : 0.03,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 2,
     },
     cardProminent: {
-      borderColor: colors.lineStrong,
-      shadowOpacity: isDark ? 0.32 : 0.06,
-      shadowRadius: 14,
-      shadowOffset: { width: 0, height: 5 },
-      elevation: 3,
+      shadowColor: "#000",
+      shadowOpacity: isDark ? 0 : 0.05,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
     },
     groupedCard: {
       backgroundColor: colors.card,
       borderRadius: 18,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderColor: colors.line,
       overflow: "hidden",
     },
     glassCard: {
@@ -3084,18 +3083,15 @@ function makeStyles(colors: Palette) {
       elevation: 5,
     },
     cardInset: {
-      backgroundColor: colors.cardInset,
-      borderColor: colors.line,
+      backgroundColor: isDark ? colors.fill : colors.cardInset,
       borderCurve: "continuous",
     },
     field: { gap: 6 },
-    label: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
+    label: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
     input: {
-      backgroundColor: isDark ? "rgba(24, 28, 36, 0.85)" : "rgba(235, 238, 242, 0.85)",
-      borderRadius: 14,
+      backgroundColor: colors.fill,
+      borderRadius: 12,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderColor: colors.line,
       paddingHorizontal: 15,
       paddingVertical: 13,
       fontSize: 16,
@@ -3107,35 +3103,23 @@ function makeStyles(colors: Palette) {
       backgroundColor: colors.control,
       borderRadius: 999,
       borderCurve: "continuous",
-      minHeight: 46,
-      paddingHorizontal: 20,
+      minHeight: 50,
+      paddingHorizontal: 22,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: isDark ? 0.25 : 0.1,
-      shadowRadius: 8,
-      elevation: 2,
     },
     buttonBlock: { alignSelf: "stretch" },
     quiet: {
-      backgroundColor: colors.glass,
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
-      shadowOpacity: isDark ? 0.15 : 0.04,
+      backgroundColor: colors.fill,
       overflow: "hidden",
     },
     danger: { backgroundColor: colors.danger },
-    buttonText: { color: colors.controlInk, fontSize: 15, fontWeight: "600", letterSpacing: -0.2 },
+    buttonText: { color: colors.controlInk, fontSize: 16, fontWeight: "600", letterSpacing: -0.3 },
     quietText: { color: colors.ink },
     row: {
-      backgroundColor: colors.glass,
+      backgroundColor: colors.card,
       borderRadius: 20,
       borderCurve: "continuous",
-      borderWidth: 1,
       borderColor: colors.line,
       paddingHorizontal: 16,
       minHeight: 56,
@@ -3143,27 +3127,26 @@ function makeStyles(colors: Palette) {
       justifyContent: "space-between",
       alignItems: "center",
       gap: 12,
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.2 : 0.03,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
     },
-    section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: -4, marginTop: 4 },
-    sectionTitle: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },
-    sectionTrail: { fontSize: 15, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
-    sectionAction: { fontSize: 15, fontWeight: "600", color: colors.accentInk, letterSpacing: -0.2 },
+    section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12, paddingHorizontal: 4, marginBottom: -2 },
+    sectionTitle: { flexShrink: 1, fontSize: 20, lineHeight: 25, fontWeight: "700", color: colors.ink, letterSpacing: -0.5 },
+    sectionSmall: { marginBottom: -6 },
+    sectionTitleSmall: { flexShrink: 1, fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1 },
+    sectionTrailSmall: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, fontVariant: ["tabular-nums"] },
+    sectionTrail: { fontSize: 15, fontWeight: "500", color: colors.muted, letterSpacing: -0.2, fontVariant: ["tabular-nums"] },
+    sectionAction: { fontSize: 15, fontWeight: "500", color: colors.accentInk, letterSpacing: -0.2 },
     ledger: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      minHeight: 58,
+      minHeight: 60,
       paddingHorizontal: 16,
-      paddingVertical: 11,
+      paddingVertical: 12,
       position: "relative",
     },
     ledgerCompact: {
-      minHeight: 44,
-      paddingVertical: 6,
+      minHeight: 50,
+      paddingVertical: 8,
     },
     hairline: {
       position: "absolute",
@@ -3172,29 +3155,18 @@ function makeStyles(colors: Palette) {
       height: StyleSheet.hairlineWidth,
       backgroundColor: colors.line,
     },
-    menuGlyph: { width: 34, height: 34, borderRadius: 10, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
+    menuGlyph: { width: 32, height: 32, borderRadius: 9, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
     divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
     ledgerCopy: { flex: 1, gap: 2 },
-    meta: { fontSize: 13, color: colors.tertiary, letterSpacing: -0.1 },
+    meta: { fontSize: 13, lineHeight: 17, color: colors.muted, letterSpacing: -0.1 },
     amount: { fontSize: 16, fontWeight: "600", color: colors.ink, letterSpacing: -0.3, fontVariant: ["tabular-nums"] },
-    rowTitle: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink, letterSpacing: -0.2 },
+    rowTitle: { flex: 1, fontSize: 16, lineHeight: 21, fontWeight: "500", color: colors.ink, letterSpacing: -0.3 },
     rowDetail: { fontSize: 15, color: colors.muted, letterSpacing: -0.1 },
     note: { color: colors.muted, fontSize: 15, lineHeight: 21, letterSpacing: -0.1 },
     loading: { paddingVertical: 24, alignItems: "center", gap: 8 },
     hero: {
-      backgroundColor: colors.card,
-      borderRadius: 24,
-      borderCurve: "continuous",
-      borderWidth: 1,
-      borderColor: colors.line,
-      overflow: "hidden",
-      paddingTop: 20,
-      paddingHorizontal: 20,
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.28 : 0.04,
-      shadowRadius: 14,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 3,
+      paddingTop: 8,
+      paddingHorizontal: 4,
     },
     heroGlass: {
       backgroundColor: colors.glassProminent,
@@ -3244,46 +3216,34 @@ function makeStyles(colors: Palette) {
       fontVariant: ["tabular-nums"],
     },
     heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-    heroLabel: { fontSize: 13, fontWeight: "600", color: colors.muted, letterSpacing: -0.1, textTransform: "uppercase" },
-    heroFigure: { marginTop: 4, fontSize: 46, fontWeight: "700", letterSpacing: -2, color: colors.ink, fontVariant: ["tabular-nums"] },
+    heroLabel: { fontSize: 15, fontWeight: "500", color: colors.muted, letterSpacing: -0.2 },
+    heroFigure: { marginTop: 2, fontSize: 46, fontWeight: "700", letterSpacing: -1.8, color: colors.ink, fontVariant: ["tabular-nums"] },
     heroEmpty: { fontSize: 28, fontWeight: "500", letterSpacing: -0.6, color: colors.muted },
-    heroFooter: { marginHorizontal: -20, marginTop: 14, paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, fontSize: 13, color: colors.muted },
-    status: { fontSize: 13, fontWeight: "600", color: colors.muted },
+    heroFooter: { marginTop: 14, paddingHorizontal: 0, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, fontSize: 13, color: colors.muted },
+    status: { fontSize: 15, fontWeight: "600", color: colors.muted, letterSpacing: -0.2 },
     chartTag: { position: "absolute", fontSize: 10, fontWeight: "700", letterSpacing: 1, color: colors.tertiary, textTransform: "uppercase" },
     facts: {
-      marginHorizontal: -20,
-      marginTop: 6,
-      paddingHorizontal: 16,
+      marginTop: 8,
       paddingTop: 14,
-      paddingBottom: 16,
+      paddingBottom: 4,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.line,
       flexDirection: "row",
-      gap: 8,
+      gap: 12,
     },
-    kicker: { fontSize: 12, fontWeight: "600", color: colors.tertiary, letterSpacing: -0.1, textTransform: "uppercase" },
-    factValue: { fontSize: 16, fontWeight: "600", letterSpacing: -0.3, color: colors.ink, fontVariant: ["tabular-nums"] },
+    kicker: { fontSize: 13, fontWeight: "500", color: colors.muted, letterSpacing: -0.1 },
+    factValue: { fontSize: 17, fontWeight: "600", letterSpacing: -0.4, color: colors.ink, fontVariant: ["tabular-nums"] },
     mix: { flexDirection: "row", height: 8, gap: 2, backgroundColor: colors.fill, borderRadius: 99, overflow: "hidden" },
     track: { height: 6, borderRadius: 99, backgroundColor: colors.fill, overflow: "hidden" },
     monthNav: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.glass,
+      backgroundColor: colors.fill,
       borderRadius: 19,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       paddingHorizontal: 4,
       paddingVertical: 2,
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.25 : 0.05,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
     },
     monthBtn: {
       width: 28,
@@ -3314,18 +3274,8 @@ function makeStyles(colors: Palette) {
       paddingHorizontal: 12,
       borderRadius: 17,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
-      backgroundColor: colors.glass,
+      backgroundColor: colors.fill,
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.25 : 0.05,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
     },
     glassBtnText: {
       fontSize: 13,
@@ -3338,20 +3288,10 @@ function makeStyles(colors: Palette) {
       height: 34,
       borderRadius: 17,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
-      backgroundColor: colors.glass,
+      backgroundColor: colors.fill,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.25 : 0.05,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
     },
     banner: {
       minHeight: 60,
@@ -3359,21 +3299,11 @@ function makeStyles(colors: Palette) {
       paddingVertical: 12,
       borderRadius: 22,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
-      backgroundColor: colors.glass,
+      backgroundColor: colors.card,
       flexDirection: "row",
       alignItems: "center",
       gap: 14,
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.3 : 0.05,
-      shadowRadius: 14,
-      shadowOffset: { width: 0, height: 5 },
-      elevation: 3,
     },
     bannerIconWrap: {
       width: 38,
@@ -3410,22 +3340,12 @@ function makeStyles(colors: Palette) {
     searchWrap: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.glass,
+      backgroundColor: colors.fill,
       borderRadius: 16,
       borderCurve: "continuous",
-      borderWidth: 1,
-      borderTopColor: colors.specularTop || colors.glassBorder,
-      borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-      borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-      borderRightColor: colors.specularSides || colors.glassBorderSubtle,
       minHeight: 44,
       paddingHorizontal: 14,
       gap: 10,
-      shadowColor: "#000",
-      shadowOpacity: isDark ? 0.2 : 0.04,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
     },
     search: {
       flex: 1,

@@ -24,6 +24,7 @@ import {
   LoadError,
   Loading,
   MonthNav,
+  EmptyState,
   Note,
   ReviewBanner,
   Screen,
@@ -585,12 +586,12 @@ export default function ActivityScreen() {
         framed
         scrollable={false}
         action={
-          <GlassButton
-            label="Done"
-            onPress={closeReview}
-            compact
-            tone="accent"
-          />
+          <>
+            <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: "700", letterSpacing: -0.5, color: colors.ink }}>
+              Review
+            </Text>
+            <GlassButton label="Done" onPress={closeReview} tone="accent" />
+          </>
         }
       >
         <Animated.View style={[reviewStyle, { paddingHorizontal: 16, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 84, 102) }]}>
@@ -680,6 +681,17 @@ export default function ActivityScreen() {
           <Icon name="filter" size={18} color={colors.ink} />
           {filtered ? <View style={styles.filterDot} /> : null}
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a transaction"
+          onPress={() => {
+            tapPress();
+            setAdding(true);
+          }}
+          style={styles.filterButton}
+        >
+          <Icon name="plus" size={18} color={colors.ink} />
+        </Pressable>
       </View>
 
       {/* Liquid Glass Quick Filter Capsule */}
@@ -725,7 +737,7 @@ export default function ActivityScreen() {
               unreviewedOnly ? styles.quickPillTextActive : null,
             ]}
           >
-            Needs Review
+            To review
           </Text>
           {unreviewed > 0 ? (
             <View
@@ -777,7 +789,7 @@ export default function ActivityScreen() {
               range ? styles.quickPillTextActive : null,
             ]}
           >
-            This Month
+            This month
           </Text>
         </Pressable>
 
@@ -861,24 +873,12 @@ export default function ActivityScreen() {
       ) : null}
 
       {rows === null && !error ? <Loading /> : null}
-      {rows && grouped.length === 0 ? <Note>No matches. Try another search or clear a filter.</Note> : null}
+      {rows && grouped.length === 0 ? <EmptyState icon="search" title="No matches" body="Try another search or clear a filter." /> : null}
     </View>
   );
 
   return (
-    <Screen
-      title="Activity"
-      framed
-      scrollable={false}
-      action={
-        <GlassButton
-          label="Add"
-          icon="plus"
-          onPress={() => setAdding(true)}
-          compact
-        />
-      }
-    >
+    <Screen title="Activity" framed scrollable={false}>
       <FlatList
         data={flatData}
         keyExtractor={(item) => item.id}
@@ -895,7 +895,7 @@ export default function ActivityScreen() {
           if (item.type === "header") {
             return (
               <View style={{ backgroundColor: colors.bg, paddingTop: 10, paddingBottom: 6 }}>
-                <Section title={item.title} trailing={item.flowText} />
+                <Section size="small" title={item.title} trailing={item.flowText} />
               </View>
             );
           }
@@ -1447,21 +1447,12 @@ function makeStyles(colors: Palette) {
   filterButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 22,
     borderCurve: "continuous",
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderTopColor: colors.specularTop || colors.glassBorder,
-    borderBottomColor: colors.specularBottom || colors.glassBorderSubtle,
-    borderLeftColor: colors.specularSides || colors.glassBorderSubtle,
-    borderRightColor: colors.specularSides || colors.glassBorderSubtle,
+    backgroundColor: colors.fill,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
   },
   filterDot: {
     position: "absolute",
@@ -1516,28 +1507,17 @@ function makeStyles(colors: Palette) {
   },
   rowWrapper: {
     backgroundColor: colors.card,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: colors.line,
     overflow: "hidden",
   },
   rowFirst: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderCurve: "continuous",
-    borderTopWidth: 1,
-    borderTopColor: colors.specularTop || colors.line,
   },
   rowLast: {
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
     borderCurve: "continuous",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.specularBottom || colors.line,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
   },
   txRowInner: {
     flexDirection: "row",
@@ -1609,22 +1589,20 @@ function makeStyles(colors: Palette) {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 36,
+    paddingHorizontal: 14,
     borderRadius: 99,
     borderCurve: "continuous",
-    backgroundColor: colors.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)",
-    borderWidth: 1,
-    borderColor: colors.glassBorderSubtle,
+    backgroundColor: colors.fill,
   },
   quickPillActive: {
     backgroundColor: colors.control,
     borderColor: colors.control,
   },
   quickPillText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "500",
-    color: colors.muted,
+    color: colors.ink,
     letterSpacing: -0.1,
   },
   quickPillTextActive: {
