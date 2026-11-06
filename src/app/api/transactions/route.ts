@@ -123,7 +123,9 @@ export async function GET(request: Request) {
         .filter((tag): tag is (typeof tagRows)[number] => Boolean(tag)),
     }));
     const filtered = tag ? tagged.filter((row) => row.tags.some((item) => item.name.toLowerCase() === tag)) : tagged;
-    const page = filtered;
+    // Search and Needs Review return every match unless the caller asks for a page.
+    const paged = url.searchParams.has("limit") || url.searchParams.has("offset");
+    const page = wantAll && paged ? filtered.slice(offset, offset + limit) : filtered;
     const data = page.map(({ tx, tags: txTagRows }) => {
       const category = catRows.find((c) => c.id === tx.categoryId) ?? null;
       const group = category ? groupRows.find((g) => g.id === category.groupId) : null;
@@ -143,7 +145,15 @@ export async function GET(request: Request) {
 
     const now = yearMonth();
     const range = monthRange(now.year, now.month);
-    const history = (await db.select().from(transactions)).map((row) => openTx(row, dek));
+    // Needs Review ranks categories across all history. Every other list only needs this month for merchant totals.
+    const historyRows =
+      reviewed === "false"
+        ? await db.select().from(transactions)
+        : await db
+            .select()
+            .from(transactions)
+            .where(and(gte(transactions.date, range.start), lte(transactions.date, range.end)));
+    const history = historyRows.map((row) => openTx(row, dek));
     const names = new Set(data.map((tx) => tx.merchantName || tx.name));
     const totals: Record<string, { monthCents: number; count: number }> = {};
     const categoryCounts = new Map<string, number>();
