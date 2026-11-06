@@ -302,7 +302,7 @@ export function launchLeftToPlan(reduceMotion: boolean) {
           fontWeight: "700",
           from,
           toAnchor: "plan.left",
-          toFontSize: 38,
+          toFontSize: 46,
         },
       ],
     },
