@@ -5,7 +5,7 @@ import { CategoryPicker, ChargeGroup, getCategoryColor } from "../src/charge";
 import { goalPace, mediumDate, money, monthlyNeedCents } from "../src/format";
 import { goalPreview, useFlightClock, useFlightHidden, useMeasuredAnchor } from "../src/flight";
 import { celebrate } from "../src/toast";
-import { Back, Button, Card, colors, Field, GlassButton, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, EmptyState, Field, GlassButton, LoadError, Loading, Note, Progress, Screen, Segment, Sheet, Switch } from "../src/ui";
 
 type Goal = {
   id: string;
@@ -170,7 +170,7 @@ export default function GoalsScreen() {
       {error ? <LoadError message={error} onRetry={load} /> : null}
       {actionError ? <LoadError message={actionError.message} onRetry={actionError.retry} /> : null}
       {goals === null && !error ? <Loading /> : null}
-      {goals && goals.length === 0 ? <Note>No goals yet.</Note> : null}
+      {goals && goals.length === 0 ? <EmptyState icon="flag" title="No goals yet" body="Save toward something, or pay a card down, and see how far along you are." action="Add a goal" onAction={openNew} /> : null}
       {goals && goals.length ? (
         <Card>
           {goals.map((goal, index) => {
@@ -301,7 +301,7 @@ export default function GoalsScreen() {
       ) : null}
 
       {pickingCategory ? (
-        <Sheet title="Select Category" onClose={() => setPickingCategory(false)}>
+        <Sheet title="Choose a category" onClose={() => setPickingCategory(false)}>
           <Pressable
             onPress={() => {
               setForm({ ...form, categoryId: "" });

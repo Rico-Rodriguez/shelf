@@ -736,10 +736,13 @@ export function MenuRow({
   active,
   compact,
   trailing,
+  plain,
 }: {
   title: string;
   subtitle?: string;
   icon?: string;
+  /** No chevron: the row shows information or acts in place. */
+  plain?: boolean;
   onPress: () => void;
   divided?: boolean;
   danger?: boolean;
@@ -774,8 +777,41 @@ export function MenuRow({
         ) : null}
       </View>
       {trailing}
-      {danger ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
+      {danger || plain ? null : <Icon name="chevron" size={15} color={colors.tertiary} />}
     </Pressable>
+  );
+}
+
+/** A centered empty state: a glyph, one line on what is missing, and the next step. */
+export function EmptyState({
+  icon,
+  title,
+  body,
+  action,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  body?: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <View style={{ alignItems: "center", paddingVertical: 40, paddingHorizontal: 24, gap: 10 }}>
+      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: palette.fill, alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+        <Icon name={icon} size={24} color={palette.muted} />
+      </View>
+      <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: "700", letterSpacing: -0.5, color: palette.ink, textAlign: "center" }}>
+        {title}
+      </Text>
+      {body ? <Text style={{ fontSize: 15, lineHeight: 21, color: palette.muted, textAlign: "center", maxWidth: 300 }}>{body}</Text> : null}
+      {action && onAction ? (
+        <View style={{ marginTop: 8 }}>
+          <Button label={action} onPress={onAction} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -2204,7 +2240,7 @@ export function EnvelopesGlance({
   return (
     <View style={{ gap: 8 }}>
       <Section
-        title="Category Envelopes"
+        title="Category envelopes"
         action="View plan"
         onAction={onViewAll}
       />

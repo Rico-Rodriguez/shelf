@@ -1087,7 +1087,7 @@ export function ReviewDeck({
 
       {/* Category Picker Sheet Modal */}
       {picking ? (
-        <Sheet title="Select Category" onClose={() => setPicking(false)}>
+        <Sheet title="Choose a category" onClose={() => setPicking(false)}>
           <CategoryPicker
             groups={groups}
             selected={categoryId}

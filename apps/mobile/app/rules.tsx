@@ -1,8 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../src/api";
-import { Back, Button, Card, colors, Field, Loading, Note, Screen, Sheet, Switch } from "../src/ui";
+import { Back, Button, Card, colors, EmptyState, Field, GlassButton, Loading, Note, Screen, Sheet, Switch } from "../src/ui";
 
 type Rule = {
   id: string;
@@ -221,19 +221,22 @@ export default function RulesScreen() {
     <Screen
       title="Rules"
       refresh={<Back />}
-      action={<Button label="Add" onPress={() => { setForm(empty); setEditingId(null); setPreview(null); setPicking(null); setOpen(true); }} />}
+      action={<GlassButton label="Add" icon="plus" compact onPress={() => { setForm(empty); setEditingId(null); setPreview(null); setPicking(null); setOpen(true); }} />}
     >
       {error ? <Note>{error}</Note> : null}
       {rules === null && !error ? <Loading /> : null}
       {rules && rules.length === 0 ? (
-        <View style={{ gap: 12, alignItems: "center" }}>
-          <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>No rules yet</Text>
-          <Button label="Add a rule" onPress={() => setOpen(true)} />
-        </View>
+        <EmptyState
+          icon="list"
+          title="No rules yet"
+          body="Rules file new purchases for you, like always putting a store in Groceries."
+          action="Add a rule"
+          onAction={() => setOpen(true)}
+        />
       ) : null}
       {rules && rules.length > 0 ? <Card>
       {rules.map((rule, index) => (
-        <View key={rule.id} style={{ borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}>
+        <View key={rule.id} style={{ borderTopWidth: index ? StyleSheet.hairlineWidth : 0, borderTopColor: colors.line, paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}>
           <Pressable onPress={() => openEdit(rule)} style={{ gap: 4 }}>
             <Text style={{ fontSize: 16, fontWeight: "600", color: rule.enabled ? colors.ink : colors.muted }}>{rule.name}</Text>
             <Text style={{ fontSize: 13, color: colors.muted }}>{describe(rule)}</Text>

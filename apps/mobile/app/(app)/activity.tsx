@@ -24,6 +24,7 @@ import {
   LoadError,
   Loading,
   MonthNav,
+  EmptyState,
   Note,
   ReviewBanner,
   Screen,
@@ -872,7 +873,7 @@ export default function ActivityScreen() {
       ) : null}
 
       {rows === null && !error ? <Loading /> : null}
-      {rows && grouped.length === 0 ? <Note>No matches. Try another search or clear a filter.</Note> : null}
+      {rows && grouped.length === 0 ? <EmptyState icon="search" title="No matches" body="Try another search or clear a filter." /> : null}
     </View>
   );
 

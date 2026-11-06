@@ -44,7 +44,7 @@ export default function CashFlowScreen() {
     .filter((point): point is { date: string; cents: number } => Boolean(point));
 
   return (
-    <Screen title="Cash Flow" refresh={<Back />} onRefresh={load}>
+    <Screen title="Cash flow" refresh={<Back />} onRefresh={load}>
       {error ? <LoadError message={error} onRetry={() => void load()} /> : null}
       <Segment
         value={grain}

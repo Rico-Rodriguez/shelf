@@ -135,7 +135,6 @@ export default function AccountsScreen() {
   return (
     <Screen
       title="Accounts"
-      framed={!router.canGoBack()}
       refresh={router.canGoBack() ? <Back label="Today" /> : undefined}
       onRefresh={load}
       action={

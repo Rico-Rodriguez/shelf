@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { api } from "../src/api";
-import { Back, Card, colors, Loading, Note, Screen } from "../src/ui";
+import { Back, Card, colors, EmptyState, Loading, Note, Screen } from "../src/ui";
 
 type NoteRow = {
   id: string;
@@ -73,7 +73,7 @@ export default function NotificationsScreen() {
     >
       {error ? <Note>{error}</Note> : null}
       {rows === null && !error ? <Loading /> : null}
-      {rows && rows.length === 0 ? <Note>Nothing new.</Note> : null}
+      {rows && rows.length === 0 ? <EmptyState icon="bell" title="You’re all caught up" body="Bills, big charges and goal milestones show up here." /> : null}
       {rows && rows.length ? (
         <Card>
           {rows.map((row, index) => (

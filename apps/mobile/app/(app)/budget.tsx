@@ -636,7 +636,7 @@ export default function BudgetScreen() {
 
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <View style={{ gap: 2 }}>
-                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Planned Income</Text>
+                  <Text style={{ fontSize: 12, color: colors.tertiary }}>Planned income</Text>
                   <Text style={{ fontSize: 17, fontWeight: "600", color: colors.ink }}>
                     {money(Math.round(Number(income || 0) * 100))}
                   </Text>
@@ -767,7 +767,7 @@ export default function BudgetScreen() {
                       <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink }}>{money(editing.plannedCents)}</Text>
                     </View>
                     <View style={{ gap: 2, alignItems: "flex-end" }}>
-                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>{rowOver ? "Over Budget" : "Remaining"}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "500", color: colors.tertiary }}>{rowOver ? "Over budget" : "Remaining"}</Text>
                       <Text style={{ fontSize: 15, fontWeight: "600", color: rowOver ? colors.danger : colors.positive }}>
                         {money(figure)}
                       </Text>
@@ -862,7 +862,7 @@ export default function BudgetScreen() {
 
       {adding ? (
         <Sheet title="New category" onClose={() => setAdding(null)}>
-          <Section title="Select group" />
+          <Section title="Group" />
           <Card tone="inset">
             {groupsList.map((group, index) => (
               <Pressable
