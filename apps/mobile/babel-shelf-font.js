@@ -15,7 +15,9 @@ module.exports = function shelfFontPlugin({ types: t }) {
   return {
     name: "shelf-font",
     visitor: {
-      JSXOpeningElement(path) {
+      JSXOpeningElement(path, state) {
+        // Live Activity layouts run in the widget extension, not React Native.
+        if (/[\\/]src[\\/]widgets[\\/]/.test(state.filename || "")) return;
         const name = path.node.name;
         if (!t.isJSXIdentifier(name) || (name.name !== "Text" && name.name !== "TextInput")) return;
         const attr = path.node.attributes.find((item) => t.isJSXAttribute(item) && t.isJSXIdentifier(item.name) && item.name.name === "style");
