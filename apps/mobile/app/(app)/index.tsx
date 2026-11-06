@@ -33,7 +33,7 @@ import {
   useMeasuredAnchor,
 } from "../../src/flight";
 import { tapPress } from "../../src/haptic";
-import { markIslandSat, onIslandSit } from "../../src/island";
+import { islandSitPlan, markIslandSat, onIslandSit } from "../../src/island";
 import { useReduceMotion } from "../../src/theme";
 import { mergeDashboard, subscribeLive } from "../../src/live-edits";
 import {
@@ -182,7 +182,7 @@ export default function HomeScreen() {
     : null;
   const savedCents = (shownDash?.cashFlow.incomeCents ?? 0) - (shownDash?.cashFlow.spendingCents ?? 0);
 
-  const heroText = leftCents < 0 ? money(leftCents) : money(leftCents);
+  const heroText = money(leftCents);
   useFlightArrival("plan-to-left", reduceMotion, (plan) => {
     const carried = plan.pieces[0]?.text;
     plan.onDone = () => {
@@ -194,38 +194,8 @@ export default function HomeScreen() {
   useFlightArrival("island-sit", reduceMotion);
   useEffect(() => {
     return onIslandSit((arrival) => {
-      markIslandSat();
-      const from = { x: 80, y: 6, width: 210, height: 32 };
-      playFlight(
-        {
-          id: "island-sit",
-          hide: [`today.tx.${arrival.id}`, `today.tx.${arrival.id}.amount`],
-          pieces: [
-            {
-              key: "merchant",
-              text: arrival.merchant,
-              meta: "Posts later",
-              color: colors.tertiary,
-              fontSize: 15,
-              fontWeight: "600",
-              from,
-              toAnchor: `today.tx.${arrival.id}`,
-              toFontSize: 16,
-            },
-            {
-              key: "amount",
-              text: arrival.amount,
-              color: colors.tertiary,
-              fontSize: 15,
-              fontWeight: "700",
-              from: { x: from.x + 120, y: from.y, width: 88, height: 28 },
-              toAnchor: `today.tx.${arrival.id}.amount`,
-              toFontSize: 16,
-            },
-          ],
-        },
-        reduceMotion,
-      );
+      markIslandSat(arrival.id);
+      playFlight(islandSitPlan(arrival, colors.tertiary), reduceMotion);
     });
   }, [reduceMotion]);
 

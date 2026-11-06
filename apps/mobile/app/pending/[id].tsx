@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect } from "react";
-import { markIslandSat } from "../../src/island";
+import { islandSitPlan, markIslandSat } from "../../src/island";
 import { stageFlight } from "../../src/flight";
 import { useReduceMotion } from "../../src/theme";
 import { colors } from "../../src/ui";
@@ -14,40 +14,8 @@ export default function IslandLanding() {
   const amount = typeof params.amount === "string" ? params.amount : "";
 
   useEffect(() => {
-    markIslandSat();
-    if (id) {
-      const from = { x: 80, y: 6, width: 210, height: 32 };
-      stageFlight(
-        {
-          id: "island-sit",
-          hide: [`today.tx.${id}`, `today.tx.${id}.amount`],
-          pieces: [
-            {
-              key: "merchant",
-              text: merchant,
-              meta: "Posts later",
-              color: colors.tertiary,
-              fontSize: 15,
-              fontWeight: "600",
-              from,
-              toAnchor: `today.tx.${id}`,
-              toFontSize: 16,
-            },
-            {
-              key: "amount",
-              text: amount,
-              color: colors.tertiary,
-              fontSize: 15,
-              fontWeight: "700",
-              from: { x: from.x + 120, y: from.y, width: 88, height: 28 },
-              toAnchor: `today.tx.${id}.amount`,
-              toFontSize: 16,
-            },
-          ],
-        },
-        reduceMotion,
-      );
-    }
+    markIslandSat(id || undefined);
+    if (id) stageFlight(islandSitPlan({ id, merchant, amount }, colors.tertiary), reduceMotion);
     router.replace("/(app)");
   }, [amount, id, merchant, reduceMotion]);
 
