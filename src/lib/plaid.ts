@@ -41,6 +41,15 @@ export function dollarsFromPlaid(amount: number | null | undefined): number {
   return Math.round(amount * 100);
 }
 
+/** Plaid's error code (such as ITEM_LOGIN_REQUIRED) when the error came from Plaid. */
+export function plaidErrorCode(err: unknown): string | null {
+  if (err && typeof err === "object" && "response" in err) {
+    const code = (err as { response?: { data?: { error_code?: string } } }).response?.data?.error_code;
+    if (code) return code;
+  }
+  return null;
+}
+
 export function plaidErrorMessage(err: unknown): string {
   if (err && typeof err === "object" && "response" in err) {
     const data = (err as { response?: { data?: { error_code?: string; error_message?: string } } }).response?.data;
