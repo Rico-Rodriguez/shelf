@@ -39,10 +39,16 @@ export async function syncAllItems(dek: Buffer, opts?: { pendingOnly?: boolean; 
   const items = await db.select().from(plaidItems);
   const targets = opts?.pendingOnly ? items.filter((item) => item.status === "pending_sync") : items;
   const results: ItemSyncResult[] = [];
+  // Every bank's new transactions first, then the slower extras (logos, investments,
+  // loans) only while time remains, so a slow extra can never hold back today's charges
+  // or run the request past the server's time limit.
+  const deadline = Date.now() + EXTRAS_BUDGET_MS;
+  const synced: { id: string; access: string; logos: Map<string, string> }[] = [];
   for (const item of targets) {
     try {
-      const res = await syncItem(item.id, dek);
-      results.push({ ok: true, ...res });
+      const res = await syncTransactions(item.id, dek);
+      synced.push({ id: item.id, access: res.access, logos: res.logos });
+      results.push({ ok: true, itemId: item.id, added: res.added, modified: res.modified, removed: res.removed });
     } catch (err) {
       const error = plaidErrorMessage(err);
       results.push({ itemId: item.id, ok: false, error });
@@ -53,6 +59,10 @@ export async function syncAllItems(dek: Buffer, opts?: { pendingOnly?: boolean; 
         .catch(() => undefined);
     }
   }
+  for (const item of synced) {
+    await syncExtras(item.id, item.access, item.logos, dek, deadline);
+  }
+  if (synced.length) await prepareVault(dek);
   if (opts?.refresh) await requestBankRefresh(targets, dek);
   if (results.some((row) => row.ok)) {
     await snapshotNetWorth(dek);
@@ -92,7 +102,19 @@ async function requestBankRefresh(items: { id: string; accessTokenEnc: string }[
   }
 }
 
+/** Time the extras may use, counted from the start of a sync. Vercel stops the request at 60s. */
+const EXTRAS_BUDGET_MS = 35 * 1000;
+
 export async function syncItem(localItemId: string, dek: Buffer) {
+  const deadline = Date.now() + EXTRAS_BUDGET_MS;
+  const res = await syncTransactions(localItemId, dek);
+  await syncExtras(localItemId, res.access, res.logos, dek, deadline);
+  await prepareVault(dek);
+  return { itemId: localItemId, added: res.added, modified: res.modified, removed: res.removed };
+}
+
+/** Accounts, balances and transactions: the part of a sync that must always finish. */
+async function syncTransactions(localItemId: string, dek: Buffer) {
   const db = await getDb();
   const [item] = await db.select().from(plaidItems).where(eq(plaidItems.id, localItemId));
   if (!item) throw new Error("Item not found");
@@ -137,24 +159,28 @@ export async function syncItem(localItemId: string, dek: Buffer) {
     .set({ cursor, status: "ok", errorCode: null, updatedAt: new Date() })
     .where(eq(plaidItems.id, localItemId));
 
+  return { access, logos, added, modified, removed };
+}
+
+/** Logos, investments and loans. Each is best effort and skipped once the deadline passes. */
+async function syncExtras(localItemId: string, access: string, logos: Map<string, string>, dek: Buffer, deadline: number) {
   try {
-    await syncLogos(localItemId, client, access, logos, dek);
+    await syncLogos(localItemId, getPlaidClient(), access, logos, dek, deadline);
   } catch {
     // Logos are decoration; a failed lookup never fails the sync
   }
+  if (Date.now() > deadline) return;
   try {
     await syncInvestments(localItemId, access, dek);
   } catch {
     // Item may not have investment accounts
   }
+  if (Date.now() > deadline) return;
   try {
     await syncLiabilities(access, dek);
   } catch {
     // Item may not have liabilities
   }
-
-  await prepareVault(dek);
-  return { itemId: localItemId, added, modified, removed };
 }
 
 async function syncLogos(
@@ -163,20 +189,23 @@ async function syncLogos(
   access: string,
   logos: Map<string, string>,
   dek: Buffer,
+  deadline: number,
 ) {
   const store = await readLogoStore(dek);
-  if (store.backfilled.includes(localItemId)) {
+  if (store.backfilled.includes(localItemId) || Date.now() > deadline) {
     await saveLogos(logos, dek);
     return;
   }
+  // The history pass reads up to two years of transactions. It stops at the deadline and
+  // picks up where it left off on the next sync, instead of starting over every time.
+  let pass: { done: boolean; offset: number };
   try {
-    await backfillLogos(client, access, logos);
+    pass = await backfillLogos(client, access, logos, { offset: store.progress[localItemId] ?? 0, deadline });
   } catch {
-    // Keep what this sync found; the history pass retries next sync
     await saveLogos(logos, dek);
     return;
   }
-  await saveLogos(logos, dek, localItemId);
+  await saveLogos(logos, dek, pass.done ? { backfilled: localItemId } : { progress: [localItemId, pass.offset] });
 }
 
 async function refreshAccounts(localItemId: string, access: string, dek: Buffer) {

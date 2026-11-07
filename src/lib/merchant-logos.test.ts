@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Transaction } from "plaid";
-import { collectLogo, logoLookup, plaidLogo } from "./merchant-logos";
+import type { PlaidApi, Transaction } from "plaid";
+import { backfillLogos, collectLogo, logoLookup, plaidLogo } from "./merchant-logos";
 
 const tx = (over: Partial<Transaction>) => over as Transaction;
 
@@ -34,5 +34,32 @@ describe("collectLogo and logoLookup", () => {
       { name: "Dinner delivery", merchantName: "Uber Eats", originalDescription: null },
     ]);
     expect(logos["dinner delivery"]).toBe("https://x.example/uber.png");
+  });
+});
+
+describe("backfillLogos", () => {
+  const rows = Array.from({ length: 3 }, (_, i) => tx({ merchant_name: `Shop ${i}`, logo_url: `https://logos.example/${i}.png` }));
+  const client = (seen: number[]) =>
+    ({
+      transactionsGet: async (req: { options: { offset: number } }) => {
+        seen.push(req.options.offset);
+        return { data: { transactions: rows.slice(req.options.offset, req.options.offset + 1), total_transactions: rows.length } };
+      },
+    }) as unknown as PlaidApi;
+
+  it("stops at the deadline and reports where it got to", async () => {
+    const seen: number[] = [];
+    const res = await backfillLogos(client(seen), "token", new Map(), { deadline: Date.now() - 1 });
+    expect(res).toEqual({ done: false, offset: 0 });
+    expect(seen).toEqual([]);
+  });
+
+  it("resumes from a saved offset", async () => {
+    const seen: number[] = [];
+    const found = new Map<string, string>();
+    const res = await backfillLogos(client(seen), "token", found, { offset: 1 });
+    expect(res.done).toBe(true);
+    expect(seen[0]).toBe(1);
+    expect(found.size).toBe(2);
   });
 });

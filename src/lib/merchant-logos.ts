@@ -14,6 +14,8 @@ type LogoStore = {
   logos: Record<string, string>;
   /** Plaid items whose older transactions were already read once for logos. */
   backfilled: string[];
+  /** How far the history pass got for items it has not finished. */
+  progress: Record<string, number>;
 };
 
 const ROW_ID = "default";
@@ -55,15 +57,16 @@ export async function readLogoStore(dek: Buffer): Promise<LogoStore> {
   const db = await getDb();
   const [row] = await db.select().from(merchantLogos).where(eq(merchantLogos.id, ROW_ID));
   const raw = row ? openText(row.secretEnc, dek) : null;
-  if (!raw) return { logos: {}, backfilled: [] };
+  if (!raw) return { logos: {}, backfilled: [], progress: {} };
   try {
     const parsed = JSON.parse(raw) as Partial<LogoStore>;
     return {
       logos: parsed.logos && typeof parsed.logos === "object" ? parsed.logos : {},
       backfilled: Array.isArray(parsed.backfilled) ? parsed.backfilled : [],
+      progress: parsed.progress && typeof parsed.progress === "object" ? parsed.progress : {},
     };
   } catch {
-    return { logos: {}, backfilled: [] };
+    return { logos: {}, backfilled: [], progress: {} };
   }
 }
 
@@ -76,8 +79,15 @@ async function writeLogoStore(store: LogoStore, dek: Buffer) {
     .onConflictDoUpdate({ target: merchantLogos.id, set: { secretEnc, updatedAt: new Date() } });
 }
 
-/** Merges logos found during a sync, and marks the item as backfilled when that pass ran. */
-export async function saveLogos(found: Map<string, string>, dek: Buffer, backfilledItem?: string) {
+/**
+ * Merges logos found during a sync. `backfilled` marks an item's history pass as finished;
+ * `progress` records how far an unfinished pass got.
+ */
+export async function saveLogos(
+  found: Map<string, string>,
+  dek: Buffer,
+  mark?: { backfilled?: string; progress?: [string, number] },
+) {
   const store = await readLogoStore(dek);
   let changed = false;
   for (const [key, url] of found) {
@@ -86,9 +96,18 @@ export async function saveLogos(found: Map<string, string>, dek: Buffer, backfil
       changed = true;
     }
   }
-  if (backfilledItem && !store.backfilled.includes(backfilledItem)) {
-    store.backfilled.push(backfilledItem);
+  const done = mark?.backfilled;
+  if (done && !store.backfilled.includes(done)) {
+    store.backfilled.push(done);
+    delete store.progress[done];
     changed = true;
+  }
+  if (mark?.progress) {
+    const [item, offset] = mark.progress;
+    if (store.progress[item] !== offset) {
+      store.progress[item] = offset;
+      changed = true;
+    }
   }
   if (changed) await writeLogoStore(store, dek);
 }
@@ -103,11 +122,17 @@ function isoDaysAgo(days: number) {
  * Transactions synced before logos were kept never come back through /transactions/sync,
  * so read the item's history once with /transactions/get and keep only the logos.
  */
-export async function backfillLogos(client: PlaidApi, access: string, into: Map<string, string>) {
+export async function backfillLogos(
+  client: PlaidApi,
+  access: string,
+  into: Map<string, string>,
+  opts: { offset?: number; deadline?: number } = {},
+): Promise<{ done: boolean; offset: number }> {
   const start = isoDaysAgo(BACKFILL_DAYS);
   const end = isoDaysAgo(0);
-  let offset = 0;
+  let offset = opts.offset ?? 0;
   for (let page = 0; page < BACKFILL_MAX_PAGES; page += 1) {
+    if (opts.deadline && Date.now() > opts.deadline) return { done: false, offset };
     const res = await client.transactionsGet({
       access_token: access,
       start_date: start,
@@ -116,8 +141,9 @@ export async function backfillLogos(client: PlaidApi, access: string, into: Map<
     });
     for (const tx of res.data.transactions) collectLogo(into, tx);
     offset += res.data.transactions.length;
-    if (!res.data.transactions.length || offset >= res.data.total_transactions) break;
+    if (!res.data.transactions.length || offset >= res.data.total_transactions) return { done: true, offset };
   }
+  return { done: true, offset };
 }
 
 /**
