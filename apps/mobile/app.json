@@ -18,14 +18,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-updates",
-      "expo-widgets",
-      "./plugins/with-live-activity-layout"
+      "expo-updates"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.shelf.mobile",
-      "buildNumber": "4"
+      "buildNumber": "5"
     },
     "android": {
       "package": "app.shelf.mobile",
