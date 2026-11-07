@@ -335,7 +335,17 @@ export default function AppTabs() {
 
   useEffect(() => {
     let alive = true;
+    // A full sync asks every bank for new rows. A pending-only sync touches just the banks a
+    // Plaid webhook flagged, so it is cheap enough to run every minute, but it finds nothing
+    // when no webhook arrived. Opening the app must always do a full sync, or today's charges
+    // wait for the 15-minute timer.
+    let lastFull = 0;
+    let syncing = false;
     const tick = (pendingOnly: boolean) => {
+      if (syncing) return;
+      const full = !pendingOnly;
+      if (full) lastFull = Date.now();
+      syncing = true;
       setSyncLabel("Syncing");
       const before = peek<{ transactions?: { id: string; name: string; merchantName?: string | null; amountCents: number; pending?: boolean }[] }>(dashboardPath());
       const known = new Map(seenSync.current);
@@ -345,14 +355,15 @@ export default function AppTabs() {
       const chip = anchorRect("sync.chip");
       const pendingFrom = anchorRect("today.pending");
       const bills = peek<{ recurrences?: { merchantName: string; isIncome?: boolean; isActive?: boolean }[] }>("/api/recurring")?.recurrences ?? [];
-      void api("/api/plaid/sync", { method: "POST", body: JSON.stringify({ pendingOnly }) })
-        .then(async () => {
+      void api<{ failed?: number }>("/api/plaid/sync", { method: "POST", body: JSON.stringify({ pendingOnly, refresh: full }) })
+        .then(async (res) => {
           if (!alive) return;
           const now = new Date();
+          // fresh: a read already in flight started before this sync saved anything.
           await Promise.all([
-            load(dashboardPath()).catch(() => undefined),
-            load("/api/transactions?").catch(() => undefined),
-            load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`).catch(() => undefined),
+            load(dashboardPath(), { fresh: true }).catch(() => undefined),
+            load("/api/transactions?", { fresh: true }).catch(() => undefined),
+            load(`/api/budget?year=${now.getFullYear()}&month=${now.getMonth() + 1}`, { fresh: true }).catch(() => undefined),
           ]);
           refreshMerchantLogos();
           if (!alive) return;
@@ -401,12 +412,15 @@ export default function AppTabs() {
             });
             delay += 40;
           }
-          setSyncLabel("Up to date");
+          setSyncLabel(res?.failed ? "Sync failed" : "Up to date");
           if (pieces.length) playFlight({ id: "sync", hide: arrivals.map((tx) => `today.tx.${tx.id}`), pieces }, reduceRef.current);
         })
         .catch((err: unknown) => {
           if (!alive) return;
           setSyncLabel(err instanceof ApiError && err.status === 403 ? "Up to date" : "Sync failed");
+        })
+        .finally(() => {
+          syncing = false;
         });
     };
     const now = new Date();
@@ -426,15 +440,17 @@ export default function AppTabs() {
       if (alive) tick(false);
     });
     const focus = AppState.addEventListener("change", (state) => {
-      if (state === "active") tick(true);
+      if (state !== "active") return;
+      // Coming back to the app is "opening" it: pull from every bank unless a full sync just ran.
+      tick(Date.now() - lastFull < 60 * 1000);
     });
     const pending = setInterval(() => tick(true), 60 * 1000);
-    const full = setInterval(() => tick(false), 15 * 60 * 1000);
+    const fullTimer = setInterval(() => tick(false), 15 * 60 * 1000);
     return () => {
       alive = false;
       focus.remove();
       clearInterval(pending);
-      clearInterval(full);
+      clearInterval(fullTimer);
     };
   }, []);
 

@@ -205,8 +205,12 @@ export function mutateCache<T>(path: string, updater: (current: T | undefined) =
 }
 
 /** Reads a GET through a shared in-memory cache so tabs can show the last answer immediately. */
-export function load<T>(path: string): Promise<T> {
+export function load<T>(path: string, opts?: { fresh?: boolean }): Promise<T> {
   const pending = flight.get(path);
+  if (pending && opts?.fresh) {
+    // That read may have left before the server changed; wait for it, then read again.
+    return pending.catch(() => undefined).then(() => load<T>(path));
+  }
   if (pending) return pending as Promise<T>;
   const req = api<T>(path)
     .then((data) => {

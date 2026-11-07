@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { decryptSecret } from "./crypto";
 import { nid } from "./ids";
-import { dollarsFromPlaid, getPlaidClient } from "./plaid";
+import { dollarsFromPlaid, getPlaidClient, plaidErrorCode, plaidErrorMessage } from "./plaid";
 import { applyRulesToNewTx } from "./rules";
 import { snapshotNetWorth } from "./networth";
 import { backfillLogos, collectLogo, readLogoStore, saveLogos } from "./merchant-logos";
@@ -25,22 +25,71 @@ import {
   sealText,
 } from "./secrets";
 
-export async function syncAllItems(dek: Buffer, opts?: { pendingOnly?: boolean }) {
+export type ItemSyncResult =
+  | { itemId: string; ok: true; added: number; modified: number; removed: number }
+  | { itemId: string; ok: false; error: string };
+
+/**
+ * Syncs every bank. One bank failing (an expired login, a Plaid outage for one institution)
+ * must not stop the others, so each item is synced on its own and a failure is recorded on
+ * that item, which also raises the "A bank needs attention" notification.
+ */
+export async function syncAllItems(dek: Buffer, opts?: { pendingOnly?: boolean; refresh?: boolean }) {
   const db = await getDb();
   const items = await db.select().from(plaidItems);
   const targets = opts?.pendingOnly ? items.filter((item) => item.status === "pending_sync") : items;
-  const results = [];
+  const results: ItemSyncResult[] = [];
   for (const item of targets) {
-    results.push(await syncItem(item.id, dek));
+    try {
+      const res = await syncItem(item.id, dek);
+      results.push({ ok: true, ...res });
+    } catch (err) {
+      const error = plaidErrorMessage(err);
+      results.push({ itemId: item.id, ok: false, error });
+      await db
+        .update(plaidItems)
+        .set({ status: "error", errorCode: plaidErrorCode(err) ?? error.slice(0, 200), updatedAt: new Date() })
+        .where(eq(plaidItems.id, item.id))
+        .catch(() => undefined);
+    }
   }
-  if (targets.length) {
+  if (opts?.refresh) await requestBankRefresh(targets, dek);
+  if (results.some((row) => row.ok)) {
     await snapshotNetWorth(dek);
     const { confirmRecurring, previewRecurring } = await import("./recurring");
-    const { refreshNotifications } = await import("./notify");
     await confirmRecurring(dek, await previewRecurring(dek));
+  }
+  if (targets.length) {
+    const { refreshNotifications } = await import("./notify");
     await refreshNotifications(dek);
   }
   return results;
+}
+
+const REFRESH_EVERY_MS = 30 * 60 * 1000;
+const lastRefresh = new Map<string, number>();
+
+/**
+ * /transactions/sync only returns what Plaid already pulled from the bank, and Plaid pulls on
+ * its own schedule (a few times a day). /transactions/refresh asks Plaid to pull now; the new
+ * rows arrive through the SYNC_UPDATES_AVAILABLE webhook, which the phone's next pending sync
+ * picks up. Refresh is a billed Plaid add-on, so it only runs when PLAID_REFRESH_ON_OPEN is
+ * set, at most once per bank every 30 minutes, and any error (such as the add-on not being
+ * enabled) is ignored.
+ */
+async function requestBankRefresh(items: { id: string; accessTokenEnc: string }[], dek: Buffer) {
+  if (process.env.PLAID_REFRESH_ON_OPEN !== "1") return;
+  const client = getPlaidClient();
+  const now = Date.now();
+  for (const item of items) {
+    if (now - (lastRefresh.get(item.id) ?? 0) < REFRESH_EVERY_MS) continue;
+    lastRefresh.set(item.id, now);
+    try {
+      await client.transactionsRefresh({ access_token: decryptSecret(item.accessTokenEnc, dek) });
+    } catch {
+      // Best effort: the regular sync already ran
+    }
+  }
 }
 
 export async function syncItem(localItemId: string, dek: Buffer) {
