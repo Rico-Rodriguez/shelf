@@ -3,6 +3,8 @@ import { AuthError, requireWriter } from "@/lib/auth";
 import { syncAllItems, syncItem } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
+// A sync with several banks can outrun the platform default of 10 to 15 seconds.
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {

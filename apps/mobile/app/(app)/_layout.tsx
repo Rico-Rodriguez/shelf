@@ -418,6 +418,9 @@ export default function AppTabs() {
         .catch((err: unknown) => {
           if (!alive) return;
           setSyncLabel(err instanceof ApiError && err.status === 403 ? "Up to date" : "Sync failed");
+          // A sync that timed out may still have saved new charges before it stopped.
+          void load(dashboardPath(), { fresh: true }).catch(() => undefined);
+          void load("/api/transactions?", { fresh: true }).catch(() => undefined);
         })
         .finally(() => {
           syncing = false;
